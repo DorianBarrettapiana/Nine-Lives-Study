@@ -1,0 +1,2226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PhD Study Lab</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0f1117;--card-bg:#1a1d27;--text:#e8e9ed;--text-dim:#6b7084;--border:#2a2d3a;--accent:#6366f1;--success:#10b981;--danger:#ef4444;--warning:#f59e0b}
+.light{--bg:#f5f5f0;--card-bg:#ffffff;--text:#1a1a2e;--text-dim:#8e8ea0;--border:#e0dfd8;--accent:#4f46e5;--success:#059669;--danger:#dc2626;--warning:#d97706}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans SC','PingFang SC',-apple-system,sans-serif;min-height:100vh;padding:24px 16px;transition:background .3s,color .3s}
+.container{max-width:750px;margin:0 auto}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:32px}
+.header h1{font-size:26px;font-weight:800;letter-spacing:-.5px;background:linear-gradient(135deg,var(--accent),#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header p{margin-top:4px;font-size:13px;color:var(--text-dim)}
+.header-actions{display:flex;gap:8px;align-items:center}
+.icon-btn{width:40px;height:40px;border-radius:12px;border:1px solid var(--border);background:var(--card-bg);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .25s}
+.icon-btn:hover{border-color:var(--accent)}
+.dropdown{position:relative}
+.dropdown-menu{display:none;position:absolute;right:0;top:48px;z-index:100;background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:6px;min-width:170px;box-shadow:0 8px 32px rgba(0,0,0,.3)}
+.dropdown-menu.open{display:block}
+.dropdown-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;border:none;background:none;width:100%;cursor:pointer;font-family:inherit;font-size:14px;color:var(--text);transition:background .15s}
+.dropdown-item:hover{background:var(--border)}
+.tabs{display:flex;gap:4px;margin-bottom:28px;background:var(--card-bg);border-radius:14px;padding:4px;border:1px solid var(--border)}
+.tab-btn{flex:1;padding:10px 4px;border-radius:10px;border:none;cursor:pointer;background:transparent;color:var(--text-dim);font-family:inherit;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:4px;transition:all .2s}
+.tab-btn.active{background:var(--accent);color:#fff}
+.tab-btn .icon{font-size:15px}.tab-btn .label{font-size:11px}
+.card{background:var(--card-bg);border-radius:16px;padding:24px;border:1px solid var(--border)}
+.section{display:none;flex-direction:column;gap:24px}.section.active{display:flex}
+.btn{padding:10px 24px;border-radius:20px;border:none;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:all .25s}
+.btn-accent{background:var(--accent);color:#fff}.btn-success{background:var(--success);color:#fff}
+.btn-danger{background:var(--danger);color:#fff}.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text-dim)}
+.btn-sm{padding:6px 14px;font-size:12px;border-radius:14px}
+input,textarea{padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;width:100%;transition:border-color .2s}
+textarea{min-height:80px;resize:vertical;line-height:1.7}
+input:focus,textarea:focus{outline:none;border-color:var(--accent)}
+.small-label{font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px}
+.history-title{font-size:13px;text-transform:uppercase;letter-spacing:2px;color:var(--text-dim);margin-bottom:12px;font-weight:600}
+.modal-overlay{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:24px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--card-bg);border:1px solid var(--border);border-radius:20px;padding:32px;max-width:620px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.4);position:relative;animation:modalIn .25s ease}
+@keyframes modalIn{from{opacity:0;transform:translateY(20px) scale(.97)}to{opacity:1;transform:none}}
+.modal-close{position:absolute;top:16px;right:16px;width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);transition:all .2s}
+.modal-close:hover{border-color:var(--danger);color:var(--danger)}
+.modal h2{font-size:20px;margin-bottom:20px;padding-right:40px}
+.modal-section{margin-bottom:18px}
+.modal-section-title{font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px}
+.modal-section-content{font-size:14px;line-height:1.8;color:var(--text);white-space:pre-wrap}
+.modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:24px;padding-top:18px;border-top:1px solid var(--border)}
+.toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--success);color:#fff;padding:12px 28px;border-radius:14px;font-size:14px;font-weight:600;z-index:2000;opacity:0;transition:all .35s ease;pointer-events:none;box-shadow:0 6px 24px rgba(0,0,0,.3)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+/* Pomodoro */
+.pomo-center{display:flex;flex-direction:column;align-items:center;gap:28px}
+.pomo-modes{display:flex;gap:8px}
+.pomo-mode-btn{padding:8px 20px;border-radius:20px;border:none;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;background:var(--card-bg);color:var(--text-dim);transition:all .25s}
+.pomo-mode-btn.active{background:var(--accent);color:#fff}
+.pomo-ring{position:relative;width:260px;height:260px}
+.pomo-ring svg{width:260px;height:260px}
+.pomo-ring .track{fill:none;stroke:var(--card-bg);stroke-width:6}
+.pomo-ring .progress{fill:none;stroke:var(--accent);stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset .4s ease}
+.pomo-display{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.pomo-time{font-family:'JetBrains Mono','Fira Code',monospace;font-size:56px;font-weight:700;color:var(--text);letter-spacing:4px}
+.pomo-label{font-size:13px;color:var(--text-dim);margin-top:4px}
+.pomo-actions{display:flex;gap:12px}
+.pomo-start{padding:12px 36px;border-radius:28px;border:none;color:#fff;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;transition:all .25s}
+.pomo-reset{padding:12px 24px;border-radius:28px;border:2px solid var(--border);background:transparent;color:var(--text-dim);font-size:16px;font-weight:600;font-family:inherit;cursor:pointer}
+.pomo-stats{display:flex;gap:6px;padding:12px 20px;background:var(--card-bg);border-radius:12px;font-size:14px;flex-wrap:wrap;justify-content:center}
+/* Feynman */
+.steps-bar{display:flex;align-items:center}
+.step-circle{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;transition:all .3s;background:var(--card-bg);color:var(--text-dim)}
+.step-circle.active{background:var(--accent);color:#fff}
+.step-line{flex:1;height:2px;background:var(--border);transition:background .3s}.step-line.active{background:var(--accent)}
+.feynman-card{padding:28px}.feynman-card h3{color:var(--accent);font-size:18px;margin-bottom:6px}
+.feynman-card p{color:var(--text-dim);font-size:14px;margin-bottom:16px}
+.feynman-card textarea{min-height:140px;padding:16px;border-radius:12px}
+.feynman-nav{display:flex;justify-content:space-between;margin-top:16px}
+.fh-item{padding:14px 18px;border-radius:12px;background:var(--card-bg);border:1px solid var(--border);display:flex;align-items:center;gap:10px;cursor:pointer;transition:all .2s}
+.fh-item:hover{border-color:var(--accent);transform:translateX(4px)}
+/* Notes */
+.notes-form{display:flex;flex-direction:column;gap:14px}
+.notes-row{display:grid;grid-template-columns:1fr 1fr auto;gap:14px}
+@media(max-width:560px){.notes-row{grid-template-columns:1fr}}
+.notes-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.note-card{background:var(--card-bg);border-radius:14px;padding:20px;border:1px solid var(--border);display:flex;flex-direction:column;gap:10px;transition:transform .15s;cursor:pointer}
+.note-card:hover{transform:translateY(-2px)}
+.note-card-header{display:flex;justify-content:space-between;align-items:flex-start}
+.note-card-header h4{font-size:15px;line-height:1.4;flex:1}
+.note-card-actions{display:flex;gap:6px;flex-shrink:0;margin-left:8px}
+.note-card-actions button{background:none;border:none;cursor:pointer;font-size:14px;padding:2px}
+.note-meta{font-size:12px;color:var(--text-dim)}
+.note-excerpt{font-size:13px;color:var(--text-dim);line-height:1.6;white-space:pre-wrap}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{padding:3px 10px;border-radius:10px;font-size:11px;font-weight:600}
+.empty-state{text-align:center;padding:40px;color:var(--text-dim)}
+.empty-state .emoji{font-size:40px;margin-bottom:12px}
+/* Tracker */
+.progress-bar-wrap{height:10px;border-radius:5px;background:var(--border);overflow:hidden}
+.progress-bar-fill{height:100%;border-radius:5px;transition:width .4s ease}
+.task-item{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:12px;background:var(--card-bg);border:1px solid var(--border)}
+.checkbox{width:22px;height:22px;border-radius:6px;border:2px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;transition:all .2s;flex-shrink:0;background:transparent}
+.checkbox.checked{border-color:var(--success);background:var(--success)}
+.task-text{flex:1;font-size:14px;transition:all .2s}.task-text.done{text-decoration:line-through;opacity:.5}
+.task-remove{background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:16px;padding:4px;opacity:.5}
+.mood-row{display:flex;gap:12px;justify-content:center}
+.mood-btn{width:52px;height:52px;border-radius:14px;border:2px solid var(--border);background:transparent;font-size:26px;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center}
+.mood-btn.active{border-color:var(--accent);transform:scale(1.15)}
+.log-item{display:flex;align-items:center;gap:14px;padding:12px 16px;border-radius:12px;background:var(--card-bg);border:1px solid var(--border);cursor:pointer;transition:all .2s}
+.log-item:hover{border-color:var(--accent);transform:translateX(4px)}
+/* Stats */
+.stat-card{background:var(--card-bg);border-radius:16px;padding:20px;border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;overflow:hidden}
+.stat-card .delta{font-size:11px;font-weight:600;padding:2px 8px;border-radius:8px;margin-top:2px}
+.delta-up{background:#10b98120;color:var(--success)}.delta-down{background:#ef444420;color:var(--danger)}.delta-flat{background:var(--border);color:var(--text-dim)}
+.stat-number{font-size:30px;font-weight:800;font-family:'JetBrains Mono',monospace}
+.stat-label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;text-align:center}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.sparkline{display:flex;align-items:flex-end;gap:2px;height:32px;margin-top:4px}
+.spark-bar{flex:1;border-radius:2px;min-height:2px;transition:height .3s}
+.heatmap-grid{display:grid;grid-template-columns:repeat(auto-fill,16px);gap:3px}
+.heat-cell{width:16px;height:16px;border-radius:3px;cursor:pointer;transition:transform .15s,box-shadow .15s}
+.heat-cell:hover{transform:scale(1.4);box-shadow:0 0 8px rgba(99,102,241,.4);z-index:1}
+.hour-chart{display:flex;align-items:flex-end;gap:3px;height:100px}
+.hour-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}
+.hour-bar{width:100%;border-radius:4px 4px 0 0;min-height:2px;transition:height .4s}
+.hour-label{font-size:9px;color:var(--text-dim)}
+.hour-val{font-size:9px;font-weight:700;color:var(--text)}
+.insight-row{display:flex;justify-content:space-between;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
+.insight-row:last-child{border-bottom:none}
+.insight-key{color:var(--text-dim)}
+.insight-val{font-weight:700;font-family:'JetBrains Mono',monospace;font-size:14px}
+.weekly-row{display:grid;grid-template-columns:60px 1fr 50px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.weekly-row:last-child{border-bottom:none}
+.mini-bar-bg{height:8px;border-radius:4px;background:var(--border);overflow:hidden}
+.mini-bar-fill{height:100%;border-radius:4px;transition:width .4s}
+/* Mood stats */
+.mood-dist-row{display:flex;align-items:center;gap:12px;padding:8px 0}
+.mood-dist-emoji{font-size:24px;width:36px;text-align:center;flex-shrink:0}
+.mood-dist-bar{flex:1;height:10px;border-radius:5px;background:var(--border);overflow:hidden}
+.mood-dist-fill{height:100%;border-radius:5px;transition:width .5s}
+.mood-dist-info{font-size:12px;color:var(--text-dim);min-width:80px;text-align:right;flex-shrink:0}
+.mood-dot{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;transition:transform .15s;flex-shrink:0}
+.mood-dot:hover{transform:scale(1.3)}
+.mood-corr-row{display:flex;align-items:center;gap:14px;padding:10px 14px;border-radius:10px;background:var(--bg);margin-bottom:8px;font-size:13px}
+.mood-corr-emoji{font-size:20px}
+.mood-corr-data{flex:1;display:flex;flex-direction:column;gap:3px}
+.mood-corr-label{font-size:11px;color:var(--text-dim)}
+.footer{text-align:center;margin-top:40px;padding-top:20px;border-top:1px solid var(--border);font-size:12px;color:var(--text-dim)}
+#importInput{display:none}
+/* Confetti */
+.confetti-container{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:3000;overflow:hidden}
+.confetti-piece{position:absolute;width:8px;height:8px;top:-10px;border-radius:2px;animation:confettiFall 2.5s ease-in forwards}
+@keyframes confettiFall{0%{transform:translateY(0) rotate(0deg) scale(1);opacity:1}100%{transform:translateY(100vh) rotate(720deg) scale(0.3);opacity:0}}
+/* Achievement popup */
+.achieve-overlay{position:fixed;inset:0;z-index:2500;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:24px;animation:fadeIn .3s}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.achieve-card{background:var(--card-bg);border:1px solid var(--border);border-radius:24px;padding:36px 32px;text-align:center;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);animation:achievePop .4s cubic-bezier(.17,.67,.35,1.4)}
+@keyframes achievePop{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
+.achieve-num{font-family:'JetBrains Mono',monospace;font-size:48px;font-weight:800;margin:12px 0 4px}
+.achieve-label{font-size:14px;color:var(--text-dim);margin-bottom:16px}
+.achieve-sub{font-size:13px;color:var(--text-dim);line-height:1.6;margin-bottom:20px}
+/* Level & XP */
+.xp-bar-bg{height:12px;border-radius:6px;background:var(--border);overflow:hidden;margin:12px 0 8px}
+.xp-bar-fill{height:100%;border-radius:6px;transition:width .8s cubic-bezier(.4,0,.2,1);background:linear-gradient(90deg,var(--accent),#a78bfa)}
+.level-title{font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+.level-num{font-family:'JetBrains Mono',monospace;font-size:56px;font-weight:800;line-height:1;margin:8px 0}
+/* Milestones */
+.milestone-row{display:flex;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid var(--border)}
+.milestone-row:last-child{border-bottom:none}
+.ms-check{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;font-weight:700}
+.ms-check.done{background:var(--success);color:#fff}
+.ms-check.pending{background:var(--border);color:var(--text-dim)}
+.ms-info{flex:1}
+.ms-name{font-size:14px;font-weight:600}
+.ms-desc{font-size:12px;color:var(--text-dim);margin-top:2px}
+.ms-progress{width:60px;text-align:right;font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace}
+/* Records */
+.record-row{display:flex;justify-content:space-between;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.record-row:last-child{border-bottom:none}
+.record-val{font-weight:700;font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--accent)}
+/* Focus session list in modal */
+.focus-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:8px;background:var(--bg);margin-bottom:6px;font-size:13px}
+.task-done-item{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px}
+.task-done-item .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+/* === NEW: Gamification — Currency, Combo, Quests, Loot === */
+/* Top status bar with coins & freezes */
+.top-status{display:flex;gap:6px;align-items:center;margin-right:4px}
+.status-pill{display:flex;align-items:center;gap:4px;padding:6px 10px;border-radius:10px;background:var(--card-bg);border:1px solid var(--border);font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;white-space:nowrap}
+.status-pill:hover{border-color:var(--accent);transform:translateY(-1px)}
+.status-pill .ico{font-size:14px}
+.coin-pill{color:#f59e0b}
+.gem-pill{color:#8b5cf6}
+.freeze-pill{color:#38bdf8}
+/* Combo display above pomodoro */
+.combo-bar{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:12px;background:linear-gradient(90deg,var(--card-bg),var(--card-bg));border:1px solid var(--border);font-size:13px;min-width:240px;justify-content:center}
+.combo-bar.hot{border-color:#f59e0b;background:linear-gradient(90deg,#f59e0b15,#ef444415);animation:comboPulse 2s ease-in-out infinite}
+@keyframes comboPulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.4)}50%{box-shadow:0 0 0 8px rgba(245,158,11,0)}}
+.combo-flame{font-size:20px;filter:drop-shadow(0 0 4px #f59e0b80)}
+.combo-count{font-family:'JetBrains Mono',monospace;font-weight:800;font-size:16px;color:#f59e0b}
+.combo-mult{font-size:11px;padding:2px 8px;border-radius:8px;background:#f59e0b;color:#fff;font-weight:700}
+/* Daily quests card */
+.quest-card{background:linear-gradient(135deg,var(--card-bg),var(--card-bg));border-radius:16px;padding:20px;border:1px solid var(--border)}
+.quest-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.quest-header h3{font-size:15px;display:flex;align-items:center;gap:8px}
+.quest-reset{font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
+.quest-item{display:flex;align-items:center;gap:12px;padding:12px;border-radius:12px;background:var(--bg);border:1px solid var(--border);margin-bottom:8px;transition:all .25s}
+.quest-item.done{border-color:var(--success);background:linear-gradient(90deg,#10b98115,var(--bg))}
+.quest-item.claimable{border-color:var(--warning);background:linear-gradient(90deg,#f59e0b20,var(--bg));animation:claimPulse 1.5s ease-in-out infinite}
+@keyframes claimPulse{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,.5)}50%{box-shadow:0 0 0 6px rgba(245,158,11,0)}}
+.quest-icon{font-size:22px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:var(--card-bg);flex-shrink:0}
+.quest-info{flex:1;min-width:0}
+.quest-name{font-size:13px;font-weight:600;margin-bottom:4px}
+.quest-prog-bar{height:5px;border-radius:3px;background:var(--border);overflow:hidden;margin-top:4px}
+.quest-prog-fill{height:100%;border-radius:3px;background:var(--accent);transition:width .4s}
+.quest-reward{text-align:right;font-size:11px;color:var(--text-dim);font-weight:600;white-space:nowrap;flex-shrink:0}
+.quest-reward .rv{font-family:'JetBrains Mono',monospace;font-size:13px;color:#f59e0b;font-weight:700}
+.quest-claim-btn{padding:6px 12px;border-radius:10px;border:none;background:var(--warning);color:#fff;font-size:12px;font-weight:700;cursor:pointer;animation:claimPulse 1.5s infinite}
+/* Loot chest animation */
+.loot-overlay{position:fixed;inset:0;z-index:3500;background:rgba(0,0,0,.8);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;animation:fadeIn .3s}
+.chest-wrap{position:relative;width:180px;height:180px;cursor:pointer;animation:chestBob 1.2s ease-in-out infinite}
+@keyframes chestBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.chest-emoji{font-size:140px;filter:drop-shadow(0 0 30px rgba(245,158,11,.7))}
+.chest-wrap.opening{animation:chestShake .3s infinite}
+@keyframes chestShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px) rotate(-2deg)}75%{transform:translateX(4px) rotate(2deg)}}
+.chest-hint{color:#fff;margin-top:20px;font-size:14px;opacity:.8}
+.loot-rays{position:absolute;inset:-60px;border-radius:50%;background:radial-gradient(circle,rgba(245,158,11,.5),transparent 60%);animation:rayPulse 2s ease-in-out infinite;z-index:-1}
+@keyframes rayPulse{0%,100%{transform:scale(1);opacity:.6}50%{transform:scale(1.15);opacity:1}}
+.loot-reveal{background:var(--card-bg);border:2px solid var(--accent);border-radius:24px;padding:32px;text-align:center;max-width:360px;animation:revealPop .5s cubic-bezier(.17,.67,.35,1.6)}
+@keyframes revealPop{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
+.loot-rarity{font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;padding:4px 14px;border-radius:10px;display:inline-block;margin-bottom:12px}
+.rar-common{background:#6b708440;color:#9ca3af}
+.rar-uncommon{background:#10b98130;color:#10b981}
+.rar-rare{background:#3b82f630;color:#60a5fa}
+.rar-epic{background:#8b5cf630;color:#a78bfa;box-shadow:0 0 16px #8b5cf630}
+.rar-legendary{background:linear-gradient(90deg,#f59e0b40,#ef444440);color:#fbbf24;box-shadow:0 0 24px #f59e0b50;animation:legendGlow 1.5s ease-in-out infinite}
+@keyframes legendGlow{0%,100%{box-shadow:0 0 24px #f59e0b50}50%{box-shadow:0 0 40px #f59e0b80}}
+.loot-big-emoji{font-size:80px;margin:10px 0}
+.loot-name{font-size:20px;font-weight:800;margin-bottom:6px}
+.loot-desc{font-size:13px;color:var(--text-dim);line-height:1.6;margin-bottom:16px}
+.loot-rewards{display:flex;gap:12px;justify-content:center;margin-bottom:20px;flex-wrap:wrap}
+.loot-reward-chip{padding:8px 14px;border-radius:12px;background:var(--bg);border:1px solid var(--border);font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
+/* Badge collection */
+.badge-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:10px;margin-top:10px}
+.badge-cell{aspect-ratio:1;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1.5px solid var(--border);background:var(--bg);padding:6px;cursor:pointer;transition:all .2s;position:relative}
+.badge-cell:hover{transform:scale(1.08);border-color:var(--accent)}
+.badge-cell.locked{opacity:.3;filter:grayscale(1)}
+.badge-emoji{font-size:28px}
+.badge-count{position:absolute;top:2px;right:4px;background:var(--accent);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;font-family:'JetBrains Mono',monospace}
+.badge-name{font-size:9px;color:var(--text-dim);margin-top:2px;text-align:center;line-height:1.1}
+/* Quick status */
+.quick-stats{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.q-stat{flex:1;min-width:90px;padding:10px;border-radius:10px;background:var(--card-bg);border:1px solid var(--border);text-align:center}
+.q-stat .v{font-family:'JetBrains Mono',monospace;font-weight:800;font-size:18px}
+.q-stat .l{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px}
+/* Motivational banner */
+.motiv-banner{padding:14px 18px;border-radius:14px;background:linear-gradient(135deg,#6366f120,#a78bfa20);border:1px solid var(--border);font-size:13px;line-height:1.6;display:flex;align-items:center;gap:12px}
+.motiv-banner .mb-ico{font-size:26px;flex-shrink:0}
+/* Level up effect */
+.levelup-overlay{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.levelup-text{font-size:42px;font-weight:800;background:linear-gradient(135deg,#fbbf24,#f59e0b,#ef4444);-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:levelFly 2.5s ease-out forwards;text-shadow:0 0 40px rgba(245,158,11,.6)}
+@keyframes levelFly{0%{opacity:0;transform:scale(.3) translateY(50px)}20%{opacity:1;transform:scale(1.2) translateY(0)}40%{transform:scale(1) translateY(-10px)}80%{opacity:1;transform:scale(1) translateY(-10px)}100%{opacity:0;transform:scale(.9) translateY(-80px)}}
+/* Shop */
+.shop-item{display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;background:var(--bg);border:1px solid var(--border);margin-bottom:8px}
+.shop-ico{font-size:28px;width:48px;text-align:center;flex-shrink:0}
+.shop-body{flex:1;min-width:0}
+.shop-name{font-size:14px;font-weight:700}
+.shop-desc{font-size:12px;color:var(--text-dim);margin-top:2px;line-height:1.5}
+.shop-buy{padding:8px 14px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.shop-buy:disabled{opacity:.4;cursor:not-allowed}
+/* Rewards pop */
+.reward-pop{position:fixed;right:24px;top:80px;z-index:2800;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.reward-toast{background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:10px 14px;font-size:13px;font-weight:700;box-shadow:0 8px 20px rgba(0,0,0,.3);animation:rewardSlide 3s ease forwards;display:flex;align-items:center;gap:8px}
+@keyframes rewardSlide{0%{opacity:0;transform:translateX(80px)}15%{opacity:1;transform:translateX(0)}75%{opacity:1;transform:translateX(0)}100%{opacity:0;transform:translateX(80px)}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div>
+      <div style="display:flex;align-items:center;gap:12px"><h1>PhD Study Lab</h1><div id="streakBadge" style="display:none;padding:4px 12px;border-radius:10px;background:var(--warning);color:#fff;font-size:12px;font-weight:700;white-space:nowrap"></div></div>
+      <p data-i18n="header.subtitle">博士生学习助手</p>
+    </div>
+    <div class="header-actions">
+      <div class="top-status">
+        <div class="status-pill coin-pill" id="coinPill" onclick="openShop()" data-i18n-title="status.coin"><span class="ico">🪙</span><span id="coinCount">0</span></div>
+        <div class="status-pill freeze-pill" id="freezePill" onclick="showFreezeInfo()" data-i18n-title="status.freeze"><span class="ico">🛡️</span><span id="freezeCount">0</span></div>
+      </div>
+      <div class="dropdown">
+        <button class="icon-btn" onclick="toggleDropdown()" data-i18n-title="data.manage">💾</button>
+        <div class="dropdown-menu" id="dataDropdown">
+          <button class="dropdown-item" onclick="exportData()"><span style="width:22px;text-align:center">📤</span> <span data-i18n="data.export">导出数据</span></button>
+          <button class="dropdown-item" onclick="document.getElementById('importInput').click()"><span style="width:22px;text-align:center">📥</span> <span data-i18n="data.import">导入数据</span></button>
+          <button class="dropdown-item" onclick="clearAllData()" style="color:var(--danger)"><span style="width:22px;text-align:center">🗑</span> <span data-i18n="data.clear">清空所有数据</span></button>
+        </div>
+      </div>
+      <input type="file" id="importInput" accept=".json" onchange="importData(event)">
+      <div class="dropdown">
+        <button class="icon-btn" onclick="toggleLangDropdown()" title="Language / 语言 / Langue">🌐</button>
+        <div class="dropdown-menu" id="langDropdown">
+          <button class="dropdown-item" onclick="setLang('zh')"><span style="width:22px;text-align:center">🇨🇳</span> 中文</button>
+          <button class="dropdown-item" onclick="setLang('en')"><span style="width:22px;text-align:center">🇬🇧</span> English</button>
+          <button class="dropdown-item" onclick="setLang('fr')"><span style="width:22px;text-align:center">🇫🇷</span> Français</button>
+        </div>
+      </div>
+      <button class="icon-btn" id="themeBtn" onclick="toggleTheme()">☀️</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="pomodoro" onclick="switchTab('pomodoro')"><span class="icon">⏱</span><span class="label" data-i18n="tab.pomodoro">专注</span></button>
+    <button class="tab-btn" data-tab="feynman" onclick="switchTab('feynman')"><span class="icon">🧠</span><span class="label" data-i18n="tab.feynman">费曼</span></button>
+    <button class="tab-btn" data-tab="notes" onclick="switchTab('notes')"><span class="icon">📑</span><span class="label" data-i18n="tab.notes">文献</span></button>
+    <button class="tab-btn" data-tab="tracker" onclick="switchTab('tracker')"><span class="icon">📋</span><span class="label" data-i18n="tab.tracker">每日</span></button>
+    <button class="tab-btn" data-tab="stats" onclick="switchTab('stats')"><span class="icon">📊</span><span class="label" data-i18n="tab.stats">统计</span></button>
+  </div>
+
+  <!-- ══ Pomodoro ══ -->
+  <div id="sec-pomodoro" class="section active">
+    <div id="motivBanner"></div>
+    <div id="dailyQuestsCard"></div>
+    <div class="pomo-center">
+      <div id="comboBar" class="combo-bar" style="display:none"></div>
+      <div class="pomo-modes">
+        <button class="pomo-mode-btn active" data-mode="focus" onclick="pomoSwitchMode('focus')" data-i18n="pomo.mode.focus">专注时间</button>
+        <button class="pomo-mode-btn" data-mode="short" onclick="pomoSwitchMode('short')" data-i18n="pomo.mode.short">短休息</button>
+        <button class="pomo-mode-btn" data-mode="long" onclick="pomoSwitchMode('long')" data-i18n="pomo.mode.long">长休息</button>
+      </div>
+      <div class="pomo-ring">
+        <svg viewBox="0 0 260 260"><circle class="track" cx="130" cy="130" r="120"/><circle class="progress" id="pomoArc" cx="130" cy="130" r="120" stroke-dasharray="753.98" stroke-dashoffset="753.98" transform="rotate(-90 130 130)"/></svg>
+        <div class="pomo-display"><span class="pomo-time" id="pomoTime">25:00</span><span class="pomo-label" id="pomoLabel" data-i18n="pomo.mode.focus">专注时间</span></div>
+      </div>
+      <div class="pomo-actions">
+        <button class="pomo-start" id="pomoStartBtn" onclick="pomoToggle()" style="background:var(--accent);box-shadow:0 4px 20px rgba(99,102,241,.3)" data-i18n="pomo.start">开始</button>
+        <button class="pomo-reset" onclick="pomoReset()" data-i18n="pomo.reset">重置</button>
+      </div>
+      <div class="pomo-stats">
+        <span style="color:var(--text-dim)" data-i18n="pomo.today">今日专注：</span>
+        <span style="color:var(--accent);font-weight:700" id="pomoSessions">0 次</span>
+        <span style="color:var(--text-dim);margin-left:8px" id="pomoMins">共 0 分钟</span>
+      </div>
+      <div id="pomoTodayList"></div>
+    </div>
+  </div>
+
+  <!-- ══ Feynman ══ -->
+  <div id="sec-feynman" class="section">
+    <div class="steps-bar" id="feynmanSteps"></div>
+    <div class="card feynman-card">
+      <h3 id="feynmanTitle"></h3><p id="feynmanDesc"></p>
+      <textarea id="feynmanInput" data-i18n-placeholder="feyn.placeholder" placeholder="在这里写下你的思考..."></textarea>
+      <div class="feynman-nav">
+        <button class="btn btn-outline" id="feynmanPrev" onclick="feynmanPrev()" data-i18n="feyn.prev">上一步</button>
+        <button class="btn btn-accent" id="feynmanNext" onclick="feynmanNext()" data-i18n="feyn.next">下一步</button>
+      </div>
+    </div>
+    <div id="feynmanHistory"></div>
+  </div>
+
+  <!-- ══ Notes ══ -->
+  <div id="sec-notes" class="section">
+    <div class="card notes-form">
+      <div class="notes-row">
+        <div><div class="small-label" style="margin-bottom:6px" data-i18n="note.title">论文标题</div><input id="noteTitle" data-i18n-placeholder="note.title.ph" placeholder="输入论文标题..."></div>
+        <div><div class="small-label" style="margin-bottom:6px" data-i18n="note.authors">作者</div><input id="noteAuthors" data-i18n-placeholder="note.authors.ph" placeholder="输入作者..."></div>
+        <div><div class="small-label" style="margin-bottom:6px" data-i18n="note.year">年份</div><input id="noteYear" data-i18n-placeholder="note.year.ph" placeholder="年份" style="width:80px"></div>
+      </div>
+      <div><div class="small-label" style="margin-bottom:6px" data-i18n="note.key">核心观点 & 方法</div><textarea id="noteKey" data-i18n-placeholder="note.key.ph" placeholder="输入核心观点..."></textarea></div>
+      <div><div class="small-label" style="margin-bottom:6px" data-i18n="note.q">问题 & 思考</div><textarea id="noteQ" data-i18n-placeholder="note.q.ph" placeholder="输入问题与思考..."></textarea></div>
+      <div><div class="small-label" style="margin-bottom:6px" data-i18n="note.tags">标签（逗号分隔）</div><input id="noteTags" data-i18n-placeholder="note.tags.ph" placeholder="例如：深度学习, NLP, Transformer"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-outline" id="noteCancelBtn" style="display:none" onclick="noteCancel()" data-i18n="btn.cancel">取消</button>
+        <button class="btn btn-accent" id="noteSubmitBtn" onclick="noteSave()" data-i18n="note.add">添加笔记</button>
+      </div>
+    </div>
+    <div id="notesContainer"></div>
+  </div>
+
+  <!-- ══ Tracker ══ -->
+  <div id="sec-tracker" class="section">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+        <span style="font-size:14px;font-weight:600" data-i18n="tracker.progress">今日进度</span>
+        <span style="font-size:14px;font-weight:700;color:var(--accent)" id="trackPct">0%</span>
+      </div>
+      <div class="progress-bar-wrap"><div class="progress-bar-fill" id="trackBar" style="width:0;background:var(--accent)"></div></div>
+      <div style="font-size:12px;color:var(--text-dim);margin-top:8px" id="trackCount">完成 0 / 0 项任务</div>
+    </div>
+    <div id="taskList"></div>
+    <div style="display:flex;gap:8px">
+      <input id="newTaskInput" data-i18n-placeholder="tracker.newtask" placeholder="添加今日任务..." onkeydown="if(event.key==='Enter')addTask()">
+      <button class="btn btn-accent" onclick="addTask()" style="padding:10px 20px;border-radius:10px;flex-shrink:0" data-i18n="tracker.add">添加</button>
+    </div>
+    <div class="card" style="display:flex;flex-direction:column;gap:16px">
+      <span style="font-size:14px;font-weight:600" data-i18n="tracker.mood.q">今天感觉如何？</span>
+      <div class="mood-row" id="moodRow"></div>
+      <textarea id="reflectionInput" data-i18n-placeholder="tracker.reflect.ph" placeholder="今天的收获和反思..." style="min-height:70px"></textarea>
+      <button class="btn btn-success" style="align-self:flex-end" onclick="saveDay()" data-i18n="tracker.save">保存今日记录</button>
+    </div>
+    <div id="logHistory"></div>
+  </div>
+
+  <!-- ══ Stats ══ -->
+  <div id="sec-stats" class="section">
+    <!-- Level & XP bar -->
+    <div class="card" id="levelCard" style="text-align:center;padding:28px 24px"></div>
+    <!-- Period selector -->
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-sm btn-outline stat-range active" data-range="7" onclick="setRange(7)" data-i18n="stats.range.7">近7天</button>
+      <button class="btn btn-sm btn-outline stat-range" data-range="14" onclick="setRange(14)" data-i18n="stats.range.14">近14天</button>
+      <button class="btn btn-sm btn-outline stat-range" data-range="30" onclick="setRange(30)" data-i18n="stats.range.30">近30天</button>
+      <button class="btn btn-sm btn-outline stat-range" data-range="0" onclick="setRange(0)" data-i18n="stats.range.all">全部</button>
+    </div>
+    <!-- KPI cards -->
+    <div class="stat-grid" id="statCards"></div>
+    <!-- Milestones -->
+    <div class="card" id="milestonesCard"></div>
+    <!-- Badge collection -->
+    <div class="card" id="badgeCollectionCard"></div>
+    <!-- Personal records -->
+    <div class="card" id="recordsCard"></div>
+    <!-- Insights -->
+    <div class="card" id="insightsCard" style="display:flex;flex-direction:column;gap:10px"></div>
+    <!-- Focus hour distribution -->
+    <div class="card"><h3 style="font-size:15px;margin-bottom:4px" data-i18n="stats.hour.title">专注时段分布</h3><p style="font-size:12px;color:var(--text-dim);margin-bottom:14px" data-i18n="stats.hour.desc">你在哪些小时段最专注？</p><div class="hour-chart" id="hourChart"></div></div>
+    <!-- Weekly comparison table -->
+    <div class="card"><h3 style="font-size:15px;margin-bottom:14px" data-i18n="stats.weekly.title">每周对比</h3><div id="weeklyTable"></div></div>
+    <!-- Mood stats -->
+    <div class="card"><h3 style="font-size:15px;margin-bottom:4px" data-i18n="stats.mood.title">心情统计</h3><p style="font-size:12px;color:var(--text-dim);margin-bottom:14px" data-i18n="stats.mood.desc">心情分布 + 每日走势</p>
+      <div id="moodDistribution" style="margin-bottom:20px"></div>
+      <div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px" data-i18n="stats.mood.timeline">每日心情走势</div>
+      <div id="moodTimeline" style="display:flex;align-items:center;gap:3px;flex-wrap:wrap"></div>
+      <div id="moodCorrelation" style="margin-top:18px"></div>
+    </div>
+    <!-- Heatmap -->
+    <div class="card"><h3 style="font-size:15px;margin-bottom:6px" data-i18n="stats.heat.title">活跃热力图</h3><p style="font-size:12px;color:var(--text-dim);margin-bottom:12px" data-i18n="stats.heat.desc">颜色越深 = 当日活动越多（点击查看详情）</p><div style="display:flex;gap:4px;align-items:center;margin-bottom:10px;font-size:11px;color:var(--text-dim)"><span data-i18n="stats.heat.less">少</span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:var(--border)"></span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#6366f130"></span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#6366f160"></span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#6366f1a0"></span><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#6366f1"></span><span data-i18n="stats.heat.more">多</span></div><div class="heatmap-grid" id="heatmap"></div></div>
+  </div>
+
+  <div class="footer" data-i18n="footer">专注 · 理解 · 记录 · 坚持</div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()"><div class="modal" id="modalContent"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════
+   🌐 I18N — Internationalization system
+   Supports: zh (Chinese), en (English), fr (French)
+   ═══════════════════════════════════════════════ */
+const I18N={
+  zh:{
+    'lang.code':'zh-CN',
+    'doc.title':'PhD Study Lab — 博士生学习助手',
+    'header.subtitle':'博士生学习助手',
+    'status.coin':'学术币 · 点击打开商店',
+    'status.freeze':'护盾 · 可抵消 1 天中断',
+    'data.manage':'数据管理','data.export':'导出数据','data.import':'导入数据','data.clear':'清空所有数据',
+    'tab.pomodoro':'专注','tab.feynman':'费曼','tab.notes':'文献','tab.tracker':'每日','tab.stats':'统计',
+    // Pomodoro
+    'pomo.mode.focus':'专注时间','pomo.mode.short':'短休息','pomo.mode.long':'长休息',
+    'pomo.start':'开始','pomo.pause':'暂停','pomo.reset':'重置',
+    'pomo.today':'今日专注：','pomo.sessions':'{n} 次','pomo.mins':'共 {n} 分钟',
+    'pomo.todayList':'今日专注记录','pomo.session.start':'{t} 开始','pomo.session.dur':'{n} 分钟',
+    'pomo.complete':'专注完成','pomo.complete.unit':'分钟（第 {n} 个 · 🪙+{c}{combo}）','pomo.complete.combo':' · 连击×{m}',
+    'pomo.msg.0':'','pomo.msg.1':'','pomo.msg.2':'状态不错，继续保持','pomo.msg.3':'进入深度模式了','pomo.msg.4':'效率拉满的一天','pomo.msg.5':'今天太强了','pomo.msg.6':'停不下来了 🔥','pomo.msg.7':'史诗级专注','pomo.msg.8':'传奇状态','pomo.msg.9':'今天你就是神',
+    // Feynman
+    'feyn.placeholder':'在这里写下你的思考...','feyn.prev':'上一步','feyn.next':'下一步','feyn.done':'完成保存',
+    'feyn.step.1.title':'选择概念','feyn.step.1.desc':'写下你想要深入理解的一个概念或理论',
+    'feyn.step.2.title':'教给小白','feyn.step.2.desc':'用最简单的语言解释这个概念，就像在教一个完全不懂的人',
+    'feyn.step.3.title':'找出漏洞','feyn.step.3.desc':'回顾你的解释，找出含糊不清或无法说明白的地方',
+    'feyn.step.4.title':'精简类比','feyn.step.4.desc':'用一个生动的类比或比喻重新总结这个概念',
+    'feyn.history':'学习记录（点击查看）','feyn.edit':'编辑学习记录','feyn.empty':'未填写','feyn.view.t':'🧠 {name}','feyn.view.recorded':'记录于 {d}',
+    'feyn.label.1':'① 概念','feyn.label.2':'② 简单解释','feyn.label.3':'③ 知识漏洞','feyn.label.4':'④ 精简类比',
+    'feyn.saved':'已保存 ✓','feyn.updated':'已更新 ✓','feyn.deleted':'已删除',
+    'feyn.del.title':'确认删除？','feyn.del.msg':'将删除「{name}」，不可撤销。',
+    // Notes
+    'note.title':'论文标题','note.title.ph':'输入论文标题...',
+    'note.authors':'作者','note.authors.ph':'输入作者...',
+    'note.year':'年份','note.year.ph':'年份',
+    'note.key':'核心观点 & 方法','note.key.ph':'输入核心观点...',
+    'note.q':'问题 & 思考','note.q.ph':'输入问题与思考...',
+    'note.tags':'标签（逗号分隔）','note.tags.ph':'例如：深度学习, NLP, Transformer','note.tags.short':'标签',
+    'note.add':'添加笔记','note.update':'更新笔记',
+    'note.empty':'还没有文献笔记',
+    'note.del.msg':'将删除「{name}」',
+    // Tracker
+    'tracker.progress':'今日进度','tracker.done':'完成 {d} / {t} 项任务',
+    'tracker.newtask':'添加今日任务...','tracker.add':'添加',
+    'tracker.mood.q':'今天感觉如何？','tracker.reflect.ph':'今天的收获和反思...','tracker.save':'保存今日记录',
+    'tracker.history':'历史记录（点击查看详情）','tracker.tasks':'任务 {d}/{t}','tracker.focus.min':'🎯{n}分',
+    'tracker.log.title':'{mood} {date}','tracker.log.taskpct':'任务完成 {pct}%',
+    'tracker.log.doneHead':'✅ 已完成','tracker.log.undoneHead':'⬜ 未完成',
+    'tracker.log.focus':'专注时段','tracker.log.nofocus':'今日无专注记录',
+    'tracker.log.focus.total':'总计 {m} 分钟（{n} 个时段）',
+    'tracker.log.reflect':'反思与收获',
+    'tracker.log.edit':'编辑 {date}','tracker.log.mood':'心情','tracker.log.reflection':'反思',
+    'tracker.log.del.msg':'将删除 {date} 的记录',
+    'tracker.summary':'今日总结',
+    'tracker.summary.focus':'专注 {m} 分钟（{n} 个时段）',
+    'tracker.summary.tasks':'任务 {d} / {t} 完成',
+    'tracker.summary.streak':'已连续活跃 {n} 天',
+    'mood.label.0':'崩溃','mood.label.1':'低落','mood.label.2':'一般','mood.label.3':'不错','mood.label.4':'高产',
+    // Stats
+    'stats.range.7':'近7天','stats.range.14':'近14天','stats.range.30':'近30天','stats.range.all':'全部',
+    'stats.range.label':'近{n}天','stats.range.label.all':'全部时间',
+    'stats.kpi.focusMin':'专注分钟','stats.kpi.sessions':'专注次数','stats.kpi.avgTask':'平均完成率','stats.kpi.streak':'连续活跃天','stats.kpi.logDays':'记录天数','stats.kpi.notesFeyn':'笔记 + 费曼',
+    'stats.delta.flat':'— 持平','stats.unit.min':'分','stats.unit.times':'次','stats.unit.percent':'%','stats.unit.day':'天','stats.unit.pc':'篇',
+    'stats.level.current':'当前等级','stats.level.next':'{xp} XP / 下一级 {min} XP（{name}）','stats.level.max':'{xp} XP — 满级',
+    'stats.level.legend':'专注=1XP/分　任务=5XP/个　日志=10XP　笔记=15XP　费曼=20XP',
+    'stats.level.up':'升级了！','stats.level.reward':'奖励 🪙{c} + 🛡️ 1 护盾',
+    'stats.ms.title':'里程碑',
+    'stats.ms.1.n':'第一步','stats.ms.1.d':'完成第一个番茄钟',
+    'stats.ms.2.n':'小时工','stats.ms.2.d':'累计专注 1 小时',
+    'stats.ms.3.n':'半日学者','stats.ms.3.d':'累计专注 4 小时',
+    'stats.ms.4.n':'日行千里','stats.ms.4.d':'累计专注 10 小时',
+    'stats.ms.5.n':'百小时俱乐部','stats.ms.5.d':'累计专注 100 小时',
+    'stats.ms.6.n':'记录者','stats.ms.6.d':'保存 7 天日志',
+    'stats.ms.7.n':'习惯养成','stats.ms.7.d':'保存 30 天日志',
+    'stats.ms.8.n':'连续作战','stats.ms.8.d':'连续活跃 7 天',
+    'stats.ms.9.n':'钢铁意志','stats.ms.9.d':'连续活跃 30 天',
+    'stats.ms.10.n':'文献大师','stats.ms.10.d':'积累 10 篇文献笔记',
+    'stats.ms.11.n':'深度理解','stats.ms.11.d':'完成 10 次费曼学习',
+    'stats.ms.achieved':'达成',
+    'stats.records.title':'个人最佳',
+    'stats.records.bestFocus':'单日最长专注','stats.records.bestPomos':'单日最多番茄钟',
+    'stats.records.bestTasks':'单日最多完成任务','stats.records.longestStreak':'历史最长连续活跃',
+    'stats.records.totalFocus':'累计总专注','stats.records.totalTasks':'累计完成任务',
+    'stats.insights.title':'数据洞察',
+    'stats.insights.bestDay':'最高产日','stats.insights.avgDay':'日均专注','stats.insights.activeRate':'活跃率','stats.insights.peakHour':'高效时段','stats.insights.goodMood':'好心情日均专注','stats.insights.badMood':'低心情日均专注','stats.insights.empty':'数据不足，继续记录','stats.insights.hint':'提示',
+    'stats.insights.activeFmt':'{a} / {t} 天（{p}%）',
+    'stats.hour.title':'专注时段分布','stats.hour.desc':'你在哪些小时段最专注？','stats.hour.label':'{h}时',
+    'stats.weekly.title':'每周对比','stats.weekly.start':'周起始','stats.weekly.focus':'专注时长','stats.weekly.rate':'完成率',
+    'stats.weekly.info':'{m}分 · {d}天',
+    'stats.mood.title':'心情统计','stats.mood.desc':'心情分布 + 每日走势','stats.mood.timeline':'每日心情走势',
+    'stats.mood.dist':'{n} 次 ({p}%)','stats.mood.avg':'平均心情指数','stats.mood.corr':'心情 × 专注关联',
+    'stats.mood.corr.focus':'专注','stats.mood.corr.done':'完成','stats.mood.corr.days':'{n}天',
+    'stats.mood.corr.empty':'记录更多数据后将展示心情与效率的关联分析',
+    'stats.mood.no.record':'无记录',
+    'stats.heat.title':'活跃热力图','stats.heat.desc':'颜色越深 = 当日活动越多（点击查看详情）','stats.heat.less':'少','stats.heat.more':'多',
+    'stats.heat.tip':'{d}：专注{m}分钟{log}','stats.heat.hasLog':' · 有日志',
+    'stats.heat.empty':'这天没有记录',
+    'stats.heat.focus':'专注时段','stats.heat.total':'共 {m} 分钟',
+    'stats.heat.tasks':'任务','stats.heat.reflect':'反思','stats.heat.mood':'心情：{m}',
+    // Footer
+    'footer':'专注 · 理解 · 记录 · 坚持',
+    // Common
+    'btn.cancel':'取消','btn.confirm':'确认','btn.confirmDel':'确认删除','btn.edit':'编辑','btn.delete':'删除','btn.save':'保存','btn.saveEdit':'保存修改','btn.ok':'知道了','btn.continue':'继续','btn.gotIt':'收下','btn.goShop':'去商店',
+    'toast.exported':'数据已导出 ✓','toast.imported':'导入成功，刷新中…','toast.importFail':'导入失败：格式错误',
+    'toast.cleared':'已清空','toast.updated':'已更新 ✓','toast.deleted':'已删除',
+    'toast.coinLow':'金币不足','toast.freezeFull':'护盾已满（上限 5 个）',
+    'toast.shield':'🛡️ 护盾保护了 {n} 天的连续节奏',
+    'toast.shop.bought':'已购买：{name} ✓',
+    'confirm.clear.title':'⚠️ 确认清空所有数据？','confirm.clear.msg':'此操作不可撤销。建议先导出备份。',
+    'confirm.del.title':'确认删除？',
+    'streak.badge':'连续 {n} 天',
+    // Gamification
+    'reward.pomo':'番茄钟 ×{m}','reward.feyn':'费曼学习','reward.newNote':'新文献笔记','reward.taskDone':'完成任务','reward.taskAllDone':'任务全清','reward.login':'每日签到','reward.questAll':'今日任务全清','reward.questPre':'任务：','reward.upgrade':'升级奖励',
+    // Daily login
+    'login.title':'每日签到 ✨','login.unit':'🪙 学术币','login.bonus':'连续活跃 {n} 天 · 额外奖励 +{b}','login.welcome':'欢迎回来开始新的一天',
+    // Daily quests
+    'quest.title':'📅 今日任务','quest.reset':'⏰ 重置剩余 {h}时{m}分','quest.claimed':'✓ 已领取','quest.claim':'领取 🪙{n}','quest.reward':'奖励','quest.allDone':'🎉 今日任务全部完成！明天见',
+    'quest.pomo1':'完成 1 个番茄钟','quest.pomo3':'完成 3 个番茄钟','quest.pomo5':'完成 5 个番茄钟',
+    'quest.focus60':'累计专注 60 分钟','quest.focus120':'累计专注 120 分钟',
+    'quest.task1':'完成 1 项任务','quest.task3':'完成 3 项任务',
+    'quest.note1':'添加 1 篇文献笔记','quest.feyn1':'完成 1 次费曼学习',
+    'quest.mood':'保存今日记录','quest.combo3':'达成 3 连击',
+    'quest.allDone.title':'今日全清 🌟','quest.allDone.unit':'🪙 额外奖励 + 1 🛡️护盾','quest.allDone.sub':'明日还有新任务等你',
+    // Combo
+    'combo.text':'连击','combo.hint':'继续，不要断',
+    // Motiv banner
+    'motiv.new.1':'新的一天开始了。一个番茄钟就好。','motiv.new.2':'回来得正好。先做一个就好。','motiv.new.3':'Just one pomodoro. 只此而已。',
+    'motiv.streak':'你已经连续 {n} 天保持节奏了。今天也一样。',
+    'motiv.night':'今天还没开始也没关系，30 分钟也算一天。',
+    'motiv.hot':'今天已经 {n} 个番茄钟了，你状态非常好。',
+    'motiv.good':'已完成 {n} 个，保持这个节奏就很棒。',
+    'motiv.late':'夜深了。休息也是研究的一部分。',
+    'motiv.default':'今天从哪里开始？',
+    // Achievements
+    'achieve.allDone':'全部完成','achieve.allDone.unit':'项任务已清空','achieve.allDone.sub':'🪙 +20 奖金 · 今天的计划全部搞定了',
+    // Loot
+    'loot.hint':'点击宝箱开启',
+    'rarity.common':'普通','rarity.uncommon':'精良','rarity.rare':'稀有','rarity.epic':'史诗','rarity.legendary':'传说',
+    // Badge collection
+    'badge.title':'🎒 研究收藏','badge.desc':'共收集 {n} 种 · 开箱 {t} 次','badge.empty.t':'🎒 收藏','badge.empty.d':'完成番茄钟有概率开出宝箱和稀有物品','badge.count':'持有数量：',
+    // Shop
+    'shop.title':'🏪 学术商店','shop.coins':'你的金币：','shop.tip':'💡 <b>获得金币的方式</b>：完成番茄钟 · 完成每日任务 · 开宝箱 · 连续签到',
+    'shop.freeze.n':'研究护盾','shop.freeze.d':'保护 1 天不在线也不中断连击（最多持有 5 个）',
+    'shop.chest.n':'神秘宝箱','shop.chest.d':'直接开一个宝箱，有概率获得稀有物品',
+    'shop.bigChest.n':'大型宝箱','shop.bigChest.d':'保底稀有以上',
+    'shop.resetQ.n':'重置今日任务','shop.resetQ.d':'如果今天任务太难，花点币换一批',
+    // Freeze info
+    'freeze.title':'🛡️ 研究护盾',
+    'freeze.p1':'护盾可以保护你的连击不被中断。如果某一天你完全没有活动，系统会自动消耗 1 个护盾来维持连续活跃天数。',
+    'freeze.p2':'研究和学习不需要 100% 的完美主义。休息日、低产日、生病日都是正常的 — 护盾让你敢于保持长期节奏，而不被单日波动打倒。',
+    'freeze.cur':'当前：<b style="color:#38bdf8">{n} 个护盾</b><br>上限 5 个 · 可在商店购买 · 完成里程碑/开宝箱掉落',
+    // Loot items (common)
+    'item.paper.n':'草稿纸','item.paper.d':'上面有一个你看不懂的公式，可能是你自己写的',
+    'item.coffee.n':'研究咖啡','item.coffee.d':'第三杯了。第三杯还是咖啡吗？是命。',
+    'item.pencil.n':'半截铅笔','item.pencil.d':'另一半去哪了。不知道，但它完成了使命。',
+    'item.clip.n':'回形针','item.clip.d':'你不知道它从哪来，但你不敢扔',
+    'item.roll.n':'卫生纸筒芯','item.roll.d':'可以当望远镜。导师：？',
+    'item.box.n':'昨天的外卖盒','item.box.d':'里面有半个春卷。你在思考要不要吃掉。',
+    'item.battery.n':'半格电池','item.battery.d':'能用一会儿。跟你差不多。',
+    'item.candy.n':'实验室糖果','item.candy.d':'放了三年。还能吃吗？能。',
+    'item.notebook.n':'实验笔记本','item.notebook.d':'前三页很认真，后面全是涂鸦',
+    'item.bookmark.n':'不明书签','item.bookmark.d':'夹在一本你没读完的书里。第 42 页。',
+    'item.tube.n':'一个试管','item.tube.d':'里面是液体。什么液体？最好别问。',
+    'item.pen.n':'能写出字的笔','item.pen.d':'这年头这属于珍稀资源',
+    'item.chair.n':'不摇的椅子','item.chair.d':'在实验室里这叫奇迹',
+    'item.key.n':'一把钥匙','item.key.d':'你不知道它开哪个门。但是它重要。',
+    'item.scope.n':'会自己对焦的显微镜','item.scope.d':'它比你更懂这个实验',
+    'item.review.n':'1998 年的综述','item.review.d':'你的研究方向的鼻祖。读完发现问题他们早就提过了。',
+    'item.medal.n':'"今天没哭"奖章','item.medal.d':'颁发给坚持下来的你',
+    'item.tcoffee.n':'导师没喝完的咖啡','item.tcoffee.d':'别问为什么在你这',
+    'item.printer.n':'能用的打印机','item.printer.d':'全系一共两台。你今天遇到了其中一台。',
+    'item.idea.n':'一个想法','item.idea.d':'可能是灵感，也可能是幻觉。先写下来再说。',
+    'item.shield.n':'研究护盾','item.shield.d':'抵消 1 天的摆烂。系统不会判你断链。',
+    'item.crystal.n':'灵感水晶','item.crystal.d':'洗澡时忘了它，想起来的时候已经到睡觉时间了',
+    'item.scroll.n':'古老卷轴','item.scroll.d':'展开后写着：「你的研究方向已经有人做过了」。假的。但是你紧张了 3 秒。',
+    'item.exp.n':'成功的实验','item.exp.d':'你下次再也复现不出来了',
+    'item.email.n':'导师的秒回','item.email.d':'极其罕见。珍惜此刻。',
+    'item.moon.n':'凌晨 3 点的顿悟','item.moon.d':'醒来以为自己解决了整个学科。早上发现是把 x 和 y 搞反了。',
+    'item.crown.n':'学术王冠','item.crown.d':'戴上它，组会上你就敢说「我不同意」',
+    'item.trophy.n':'自封诺贝.ok奖','item.trophy.d':'颁奖词：「表彰其在今天起床这件事上的杰出贡献」',
+    'item.star.n':'顿悟之星','item.star.d':'你突然看清了整个研究方向。三天后又忘了。但这三天值。',
+    'item.r2.n':'Reviewer 2 的赞美','item.r2.d':'"这是我读过最好的论文之一。强烈建议直接接收。" — Reviewer 2（虚构）',
+    'item.advisor.n':'会通灵的导师','item.advisor.d':'在你还没提问之前就给出答案。不存在。但你梦到过。',
+    'item.pip.n':'一次成功的 pip install','item.pip.d':'没有报错。没有依赖冲突。没有版本警告。你不敢相信自己的眼睛。',
+    // Levels
+    'level.1':'入门学徒','level.2':'初级研究员','level.3':'文献猎手','level.4':'实验达人','level.5':'论文写手','level.6':'学术新星','level.7':'领域专家','level.8':'学术大牛','level.9':'博士候选人','level.10':'未来教授',
+  },
+  en:{
+    'lang.code':'en',
+    'doc.title':'PhD Study Lab',
+    'header.subtitle':'PhD student study companion',
+    'status.coin':'Academic coins · tap to open shop',
+    'status.freeze':'Shield · protects 1 day of inactivity',
+    'data.manage':'Data','data.export':'Export data','data.import':'Import data','data.clear':'Clear all data',
+    'tab.pomodoro':'Focus','tab.feynman':'Feynman','tab.notes':'Papers','tab.tracker':'Daily','tab.stats':'Stats',
+    'pomo.mode.focus':'Focus','pomo.mode.short':'Short break','pomo.mode.long':'Long break',
+    'pomo.start':'Start','pomo.pause':'Pause','pomo.reset':'Reset',
+    'pomo.today':"Today's focus:",'pomo.sessions':'{n} sessions','pomo.mins':'{n} min total',
+    'pomo.todayList':"Today's focus sessions",'pomo.session.start':'started at {t}','pomo.session.dur':'{n} min',
+    'pomo.complete':'Focus complete','pomo.complete.unit':'min (#{n} · 🪙+{c}{combo})','pomo.complete.combo':' · combo ×{m}',
+    'pomo.msg.0':'','pomo.msg.1':'','pomo.msg.2':'Nice rhythm, keep going','pomo.msg.3':'Entering deep mode','pomo.msg.4':'Peak productivity day','pomo.msg.5':'Crushing it today','pomo.msg.6':"Can't stop 🔥",'pomo.msg.7':'Epic focus','pomo.msg.8':'Legendary status','pomo.msg.9':"Today you're a god",
+    'feyn.placeholder':'Write your thoughts here...','feyn.prev':'Previous','feyn.next':'Next','feyn.done':'Save',
+    'feyn.step.1.title':'Pick a concept','feyn.step.1.desc':'Write down one concept or theory you want to understand deeply',
+    'feyn.step.2.title':'Teach a child','feyn.step.2.desc':"Explain it in the simplest words, as if teaching someone who knows nothing",
+    'feyn.step.3.title':'Find the gaps','feyn.step.3.desc':"Review your explanation — find the vague or unclear parts",
+    'feyn.step.4.title':'Simple analogy','feyn.step.4.desc':'Summarize the concept using a vivid analogy or metaphor',
+    'feyn.history':'Study records (tap to view)','feyn.edit':'Edit record','feyn.empty':'Empty','feyn.view.t':'🧠 {name}','feyn.view.recorded':'Recorded on {d}',
+    'feyn.label.1':'① Concept','feyn.label.2':'② Simple explanation','feyn.label.3':'③ Knowledge gaps','feyn.label.4':'④ Simple analogy',
+    'feyn.saved':'Saved ✓','feyn.updated':'Updated ✓','feyn.deleted':'Deleted',
+    'feyn.del.title':'Delete?','feyn.del.msg':'"{name}" will be deleted. This cannot be undone.',
+    'note.title':'Paper title','note.title.ph':'Enter paper title...',
+    'note.authors':'Authors','note.authors.ph':'Enter authors...',
+    'note.year':'Year','note.year.ph':'Year',
+    'note.key':'Key ideas & method','note.key.ph':'Enter key ideas...',
+    'note.q':'Questions & thoughts','note.q.ph':'Enter questions and reflections...',
+    'note.tags':'Tags (comma-separated)','note.tags.ph':'e.g. deep learning, NLP, Transformer','note.tags.short':'Tags',
+    'note.add':'Add note','note.update':'Update note',
+    'note.empty':'No paper notes yet',
+    'note.del.msg':'"{name}" will be deleted',
+    'tracker.progress':"Today's progress",'tracker.done':'{d} / {t} tasks done',
+    'tracker.newtask':"Add today's task...",'tracker.add':'Add',
+    'tracker.mood.q':'How do you feel today?','tracker.reflect.ph':"Today's takeaways and reflections...",'tracker.save':'Save today',
+    'tracker.history':'History (tap for details)','tracker.tasks':'tasks {d}/{t}','tracker.focus.min':'🎯{n}m',
+    'tracker.log.title':'{mood} {date}','tracker.log.taskpct':'Tasks {pct}% done',
+    'tracker.log.doneHead':'✅ Done','tracker.log.undoneHead':'⬜ Not done',
+    'tracker.log.focus':'Focus sessions','tracker.log.nofocus':'No focus sessions today',
+    'tracker.log.focus.total':'Total {m} min ({n} sessions)',
+    'tracker.log.reflect':'Reflection & takeaways',
+    'tracker.log.edit':'Edit {date}','tracker.log.mood':'Mood','tracker.log.reflection':'Reflection',
+    'tracker.log.del.msg':"The log for {date} will be deleted",
+    'tracker.summary':"Today's summary",
+    'tracker.summary.focus':'{m} min focused ({n} sessions)',
+    'tracker.summary.tasks':'{d} / {t} tasks done',
+    'tracker.summary.streak':'{n} active days in a row',
+    'mood.label.0':'Rough','mood.label.1':'Down','mood.label.2':'Meh','mood.label.3':'Good','mood.label.4':'On fire',
+    'stats.range.7':'Last 7','stats.range.14':'Last 14','stats.range.30':'Last 30','stats.range.all':'All',
+    'stats.range.label':'last {n} days','stats.range.label.all':'all time',
+    'stats.kpi.focusMin':'Focus min','stats.kpi.sessions':'Sessions','stats.kpi.avgTask':'Avg completion','stats.kpi.streak':'Active streak','stats.kpi.logDays':'Log days','stats.kpi.notesFeyn':'Notes + Feynman',
+    'stats.delta.flat':'— flat','stats.unit.min':'m','stats.unit.times':'','stats.unit.percent':'%','stats.unit.day':'d','stats.unit.pc':'',
+    'stats.level.current':'Current level','stats.level.next':'{xp} XP / next {min} XP ({name})','stats.level.max':'{xp} XP — max',
+    'stats.level.legend':'Focus=1XP/min　Tasks=5XP　Logs=10XP　Notes=15XP　Feynman=20XP',
+    'stats.level.up':'Level up!','stats.level.reward':'Reward 🪙{c} + 🛡️ 1 shield',
+    'stats.ms.title':'Milestones',
+    'stats.ms.1.n':'First step','stats.ms.1.d':'Complete your first pomodoro',
+    'stats.ms.2.n':'One hour in','stats.ms.2.d':'Focus 1 hour total',
+    'stats.ms.3.n':'Half-day scholar','stats.ms.3.d':'Focus 4 hours total',
+    'stats.ms.4.n':'Long haul','stats.ms.4.d':'Focus 10 hours total',
+    'stats.ms.5.n':'100-hour club','stats.ms.5.d':'Focus 100 hours total',
+    'stats.ms.6.n':'Recorder','stats.ms.6.d':'Save 7 daily logs',
+    'stats.ms.7.n':'Habit formed','stats.ms.7.d':'Save 30 daily logs',
+    'stats.ms.8.n':'On a roll','stats.ms.8.d':'7 days active in a row',
+    'stats.ms.9.n':'Iron will','stats.ms.9.d':'30 days active in a row',
+    'stats.ms.10.n':'Lit. master','stats.ms.10.d':'Accumulate 10 paper notes',
+    'stats.ms.11.n':'Deep understanding','stats.ms.11.d':'Complete 10 Feynman studies',
+    'stats.ms.achieved':'Done',
+    'stats.records.title':'Personal best',
+    'stats.records.bestFocus':'Best single-day focus','stats.records.bestPomos':'Most pomodoros in a day',
+    'stats.records.bestTasks':'Most tasks done in a day','stats.records.longestStreak':'Longest active streak ever',
+    'stats.records.totalFocus':'Total focus time','stats.records.totalTasks':'Total tasks done',
+    'stats.insights.title':'Insights',
+    'stats.insights.bestDay':'Best day','stats.insights.avgDay':'Daily avg focus','stats.insights.activeRate':'Active rate','stats.insights.peakHour':'Peak hour','stats.insights.goodMood':'Avg focus on good days','stats.insights.badMood':'Avg focus on low days','stats.insights.empty':'Not enough data — keep logging','stats.insights.hint':'Tip',
+    'stats.insights.activeFmt':'{a} / {t} days ({p}%)',
+    'stats.hour.title':'Focus by hour','stats.hour.desc':'Which hours are you most focused?','stats.hour.label':'{h}h',
+    'stats.weekly.title':'Weekly comparison','stats.weekly.start':'Week of','stats.weekly.focus':'Focus time','stats.weekly.rate':'Completion',
+    'stats.weekly.info':'{m}m · {d}d',
+    'stats.mood.title':'Mood stats','stats.mood.desc':'Distribution + daily trend','stats.mood.timeline':'Daily mood trend',
+    'stats.mood.dist':'{n}× ({p}%)','stats.mood.avg':'Avg mood score','stats.mood.corr':'Mood × Focus correlation',
+    'stats.mood.corr.focus':'Focus','stats.mood.corr.done':'Done','stats.mood.corr.days':'{n}d',
+    'stats.mood.corr.empty':'Mood–productivity correlations will appear with more data',
+    'stats.mood.no.record':'no record',
+    'stats.heat.title':'Activity heatmap','stats.heat.desc':'Darker = more activity that day (click for details)','stats.heat.less':'less','stats.heat.more':'more',
+    'stats.heat.tip':'{d}: {m} min{log}','stats.heat.hasLog':' · logged',
+    'stats.heat.empty':'No record for this day',
+    'stats.heat.focus':'Focus sessions','stats.heat.total':'Total {m} min',
+    'stats.heat.tasks':'Tasks','stats.heat.reflect':'Reflection','stats.heat.mood':'Mood: {m}',
+    'footer':'Focus · Understand · Record · Persist',
+    'btn.cancel':'Cancel','btn.confirm':'Confirm','btn.confirmDel':'Delete','btn.edit':'Edit','btn.delete':'Delete','btn.save':'Save','btn.saveEdit':'Save changes','btn.ok':'Got it','btn.continue':'Continue','btn.gotIt':'Collect','btn.goShop':'Go to shop',
+    'toast.exported':'Data exported ✓','toast.imported':'Import succeeded, reloading…','toast.importFail':'Import failed: bad format',
+    'toast.cleared':'Cleared','toast.updated':'Updated ✓','toast.deleted':'Deleted',
+    'toast.coinLow':'Not enough coins','toast.freezeFull':'Shields full (max 5)',
+    'toast.shield':'🛡️ Shield saved {n} day(s) of streak',
+    'toast.shop.bought':'Purchased: {name} ✓',
+    'confirm.clear.title':'⚠️ Clear all data?','confirm.clear.msg':"This can't be undone. Export a backup first if needed.",
+    'confirm.del.title':'Delete?',
+    'streak.badge':'{n}-day streak',
+    'reward.pomo':'Pomodoro ×{m}','reward.feyn':'Feynman study','reward.newNote':'New paper note','reward.taskDone':'Task done','reward.taskAllDone':'All tasks done','reward.login':'Daily login','reward.questAll':"Today's quests all clear",'reward.questPre':'Quest: ','reward.upgrade':'Level-up reward',
+    'login.title':'Daily check-in ✨','login.unit':'🪙 coins','login.bonus':'{n} active days · bonus +{b}','login.welcome':'Welcome back for a new day',
+    'quest.title':"📅 Today's quests",'quest.reset':'⏰ resets in {h}h {m}m','quest.claimed':'✓ claimed','quest.claim':'claim 🪙{n}','quest.reward':'reward','quest.allDone':"🎉 All of today's quests done! See you tomorrow",
+    'quest.pomo1':'Complete 1 pomodoro','quest.pomo3':'Complete 3 pomodoros','quest.pomo5':'Complete 5 pomodoros',
+    'quest.focus60':'Focus 60 minutes total','quest.focus120':'Focus 120 minutes total',
+    'quest.task1':'Complete 1 task','quest.task3':'Complete 3 tasks',
+    'quest.note1':'Add 1 paper note','quest.feyn1':'Complete 1 Feynman study',
+    'quest.mood':"Save today's log",'quest.combo3':'Reach a 3-combo',
+    'quest.allDone.title':'All clear 🌟','quest.allDone.unit':'🪙 bonus + 1 🛡️ shield','quest.allDone.sub':'New quests tomorrow',
+    'combo.text':'Combo','combo.hint':"Don't break the chain",
+    'motiv.new.1':'New day. Just one pomodoro.','motiv.new.2':'Good timing. Just one.','motiv.new.3':'Just one pomodoro. Nothing more.',
+    'motiv.streak':"You've kept the rhythm {n} days. Today too.",
+    'motiv.night':"Not yet started? 30 min still counts as a day.",
+    'motiv.hot':"{n} pomodoros today — you're on fire.",
+    'motiv.good':'{n} done. Keep this rhythm.',
+    'motiv.late':'Late night. Rest is also research.',
+    'motiv.default':'Where to start today?',
+    'achieve.allDone':'All done','achieve.allDone.unit':'tasks cleared','achieve.allDone.sub':'🪙 +20 bonus · everything planned got done',
+    'loot.hint':'Tap the chest to open',
+    'rarity.common':'Common','rarity.uncommon':'Uncommon','rarity.rare':'Rare','rarity.epic':'Epic','rarity.legendary':'Legendary',
+    'badge.title':'🎒 Collection','badge.desc':'{n} kinds collected · {t} chests opened','badge.empty.t':'🎒 Collection','badge.empty.d':'Completing pomodoros has a chance to drop loot chests','badge.count':'Owned: ',
+    'shop.title':'🏪 Academic shop','shop.coins':'Your coins: ','shop.tip':'💡 <b>How to earn coins</b>: complete pomodoros · daily quests · open chests · daily check-in',
+    'shop.freeze.n':'Research shield','shop.freeze.d':"Keep streak if you miss a day (max 5)",
+    'shop.chest.n':'Mystery chest','shop.chest.d':'Open a chest — chance of rare items',
+    'shop.bigChest.n':'Large chest','shop.bigChest.d':'Rare or better guaranteed',
+    'shop.resetQ.n':"Reset today's quests",'shop.resetQ.d':"Too hard? Swap them for new ones",
+    'freeze.title':'🛡️ Research shield',
+    'freeze.p1':"The shield keeps your streak safe. If you're totally inactive for a day, 1 shield is consumed automatically to preserve your active-days count.",
+    'freeze.p2':"Research doesn't need 100% perfection. Rest days, low-output days, sick days are normal — shields let you keep a long-term rhythm without single-day setbacks.",
+    'freeze.cur':'Current: <b style="color:#38bdf8">{n} shields</b><br>Cap 5 · buy in shop · drop from milestones/chests',
+    'item.paper.n':'Scratch paper','item.paper.d':"An equation you can't read. Maybe you wrote it.",
+    'item.coffee.n':'Research coffee','item.coffee.d':"Third cup. Is it still coffee? It's fate.",
+    'item.pencil.n':'Half pencil','item.pencil.d':"Where's the other half? Nobody knows. It served its purpose.",
+    'item.clip.n':'Paper clip','item.clip.d':"You don't know where it came from, but you can't throw it away",
+    'item.roll.n':'Toilet paper tube','item.roll.d':'Makes a telescope. Advisor: ?',
+    'item.box.n':"Yesterday's takeout box",'item.box.d':"Half a spring roll inside. You're weighing whether to eat it.",
+    'item.battery.n':'Half-dead battery','item.battery.d':"Still runs a bit. Like you.",
+    'item.candy.n':'Lab candy','item.candy.d':"Three years old. Still edible? Yes.",
+    'item.notebook.n':'Lab notebook','item.notebook.d':'First 3 pages serious, rest is doodles',
+    'item.bookmark.n':'Mystery bookmark','item.bookmark.d':"In a book you didn't finish. Page 42.",
+    'item.tube.n':'A test tube','item.tube.d':"Contains liquid. What kind? Don't ask.",
+    'item.pen.n':'A pen that writes','item.pen.d':'These days, this is a rare resource',
+    'item.chair.n':"A chair that doesn't wobble",'item.chair.d':"In a lab, this is a miracle",
+    'item.key.n':'A key','item.key.d':"You don't know what door it opens. But it matters.",
+    'item.scope.n':'Self-focusing microscope','item.scope.d':'It understands the experiment better than you',
+    'item.review.n':'1998 review paper','item.review.d':"Forefather of your field. Everything you're working on, they already mentioned.",
+    'item.medal.n':'"Didn\'t cry today" medal','item.medal.d':'Awarded to you for hanging on',
+    'item.tcoffee.n':"Advisor's unfinished coffee",'item.tcoffee.d':"Don't ask why it's with you",
+    'item.printer.n':'A working printer','item.printer.d':'Two exist in the whole department. You met one today.',
+    'item.idea.n':'An idea','item.idea.d':'Could be inspiration, could be a hallucination. Write it down first.',
+    'item.shield.n':'Research shield','item.shield.d':"Absorbs 1 day of slacking. System won't break your streak.",
+    'item.crystal.n':'Inspiration crystal','item.crystal.d':"You forgot it in the shower. By the time you remembered, it was bedtime.",
+    'item.scroll.n':'Ancient scroll','item.scroll.d':'Unrolls to read: "Your research direction has been done before." Fake. But you were nervous for 3 seconds.',
+    'item.exp.n':'A working experiment','item.exp.d':"You'll never reproduce it again",
+    'item.email.n':"Advisor's instant reply",'item.email.d':'Extremely rare. Cherish this moment.',
+    'item.moon.n':'3 AM epiphany','item.moon.d':"Woke up thinking you'd solved the whole field. Morning: you'd swapped x and y.",
+    'item.crown.n':'Academic crown','item.crown.d':'Wearing it, you dare to say "I disagree" in group meetings',
+    'item.trophy.n':'Self-awarded Nobel','item.trophy.d':'"For outstanding contributions to getting up today"',
+    'item.star.n':'Star of epiphany','item.star.d':"You suddenly see the whole picture. 3 days later you forget. Those 3 days are worth it.",
+    'item.r2.n':"Reviewer 2's praise",'item.r2.d':'"One of the best papers I\'ve read. Strong accept." — Reviewer 2 (fictional)',
+    'item.advisor.n':'Telepathic advisor','item.advisor.d':"Answers before you ask. Doesn't exist. But you dreamed it.",
+    'item.pip.n':'One successful pip install','item.pip.d':"No errors. No dependency conflicts. No version warnings. You don't trust your eyes.",
+    'level.1':'Novice','level.2':'Junior researcher','level.3':'Literature hunter','level.4':'Experiment pro','level.5':'Paper writer','level.6':'Rising scholar','level.7':'Field expert','level.8':'Academic heavyweight','level.9':'PhD candidate','level.10':'Future professor',
+  },
+  fr:{
+    'lang.code':'fr',
+    'doc.title':'PhD Study Lab',
+    'header.subtitle':'Compagnon d\'étude doctorale',
+    'status.coin':'Pièces académiques · cliquer pour la boutique',
+    'status.freeze':'Bouclier · protège 1 jour d\'inactivité',
+    'data.manage':'Données','data.export':'Exporter','data.import':'Importer','data.clear':'Tout effacer',
+    'tab.pomodoro':'Focus','tab.feynman':'Feynman','tab.notes':'Articles','tab.tracker':'Journal','tab.stats':'Stats',
+    'pomo.mode.focus':'Concentration','pomo.mode.short':'Pause courte','pomo.mode.long':'Pause longue',
+    'pomo.start':'Démarrer','pomo.pause':'Pause','pomo.reset':'Réinit.',
+    'pomo.today':"Focus du jour :",'pomo.sessions':'{n} sessions','pomo.mins':'{n} min au total',
+    'pomo.todayList':"Sessions du jour",'pomo.session.start':'démarré à {t}','pomo.session.dur':'{n} min',
+    'pomo.complete':'Session terminée','pomo.complete.unit':'min (n°{n} · 🪙+{c}{combo})','pomo.complete.combo':' · combo ×{m}',
+    'pomo.msg.0':'','pomo.msg.1':'','pomo.msg.2':'Bon rythme, continue','pomo.msg.3':'Mode profond activé','pomo.msg.4':'Journée au top','pomo.msg.5':"Tu déchires aujourd'hui",'pomo.msg.6':"Plus moyen de s'arrêter 🔥",'pomo.msg.7':'Focus épique','pomo.msg.8':'Statut légendaire','pomo.msg.9':"Aujourd'hui tu es un dieu",
+    'feyn.placeholder':'Écris tes pensées ici...','feyn.prev':'Précédent','feyn.next':'Suivant','feyn.done':'Enregistrer',
+    'feyn.step.1.title':'Choisir un concept','feyn.step.1.desc':'Écris un concept ou une théorie que tu veux comprendre en profondeur',
+    'feyn.step.2.title':'Expliquer à un enfant','feyn.step.2.desc':"Explique avec les mots les plus simples, comme à quelqu'un qui ne connaît rien",
+    'feyn.step.3.title':'Trouver les lacunes','feyn.step.3.desc':'Relis ton explication — repère les passages flous ou peu clairs',
+    'feyn.step.4.title':'Analogie simple','feyn.step.4.desc':"Résume le concept avec une analogie ou métaphore parlante",
+    'feyn.history':'Fiches (cliquer pour voir)','feyn.edit':'Éditer la fiche','feyn.empty':'Vide','feyn.view.t':'🧠 {name}','feyn.view.recorded':'Enregistré le {d}',
+    'feyn.label.1':'① Concept','feyn.label.2':'② Explication simple','feyn.label.3':'③ Lacunes','feyn.label.4':'④ Analogie simple',
+    'feyn.saved':'Enregistré ✓','feyn.updated':'Mis à jour ✓','feyn.deleted':'Supprimé',
+    'feyn.del.title':'Supprimer ?','feyn.del.msg':'« {name} » sera supprimé. Action irréversible.',
+    'note.title':"Titre de l'article",'note.title.ph':"Saisir le titre...",
+    'note.authors':'Auteurs','note.authors.ph':'Saisir les auteurs...',
+    'note.year':'Année','note.year.ph':'Année',
+    'note.key':'Idées clés & méthode','note.key.ph':'Saisir les idées clés...',
+    'note.q':'Questions & réflexions','note.q.ph':'Saisir questions et réflexions...',
+    'note.tags':'Tags (séparés par virgules)','note.tags.ph':'ex. deep learning, NLP, Transformer','note.tags.short':'Tags',
+    'note.add':'Ajouter','note.update':'Mettre à jour',
+    'note.empty':"Aucune fiche d'article",
+    'note.del.msg':'« {name} » sera supprimé',
+    'tracker.progress':"Progrès du jour",'tracker.done':'{d} / {t} tâches faites',
+    'tracker.newtask':"Ajouter une tâche...",'tracker.add':'Ajouter',
+    'tracker.mood.q':"Comment tu te sens aujourd'hui ?",'tracker.reflect.ph':"Leçons et réflexions du jour...",'tracker.save':'Enregistrer',
+    'tracker.history':'Historique (cliquer pour détails)','tracker.tasks':'tâches {d}/{t}','tracker.focus.min':'🎯{n}m',
+    'tracker.log.title':'{mood} {date}','tracker.log.taskpct':'Tâches {pct}% faites',
+    'tracker.log.doneHead':'✅ Faites','tracker.log.undoneHead':'⬜ Non faites',
+    'tracker.log.focus':'Sessions de focus','tracker.log.nofocus':'Aucune session de focus',
+    'tracker.log.focus.total':'Total {m} min ({n} sessions)',
+    'tracker.log.reflect':'Réflexion',
+    'tracker.log.edit':'Éditer {date}','tracker.log.mood':'Humeur','tracker.log.reflection':'Réflexion',
+    'tracker.log.del.msg':"Le journal du {date} sera supprimé",
+    'tracker.summary':"Bilan du jour",
+    'tracker.summary.focus':'{m} min de focus ({n} sessions)',
+    'tracker.summary.tasks':'{d} / {t} tâches faites',
+    'tracker.summary.streak':'{n} jours actifs de suite',
+    'mood.label.0':'Épuisé','mood.label.1':'Bof','mood.label.2':'Normal','mood.label.3':'Bien','mood.label.4':'Au top',
+    'stats.range.7':'7 j','stats.range.14':'14 j','stats.range.30':'30 j','stats.range.all':'Tout',
+    'stats.range.label':'{n} derniers jours','stats.range.label.all':'tout le temps',
+    'stats.kpi.focusMin':'Min focus','stats.kpi.sessions':'Sessions','stats.kpi.avgTask':'Complétion moy.','stats.kpi.streak':'Jours actifs','stats.kpi.logDays':'Jours notés','stats.kpi.notesFeyn':'Notes + Feynman',
+    'stats.delta.flat':'— stable','stats.unit.min':'m','stats.unit.times':'','stats.unit.percent':'%','stats.unit.day':'j','stats.unit.pc':'',
+    'stats.level.current':'Niveau actuel','stats.level.next':'{xp} XP / prochain {min} XP ({name})','stats.level.max':'{xp} XP — max',
+    'stats.level.legend':'Focus=1XP/min　Tâches=5XP　Journal=10XP　Notes=15XP　Feynman=20XP',
+    'stats.level.up':'Niveau supérieur !','stats.level.reward':'Récompense 🪙{c} + 🛡️ 1 bouclier',
+    'stats.ms.title':'Jalons',
+    'stats.ms.1.n':'Premier pas','stats.ms.1.d':'Terminer ton premier pomodoro',
+    'stats.ms.2.n':'Une heure','stats.ms.2.d':'1 heure de focus cumulée',
+    'stats.ms.3.n':'Demi-journée','stats.ms.3.d':'4 heures de focus cumulées',
+    'stats.ms.4.n':'Longue course','stats.ms.4.d':'10 heures de focus cumulées',
+    'stats.ms.5.n':'Club des 100 h','stats.ms.5.d':'100 heures de focus cumulées',
+    'stats.ms.6.n':'Chroniqueur','stats.ms.6.d':'Sauver 7 journaux quotidiens',
+    'stats.ms.7.n':'Habitude prise','stats.ms.7.d':'Sauver 30 journaux',
+    'stats.ms.8.n':'En série','stats.ms.8.d':'7 jours actifs de suite',
+    'stats.ms.9.n':'Volonté de fer','stats.ms.9.d':'30 jours actifs de suite',
+    'stats.ms.10.n':'Maître de la lit.','stats.ms.10.d':'Accumuler 10 fiches d\'article',
+    'stats.ms.11.n':'Compréhension profonde','stats.ms.11.d':'Compléter 10 études Feynman',
+    'stats.ms.achieved':'Fait',
+    'stats.records.title':'Meilleurs scores',
+    'stats.records.bestFocus':'Meilleur focus en un jour','stats.records.bestPomos':'Plus de pomodoros en un jour',
+    'stats.records.bestTasks':'Plus de tâches en un jour','stats.records.longestStreak':'Plus longue série active',
+    'stats.records.totalFocus':'Focus total cumulé','stats.records.totalTasks':'Tâches totales accomplies',
+    'stats.insights.title':'Analyses',
+    'stats.insights.bestDay':'Meilleur jour','stats.insights.avgDay':'Focus moy./jour','stats.insights.activeRate':"Taux d'activité",'stats.insights.peakHour':'Heure la plus productive','stats.insights.goodMood':'Focus moy. bons jours','stats.insights.badMood':'Focus moy. jours bas','stats.insights.empty':'Pas assez de données — continue','stats.insights.hint':'Astuce',
+    'stats.insights.activeFmt':'{a} / {t} jours ({p}%)',
+    'stats.hour.title':'Focus par heure','stats.hour.desc':'À quelles heures tu es le plus concentré ?','stats.hour.label':'{h}h',
+    'stats.weekly.title':'Comparaison hebdo','stats.weekly.start':'Semaine du','stats.weekly.focus':'Temps de focus','stats.weekly.rate':'Complétion',
+    'stats.weekly.info':'{m}m · {d}j',
+    'stats.mood.title':"Stats d'humeur",'stats.mood.desc':'Distribution + tendance','stats.mood.timeline':"Évolution quotidienne d'humeur",
+    'stats.mood.dist':'{n}× ({p}%)','stats.mood.avg':"Indice moyen d'humeur",'stats.mood.corr':'Humeur × Focus',
+    'stats.mood.corr.focus':'Focus','stats.mood.corr.done':'Fait','stats.mood.corr.days':'{n}j',
+    'stats.mood.corr.empty':"Les corrélations humeur-productivité apparaîtront avec plus de données",
+    'stats.mood.no.record':'aucun',
+    'stats.heat.title':'Carte de chaleur','stats.heat.desc':"Plus foncé = plus d'activité ce jour-là (cliquer pour détails)",'stats.heat.less':'peu','stats.heat.more':'bcp',
+    'stats.heat.tip':'{d} : {m} min{log}','stats.heat.hasLog':' · journal',
+    'stats.heat.empty':"Rien de noté ce jour",
+    'stats.heat.focus':'Sessions','stats.heat.total':'Total {m} min',
+    'stats.heat.tasks':'Tâches','stats.heat.reflect':'Réflexion','stats.heat.mood':'Humeur : {m}',
+    'footer':'Focus · Comprendre · Noter · Persévérer',
+    'btn.cancel':'Annuler','btn.confirm':'Confirmer','btn.confirmDel':'Supprimer','btn.edit':'Éditer','btn.delete':'Supprimer','btn.save':'Enregistrer','btn.saveEdit':'Enregistrer','btn.ok':'Compris','btn.continue':'Continuer','btn.gotIt':'Récupérer','btn.goShop':'Boutique',
+    'toast.exported':'Données exportées ✓','toast.imported':'Importées, rechargement…','toast.importFail':'Échec : mauvais format',
+    'toast.cleared':'Effacé','toast.updated':'Mis à jour ✓','toast.deleted':'Supprimé',
+    'toast.coinLow':'Pas assez de pièces','toast.freezeFull':'Boucliers pleins (max 5)',
+    'toast.shield':'🛡️ Bouclier a protégé {n} jour(s)',
+    'toast.shop.bought':'Acheté : {name} ✓',
+    'confirm.clear.title':'⚠️ Tout effacer ?','confirm.clear.msg':"Irréversible. Exporte une sauvegarde d'abord.",
+    'confirm.del.title':'Supprimer ?',
+    'streak.badge':'Série de {n} j',
+    'reward.pomo':'Pomodoro ×{m}','reward.feyn':'Étude Feynman','reward.newNote':'Nouvelle fiche','reward.taskDone':'Tâche finie','reward.taskAllDone':'Toutes les tâches','reward.login':'Connexion quotidienne','reward.questAll':'Quêtes du jour','reward.questPre':'Quête : ','reward.upgrade':'Récompense montée',
+    'login.title':'Connexion quotidienne ✨','login.unit':'🪙 pièces','login.bonus':'{n} jours actifs · bonus +{b}','login.welcome':"Bon retour pour une nouvelle journée",
+    'quest.title':'📅 Quêtes du jour','quest.reset':'⏰ reset dans {h}h {m}m','quest.claimed':'✓ réclamée','quest.claim':'prendre 🪙{n}','quest.reward':'récomp.','quest.allDone':'🎉 Toutes les quêtes faites ! À demain',
+    'quest.pomo1':'Compléter 1 pomodoro','quest.pomo3':'Compléter 3 pomodoros','quest.pomo5':'Compléter 5 pomodoros',
+    'quest.focus60':'Accumuler 60 min de focus','quest.focus120':'Accumuler 120 min de focus',
+    'quest.task1':'Faire 1 tâche','quest.task3':'Faire 3 tâches',
+    'quest.note1':'Ajouter 1 fiche','quest.feyn1':'Finir 1 étude Feynman',
+    'quest.mood':"Sauver le journal du jour",'quest.combo3':'Atteindre combo de 3',
+    'quest.allDone.title':'Tout clean 🌟','quest.allDone.unit':'🪙 bonus + 1 🛡️ bouclier','quest.allDone.sub':'De nouvelles quêtes demain',
+    'combo.text':'Combo','combo.hint':'Ne casse pas la chaîne',
+    'motiv.new.1':"Nouvelle journée. Juste un pomodoro.",'motiv.new.2':"Bon moment. Juste un.",'motiv.new.3':"Un seul pomodoro. Rien de plus.",
+    'motiv.streak':"Tu tiens le rythme depuis {n} jours. Aujourd'hui aussi.",
+    'motiv.night':"Pas commencé ? 30 min compte quand même.",
+    'motiv.hot':"{n} pomodoros aujourd'hui — tu es en feu.",
+    'motiv.good':'{n} fait. Continue comme ça.',
+    'motiv.late':'Nuit profonde. Le repos fait partie de la recherche.',
+    'motiv.default':"Par où commencer aujourd'hui ?",
+    'achieve.allDone':'Tout fait','achieve.allDone.unit':'tâches nettoyées','achieve.allDone.sub':'🪙 +20 bonus · tout ce qui était prévu est fait',
+    'loot.hint':'Toucher le coffre pour ouvrir',
+    'rarity.common':'Commun','rarity.uncommon':'Peu commun','rarity.rare':'Rare','rarity.epic':'Épique','rarity.legendary':'Légendaire',
+    'badge.title':'🎒 Collection','badge.desc':'{n} types · {t} coffres ouverts','badge.empty.t':'🎒 Collection','badge.empty.d':'Terminer des pomodoros peut faire tomber des coffres','badge.count':'Possédés : ',
+    'shop.title':'🏪 Boutique académique','shop.coins':'Tes pièces : ','shop.tip':'💡 <b>Gagner des pièces</b> : pomodoros · quêtes · coffres · connexion quotidienne',
+    'shop.freeze.n':'Bouclier de recherche','shop.freeze.d':"Conserve la série si tu manques un jour (max 5)",
+    'shop.chest.n':'Coffre mystère','shop.chest.d':'Ouvre un coffre — chance de rareté',
+    'shop.bigChest.n':'Grand coffre','shop.bigChest.d':'Rare ou mieux garanti',
+    'shop.resetQ.n':'Reset des quêtes','shop.resetQ.d':"Trop dur ? Change-les contre des pièces",
+    'freeze.title':'🛡️ Bouclier de recherche',
+    'freeze.p1':"Le bouclier protège ta série. Si tu es totalement inactif un jour, 1 bouclier est consommé automatiquement pour préserver ton compteur.",
+    'freeze.p2':"La recherche ne demande pas 100% de perfection. Les jours de repos, les jours creux, les jours malades sont normaux — les boucliers te permettent de tenir le long terme.",
+    'freeze.cur':'Actuel : <b style="color:#38bdf8">{n} boucliers</b><br>Plafond 5 · achat en boutique · drop des jalons/coffres',
+    'item.paper.n':'Feuille de brouillon','item.paper.d':"Une équation incompréhensible. Peut-être de toi.",
+    'item.coffee.n':'Café de recherche','item.coffee.d':"Troisième tasse. Encore du café ? C'est le destin.",
+    'item.pencil.n':'Moitié de crayon','item.pencil.d':"L'autre moitié ? Inconnu. Mais il a fait son devoir.",
+    'item.clip.n':'Trombone','item.clip.d':"Tu ne sais pas d'où il vient mais tu n'oses pas le jeter",
+    'item.roll.n':'Rouleau de PQ vide','item.roll.d':'Peut servir de longue-vue. Directeur : ?',
+    'item.box.n':"Boîte à emporter d'hier",'item.box.d':"Un demi-rouleau de printemps dedans. Tu hésites à le manger.",
+    'item.battery.n':'Pile à moitié morte','item.battery.d':"Encore un peu de jus. Comme toi.",
+    'item.candy.n':'Bonbon du labo','item.candy.d':"Trois ans. Encore mangeable ? Oui.",
+    'item.notebook.n':'Cahier de labo','item.notebook.d':"Les 3 premières pages sérieuses, le reste des gribouillis",
+    'item.bookmark.n':'Marque-page mystère','item.bookmark.d':"Dans un livre pas fini. Page 42.",
+    'item.tube.n':'Un tube à essai','item.tube.d':"Du liquide dedans. Quel liquide ? Mieux vaut ne pas demander.",
+    'item.pen.n':'Un stylo qui écrit','item.pen.d':"De nos jours, c'est une ressource rare",
+    'item.chair.n':"Chaise qui ne tangue pas",'item.chair.d':"Dans un labo, c'est un miracle",
+    'item.key.n':'Une clé','item.key.d':"Tu ne sais pas quelle porte elle ouvre. Mais elle compte.",
+    'item.scope.n':'Microscope autofocus','item.scope.d':'Il comprend mieux la manip que toi',
+    'item.review.n':'Review de 1998','item.review.d':"Ancêtre de ton domaine. Tout ce que tu fais, ils en ont déjà parlé.",
+    'item.medal.n':'Médaille « pas pleuré aujourd\'hui »','item.medal.d':"Décernée à toi pour avoir tenu",
+    'item.tcoffee.n':"Café inachevé du directeur",'item.tcoffee.d':"Ne demande pas pourquoi il est chez toi",
+    'item.printer.n':'Une imprimante qui marche','item.printer.d':"Il y en a deux dans tout le département. Tu en as trouvé une.",
+    'item.idea.n':'Une idée','item.idea.d':"Inspiration ou hallucination. Note-la d'abord.",
+    'item.shield.n':'Bouclier de recherche','item.shield.d':"Absorbe 1 jour de flemme. Le système ne casse pas ta série.",
+    'item.crystal.n':'Cristal d\'inspiration','item.crystal.d':"Oublié sous la douche. Tu y as repensé au coucher.",
+    'item.scroll.n':'Parchemin ancien','item.scroll.d':'Se déroule : « Ton sujet a déjà été fait ». Faux. Mais tu as eu 3 sec de panique.',
+    'item.exp.n':'Une manip qui marche','item.exp.d':"Tu ne la reproduiras jamais",
+    'item.email.n':"Réponse instantanée du dir.",'item.email.d':'Extrêmement rare. Savoure.',
+    'item.moon.n':'Illumination à 3 h du mat','item.moon.d':"Réveillé en pensant avoir résolu le domaine. Au matin : tu avais inversé x et y.",
+    'item.crown.n':'Couronne académique','item.crown.d':'Avec elle, tu oses dire « je ne suis pas d\'accord » en réunion',
+    'item.trophy.n':'Nobel auto-décerné','item.trophy.d':'« Pour contribution exceptionnelle au fait de se lever aujourd\'hui »',
+    'item.star.n':"Étoile de l'illumination",'item.star.d':"Tu vois soudain tout clairement. 3 jours plus tard tu oublies. Ces 3 jours valent le coup.",
+    'item.r2.n':"Éloge de Reviewer 2",'item.r2.d':'« Un des meilleurs papiers lus. Accept franc. » — Reviewer 2 (fictif)',
+    'item.advisor.n':'Directeur télépathe','item.advisor.d':"Répond avant que tu demandes. N'existe pas. Mais tu en as rêvé.",
+    'item.pip.n':'Un pip install réussi','item.pip.d':"Aucune erreur. Aucun conflit. Aucune alerte. Tu n'en crois pas tes yeux.",
+    'level.1':'Apprenti','level.2':'Chercheur junior','level.3':'Chasseur de littérature','level.4':'Pro des manips','level.5':'Rédacteur','level.6':'Étoile montante','level.7':'Expert du domaine','level.8':'Poids lourd académique','level.9':'Doctorant','level.10':'Futur professeur',
+  }
+};
+
+let currentLang=localStorage.getItem('phd_lang')||'zh';
+if(!I18N[currentLang])currentLang='zh';
+
+function t(key,vars){
+  let s=(I18N[currentLang]&&I18N[currentLang][key])||(I18N.zh[key]||key);
+  if(vars){Object.keys(vars).forEach(k=>{s=s.replace(new RegExp('\\{'+k+'\\}','g'),vars[k])})}
+  return s;
+}
+// Like t() but HTML-escapes every interpolated variable — use whenever the
+// result is going to be put into innerHTML and the vars may contain user data.
+function tE(key,vars){
+  let s=(I18N[currentLang]&&I18N[currentLang][key])||(I18N.zh[key]||key);
+  if(vars){Object.keys(vars).forEach(k=>{s=s.replace(new RegExp('\\{'+k+'\\}','g'),esc(String(vars[k]==null?'':vars[k])))})}
+  return s;
+}
+
+function applyI18n(){
+  document.documentElement.lang=t('lang.code');
+  document.title=t('doc.title');
+  // Text content
+  document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=t(el.getAttribute('data-i18n'))});
+  // Placeholders
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el=>{el.setAttribute('placeholder',t(el.getAttribute('data-i18n-placeholder')))});
+  // Titles (tooltips)
+  document.querySelectorAll('[data-i18n-title]').forEach(el=>{el.setAttribute('title',t(el.getAttribute('data-i18n-title')))});
+}
+
+function toggleLangDropdown(){document.getElementById('langDropdown').classList.toggle('open')}
+document.addEventListener('click',e=>{if(!e.target.closest('.dropdown'))document.querySelectorAll('.dropdown-menu').forEach(d=>d.classList.remove('open'))});
+
+function setLang(lang){
+  if(!I18N[lang])return;
+  currentLang=lang;localStorage.setItem('phd_lang',lang);
+  document.getElementById('langDropdown').classList.remove('open');
+  applyI18n();
+  // Refresh dynamic sections
+  try{if(typeof pR==='function')pR()}catch(e){}
+  try{if(typeof fR==='function')fR()}catch(e){}
+  try{if(typeof nR==='function')nR()}catch(e){}
+  try{if(typeof tR==='function')tR()}catch(e){}
+  try{if(typeof renderCombo==='function')renderCombo()}catch(e){}
+  try{if(typeof renderMotivBanner==='function')renderMotivBanner()}catch(e){}
+  try{if(typeof renderDailyQuests==='function')renderDailyQuests()}catch(e){}
+  try{if(typeof updateStreak==='function')updateStreak()}catch(e){}
+  try{if(document.getElementById('sec-stats').classList.contains('active'))renderStats()}catch(e){}
+}
+
+/* ═══ Utils ═══ */
+function load(k,fb){try{const v=localStorage.getItem('phd_'+k);return v?JSON.parse(v):fb}catch(e){return fb}}
+function save(k,v){localStorage.setItem('phd_'+k,JSON.stringify(v))}
+function esc(s){const d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+function showToast(m,c){const t=document.getElementById('toast');t.textContent=m;t.style.background=c||'var(--success)';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
+function openModal(h){document.getElementById('modalContent').innerHTML=h;document.getElementById('modalOverlay').classList.add('open')}
+function closeModal(){document.getElementById('modalOverlay').classList.remove('open')}
+function todayStr(){return new Date().toLocaleDateString('zh-CN')}
+function timeStr(d){return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}
+function dateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+
+/* ═══════════════════════════════════════════════
+   📇 Data Indexes
+   Build once per render instead of re-scanning arrays.
+   Without these, every streak calc / stats render does
+   O(365 × N) work — breaks down with ~1 year of history.
+   ═══════════════════════════════════════════════ */
+function buildDataIndex(logsArr,focusArr){
+  const logByDay={},focusByDay={},focusCountByDay={},focusListByDay={},dateSet=new Set();
+  for(let i=0;i<logsArr.length;i++){const l=logsArr[i];logByDay[l.date]=l;dateSet.add(l.date)}
+  for(let i=0;i<focusArr.length;i++){
+    const s=focusArr[i];
+    focusByDay[s.date]=(focusByDay[s.date]||0)+(s.duration||0);
+    focusCountByDay[s.date]=(focusCountByDay[s.date]||0)+1;
+    (focusListByDay[s.date]=focusListByDay[s.date]||[]).push(s);
+    dateSet.add(s.date);
+  }
+  return {logByDay,focusByDay,focusCountByDay,focusListByDay,dateSet};
+}
+
+/* ═══════════════════════════════════════════════
+   🎮 GAMIFICATION CORE — addictive-but-sustainable
+   参考：Duolingo (streak freeze), WoW (dailies),
+   Candy Crush (variable rewards), Fortnite (loot),
+   Pokemon (badge collection), 原神 (gacha drops)
+   核心原则：即时反馈 + 可变奖励 + 损失厌恶 + 社交叙事
+   可持续原则：有容错机制、有休息日、避免焦虑
+   ═══════════════════════════════════════════════ */
+
+// —— Currency & Resources ——
+let coins=load('coins',0);          // 学术币，完成活动获得，可买道具
+let freezes=load('freezes',1);      // 连续护盾（起始赠送 1 个，让新人无焦虑）
+let badges=load('badges',{});       // 徽章收藏 {badgeId: count}
+let gameState=load('gameState',{
+  comboCount:0,         // 当前连击数（同一天内连续番茄钟）
+  comboLastDate:'',     // 上次连击日期
+  dailyClaimedDate:'',  // 每日签到已领取日期
+  weeklyResetDate:'',   // 本周任务重置起始日期
+  lastActiveDate:'',    // 最后活跃日
+  todayFocusRewarded:0, // 今日已发放奖励的番茄钟数（防止刷奖励）
+  totalLoots:0,         // 总开箱次数
+  shopPurchases:{},     // 购买历史
+});
+
+function saveGameState(){save('gameState',gameState);save('coins',coins);save('freezes',freezes);save('badges',badges)}
+
+function addCoins(n,reason){
+  coins+=n;save('coins',coins);
+  updateTopStatus();
+  showRewardPop(`🪙 +${n}`,'#f59e0b',reason);
+}
+function spendCoins(n){if(coins<n)return false;coins-=n;save('coins',coins);updateTopStatus();return true}
+function addFreeze(n){freezes=Math.min(freezes+n,5);save('freezes',freezes);updateTopStatus()}
+
+function updateTopStatus(){
+  document.getElementById('coinCount').textContent=coins;
+  document.getElementById('freezeCount').textContent=freezes;
+}
+
+function showRewardPop(text,color,subtitle){
+  let c=document.getElementById('rewardPopContainer');
+  if(!c){c=document.createElement('div');c.id='rewardPopContainer';c.className='reward-pop';document.body.appendChild(c)}
+  const el=document.createElement('div');el.className='reward-toast';el.style.color=color||'var(--text)';
+  el.innerHTML=`<span>${text}</span>${subtitle?'<span style="font-size:11px;color:var(--text-dim);font-weight:400">· '+subtitle+'</span>':''}`;
+  c.appendChild(el);
+  setTimeout(()=>el.remove(),3000);
+}
+
+// —— Variable Ratio Loot System ——
+// 成瘾核心：每完成一个番茄钟，有概率掉落不同稀有度的"研究物品"
+// 稀有度分布刻意设计为：70% common / 20% uncommon / 7% rare / 2.5% epic / 0.5% legendary
+// 每 5 个番茄钟保底有 uncommon 以上，每 20 个保底 rare（防止纯随机带来的挫败）
+const LOOT_TABLE={
+  common:[
+    {icon:'📄',key:'paper',coins:5},
+    {icon:'☕',key:'coffee',coins:5},
+    {icon:'✏️',key:'pencil',coins:5},
+    {icon:'📎',key:'clip',coins:5},
+    {icon:'🧻',key:'roll',coins:5},
+    {icon:'🥡',key:'box',coins:5},
+    {icon:'🔋',key:'battery',coins:5},
+    {icon:'🍬',key:'candy',coins:5},
+  ],
+  uncommon:[
+    {icon:'📓',key:'notebook',coins:15},
+    {icon:'🔖',key:'bookmark',coins:15},
+    {icon:'🧪',key:'tube',coins:15},
+    {icon:'🖊️',key:'pen',coins:15},
+    {icon:'🪑',key:'chair',coins:15},
+    {icon:'🔑',key:'key',coins:15},
+  ],
+  rare:[
+    {icon:'🔬',key:'scope',coins:40},
+    {icon:'📚',key:'review',coins:40},
+    {icon:'🏅',key:'medal',coins:40,badgeId:'rare_medal'},
+    {icon:'☕',key:'tcoffee',coins:40},
+    {icon:'📠',key:'printer',coins:40},
+    {icon:'🧠',key:'idea',coins:40},
+  ],
+  epic:[
+    {icon:'🛡️',key:'shield',coins:30,freeze:1},
+    {icon:'💎',key:'crystal',coins:80},
+    {icon:'📜',key:'scroll',coins:80,badgeId:'epic_scroll'},
+    {icon:'⚗️',key:'exp',coins:80},
+    {icon:'📧',key:'email',coins:80},
+    {icon:'🌙',key:'moon',coins:80,freeze:1},
+  ],
+  legendary:[
+    {icon:'👑',key:'crown',coins:200,badgeId:'legendary_crown'},
+    {icon:'🏆',key:'trophy',coins:200,badgeId:'legendary_trophy'},
+    {icon:'🌟',key:'star',coins:150,freeze:2,badgeId:'legendary_star'},
+    {icon:'📝',key:'r2',coins:200,badgeId:'legendary_r2'},
+    {icon:'🧙',key:'advisor',coins:250,freeze:2,badgeId:'legendary_advisor'},
+    {icon:'🦄',key:'pip',coins:200,badgeId:'legendary_pip'},
+  ],
+};
+// Helpers that return localized name/desc for a loot item
+function itemName(it){return t('item.'+it.key+'.n')}
+function itemDesc(it){return t('item.'+it.key+'.d')}
+const RARITY_COLORS={common:'var(--text-dim)',uncommon:'#10b981',rare:'#60a5fa',epic:'#a78bfa',legendary:'#fbbf24'};
+function RARITY_LABEL(r){return t('rarity.'+r)}
+
+function rollLoot(pomosDoneToday){
+  // 保底机制：第 5 个番茄钟保底 uncommon+，第 20 个保底 rare+
+  const r=Math.random()*100;
+  let rarity='common';
+  if(pomosDoneToday>0&&pomosDoneToday%20===0) rarity=r<25?'legendary':r<65?'epic':'rare';
+  else if(pomosDoneToday>0&&pomosDoneToday%10===0) rarity=r<5?'legendary':r<20?'epic':r<60?'rare':'uncommon';
+  else if(pomosDoneToday>0&&pomosDoneToday%5===0) rarity=r<2?'epic':r<15?'rare':'uncommon';
+  else {
+    if(r<0.5)rarity='legendary';
+    else if(r<3)rarity='epic';
+    else if(r<10)rarity='rare';
+    else if(r<30)rarity='uncommon';
+    else rarity='common';
+  }
+  const pool=LOOT_TABLE[rarity];
+  const item=pool[Math.floor(Math.random()*pool.length)];
+  return {rarity,item};
+}
+
+function showLootChest(loot){
+  gameState.totalLoots++;saveGameState();
+  const {rarity,item}=loot;
+  const color=RARITY_COLORS[rarity];
+  const overlay=document.createElement('div');overlay.className='loot-overlay';
+  overlay.innerHTML=`
+    <div class="chest-wrap" id="chestEl">
+      <div class="loot-rays"></div>
+      <div class="chest-emoji">🎁</div>
+    </div>
+    <div class="chest-hint">${t('loot.hint')}</div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('chestEl').onclick=function(){
+    this.classList.add('opening');
+    setTimeout(()=>{
+      overlay.innerHTML=`
+        <div class="loot-reveal">
+          <div class="loot-rarity rar-${rarity}">${RARITY_LABEL(rarity)}</div>
+          <div class="loot-big-emoji">${item.icon}</div>
+          <div class="loot-name" style="color:${color}">${itemName(item)}</div>
+          <div class="loot-desc">${itemDesc(item)}</div>
+          <div class="loot-rewards">
+            ${item.coins?`<div class="loot-reward-chip">🪙 <b>+${item.coins}</b></div>`:''}
+            ${item.freeze?`<div class="loot-reward-chip">🛡️ <b>+${item.freeze}</b></div>`:''}
+            ${item.badgeId?`<div class="loot-reward-chip">🎖️ <b>Badge</b></div>`:''}
+          </div>
+          <button class="btn btn-accent" onclick="this.closest('.loot-overlay').remove()" style="min-width:140px">${t('btn.gotIt')}</button>
+        </div>`;
+      // 发放奖励
+      if(item.coins)addCoins(item.coins,itemName(item));
+      if(item.freeze)addFreeze(item.freeze);
+      if(item.badgeId){badges[item.badgeId]=(badges[item.badgeId]||0)+1;save('badges',badges)}
+      else {
+        // 普通物品也入库作为藏品（用 key 做 id，语言无关）
+        const id='item_'+item.key;
+        badges[id]=(badges[id]||0)+1;save('badges',badges);
+      }
+      if(rarity==='legendary')fireConfetti();
+    },500);
+  };
+  // 3 秒后如果用户没点，自动打开（防止遗漏奖励）
+  setTimeout(()=>{const el=document.getElementById('chestEl');if(el&&!el.classList.contains('opening'))el.click()},3500);
+}
+
+// —— Combo / Streak Within Day ——
+// 当日连续完成番茄钟不中断，连击×2、×3 等加成奖励
+function updateCombo(onFocusComplete){
+  const today=todayStr();
+  if(gameState.comboLastDate!==today){gameState.comboCount=0}
+  if(onFocusComplete){
+    gameState.comboCount++;
+    gameState.comboLastDate=today;
+  }
+  saveGameState();
+  renderCombo();
+}
+function comboMultiplier(){
+  const c=gameState.comboCount;
+  if(c>=10)return 3;
+  if(c>=6)return 2.5;
+  if(c>=4)return 2;
+  if(c>=2)return 1.5;
+  return 1;
+}
+function renderCombo(){
+  const bar=document.getElementById('comboBar');if(!bar)return;
+  const c=gameState.comboCount;
+  if(c<2){bar.style.display='none';return}
+  bar.style.display='';
+  bar.classList.toggle('hot',c>=4);
+  const mult=comboMultiplier();
+  bar.innerHTML=`<span class="combo-flame">🔥</span>
+    <span>${t('combo.text')} <span class="combo-count">${c}</span></span>
+    <span class="combo-mult">×${mult}</span>
+    <span style="font-size:11px;color:var(--text-dim)">${t('combo.hint')}</span>`;
+}
+
+// —— Daily Login Reward ——
+function tryDailyLogin(){
+  const today=todayStr();
+  if(gameState.dailyClaimedDate===today)return;
+  // 渐进登录奖励：基础 10 币 + 连击日加成
+  const streak=calcStreak();
+  const baseCoins=10;
+  const bonus=Math.min(streak*2,30);
+  const total=baseCoins+bonus;
+  gameState.dailyClaimedDate=today;
+  saveGameState();
+  setTimeout(()=>{
+    showAchieve(t('login.title'),total,t('login.unit'),
+      streak>=2?t('login.bonus',{n:streak,b:bonus}):t('login.welcome'),
+      '#f59e0b');
+    addCoins(total,t('reward.login'));
+  },400);
+}
+
+// —— Daily Quests (WoW dailies pattern) ——
+// 每天 3 个随机任务，完成后可领奖励；减少完美主义压力，有易有中有挑战
+const QUEST_POOL=[
+  {id:'pomo1',icon:'⏱',nameKey:'quest.pomo1',target:1,type:'pomo',reward:15,difficulty:'easy'},
+  {id:'pomo3',icon:'🎯',nameKey:'quest.pomo3',target:3,type:'pomo',reward:30,difficulty:'med'},
+  {id:'pomo5',icon:'🔥',nameKey:'quest.pomo5',target:5,type:'pomo',reward:60,difficulty:'hard'},
+  {id:'focus60',icon:'⚡',nameKey:'quest.focus60',target:60,type:'focusMin',reward:35,difficulty:'med'},
+  {id:'focus120',icon:'💎',nameKey:'quest.focus120',target:120,type:'focusMin',reward:80,difficulty:'hard'},
+  {id:'task1',icon:'✅',nameKey:'quest.task1',target:1,type:'taskDone',reward:12,difficulty:'easy'},
+  {id:'task3',icon:'📋',nameKey:'quest.task3',target:3,type:'taskDone',reward:30,difficulty:'med'},
+  {id:'note1',icon:'📑',nameKey:'quest.note1',target:1,type:'note',reward:25,difficulty:'med'},
+  {id:'feyn1',icon:'🧠',nameKey:'quest.feyn1',target:1,type:'feynman',reward:35,difficulty:'med'},
+  {id:'mood',icon:'📝',nameKey:'quest.mood',target:1,type:'logSaved',reward:20,difficulty:'easy'},
+  {id:'combo3',icon:'🔗',nameKey:'quest.combo3',target:3,type:'combo',reward:25,difficulty:'med'},
+];
+function hashDate(s){let h=0;for(let i=0;i<s.length;i++)h=((h<<5)-h+s.charCodeAt(i))|0;return Math.abs(h)}
+function getDailyQuests(){
+  const today=todayStr();
+  let stored=load('dailyQuests',null);
+  if(stored&&stored.date===today)return stored;
+  // 分难度各抽 1 个（保证每天至少 1 个易任务可达成）
+  const easy=QUEST_POOL.filter(q=>q.difficulty==='easy');
+  const med=QUEST_POOL.filter(q=>q.difficulty==='med');
+  const hard=QUEST_POOL.filter(q=>q.difficulty==='hard');
+  const seed=hashDate(today);
+  const pick=(arr,i)=>arr[(seed+i)%arr.length];
+  const quests=[pick(easy,0),pick(med,1),pick(hard,2)].map(q=>({...q,progress:0,claimed:false}));
+  stored={date:today,quests};save('dailyQuests',stored);return stored;
+}
+function computeQuestProgress(){
+  const q=getDailyQuests();
+  const today=todayStr();
+  const todayPomos=focusSessions.filter(s=>s.date===today).length;
+  const todayFocusM=focusSessions.filter(s=>s.date===today).reduce((a,s)=>a+s.duration,0);
+  const todayTaskDone=tasks.filter(t=>t.done).length + (logs.find(l=>l.date===today)?.tasks?.filter(t=>t.done).length||0);
+  const todayNotes=notes.filter(n=>n._createdDate===today).length;
+  const todayFeyn=fHist.filter(f=>f.date===today).length;
+  const todayLog=logs.some(l=>l.date===today)?1:0;
+  q.quests.forEach(qu=>{
+    switch(qu.type){
+      case 'pomo':qu.progress=Math.min(todayPomos,qu.target);break;
+      case 'focusMin':qu.progress=Math.min(todayFocusM,qu.target);break;
+      case 'taskDone':qu.progress=Math.min(todayTaskDone,qu.target);break;
+      case 'note':qu.progress=Math.min(todayNotes,qu.target);break;
+      case 'feynman':qu.progress=Math.min(todayFeyn,qu.target);break;
+      case 'logSaved':qu.progress=Math.min(todayLog,qu.target);break;
+      case 'combo':qu.progress=Math.min(gameState.comboCount,qu.target);break;
+    }
+  });
+  save('dailyQuests',q);return q;
+}
+function renderDailyQuests(){
+  const el=document.getElementById('dailyQuestsCard');if(!el)return;
+  const q=computeQuestProgress();
+  // 倒计时到午夜
+  const now=new Date();const end=new Date(now);end.setHours(24,0,0,0);
+  const msLeft=end-now;const hL=Math.floor(msLeft/3600000);const mL=Math.floor((msLeft%3600000)/60000);
+  let html=`<div class="quest-card"><div class="quest-header">
+    <h3>${t('quest.title')}</h3>
+    <div class="quest-reset">${t('quest.reset',{h:hL,m:mL})}</div>
+  </div>`;
+  q.quests.forEach(qu=>{
+    const done=qu.progress>=qu.target;
+    const claimed=qu.claimed;
+    const pct=Math.round(qu.progress/qu.target*100);
+    const qName=qu.nameKey?t(qu.nameKey):(qu.name||'');
+    html+=`<div class="quest-item ${claimed?'done':done?'claimable':''}">
+      <div class="quest-icon">${qu.icon}</div>
+      <div class="quest-info">
+        <div class="quest-name">${qName}</div>
+        <div style="font-size:11px;color:var(--text-dim)">${qu.progress} / ${qu.target}</div>
+        <div class="quest-prog-bar"><div class="quest-prog-fill" style="width:${pct}%;background:${done?'var(--success)':'var(--accent)'}"></div></div>
+      </div>
+      ${claimed?'<div class="quest-reward" style="color:var(--success)">'+t('quest.claimed')+'</div>':
+        done?`<button class="quest-claim-btn" onclick="claimQuest('${qu.id}')">${t('quest.claim',{n:qu.reward})}</button>`:
+        `<div class="quest-reward">${t('quest.reward')}<div class="rv">🪙 ${qu.reward}</div></div>`}
+    </div>`;
+  });
+  const allClaimed=q.quests.every(qu=>qu.claimed);
+  if(allClaimed) html+=`<div style="text-align:center;padding:12px;color:var(--success);font-size:13px;font-weight:600">${t('quest.allDone')}</div>`;
+  html+=`</div>`;
+  el.innerHTML=html;
+}
+function claimQuest(id){
+  const q=computeQuestProgress();
+  const qu=q.quests.find(x=>x.id===id);
+  if(!qu||qu.claimed||qu.progress<qu.target)return;
+  qu.claimed=true;save('dailyQuests',q);
+  const qName=qu.nameKey?t(qu.nameKey):(qu.name||'');
+  addCoins(qu.reward,t('reward.questPre')+qName);
+  renderDailyQuests();
+  // 全部完成奖励：额外 50 币 + 护盾 1
+  if(q.quests.every(x=>x.claimed)){
+    fireConfetti();
+    setTimeout(()=>{
+      addCoins(50,t('reward.questAll'));
+      addFreeze(1);
+      showAchieve(t('quest.allDone.title'),50,t('quest.allDone.unit'),t('quest.allDone.sub'),'#f59e0b');
+    },600);
+  }
+}
+
+// —— Motivational banner ——
+// 基于用户当前状态动态生成个性化鼓励文案
+function renderMotivBanner(){
+  const el=document.getElementById('motivBanner');if(!el)return;
+  const streak=calcStreak();
+  const today=todayStr();
+  const todayPomos=focusSessions.filter(s=>s.date===today).length;
+  const now=new Date();const h=now.getHours();
+  let ico='💡',text='';
+  if(streak===0&&todayPomos===0){
+    const greets=[t('motiv.new.1'),t('motiv.new.2'),t('motiv.new.3')];
+    text=greets[Math.floor(Math.random()*greets.length)];ico='☕';
+  } else if(streak>=7&&todayPomos===0){
+    text=t('motiv.streak',{n:streak});ico='🔥';
+  } else if(todayPomos===0&&h>=20){
+    text=t('motiv.night');ico='🌙';
+  } else if(todayPomos>=4){
+    text=t('motiv.hot',{n:todayPomos});ico='⚡';
+  } else if(todayPomos>=1){
+    text=t('motiv.good',{n:todayPomos});ico='✨';
+  } else if(h<6||h>=23){
+    text=t('motiv.late');ico='🌛';
+  } else {
+    text=t('motiv.default');ico='🎯';
+  }
+  el.innerHTML=`<div class="motiv-banner"><div class="mb-ico">${ico}</div><div>${text}</div></div>`;
+}
+
+// —— Badge collection ——
+function renderBadgeCollection(){
+  const el=document.getElementById('badgeCollectionCard');if(!el)return;
+  // 汇总徽章与藏品
+  const entries=Object.entries(badges);
+  if(!entries.length){
+    el.innerHTML=`<h3 style="font-size:15px;margin-bottom:8px">${t('badge.empty.t')}</h3>
+      <p style="color:var(--text-dim);font-size:13px">${t('badge.empty.d')}</p>`;
+    return;
+  }
+  // 找到对应 item 详情 - 索引同时支持 badgeId 和 item_<key>，以及老数据 item_<中文名>
+  const itemById={};
+  Object.entries(LOOT_TABLE).forEach(([rar,pool])=>{pool.forEach(it=>{
+    if(it.badgeId)itemById[it.badgeId]={...it,rarity:rar};
+    itemById['item_'+it.key]={...it,rarity:rar};
+    // 兼容旧版：按中文名索引
+    const oldName=I18N.zh['item.'+it.key+'.n'];
+    if(oldName)itemById['item_'+oldName]={...it,rarity:rar};
+  })});
+  let html=`<h3 style="font-size:15px;margin-bottom:4px">${t('badge.title')}</h3>
+    <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px">${t('badge.desc',{n:entries.length,t:gameState.totalLoots})}</p>
+    <div class="badge-grid">`;
+  entries.sort((a,b)=>{
+    const ra=itemById[a[0]]?.rarity||'common';const rb=itemById[b[0]]?.rarity||'common';
+    const order=['legendary','epic','rare','uncommon','common'];
+    return order.indexOf(ra)-order.indexOf(rb);
+  });
+  entries.forEach(([id,count])=>{
+    const it=itemById[id];if(!it)return;
+    const color=RARITY_COLORS[it.rarity]||'var(--text-dim)';
+    const nm=itemName(it);
+    html+=`<div class="badge-cell" style="border-color:${color}60" onclick="showBadgeDetail('${id}')" title="${nm}">
+      <div class="badge-emoji">${it.icon}</div>
+      <div class="badge-name" style="color:${color}">${nm}</div>
+      ${count>1?`<div class="badge-count">×${count}</div>`:''}
+    </div>`;
+  });
+  html+=`</div>`;
+  el.innerHTML=html;
+}
+function showBadgeDetail(id){
+  const itemById={};
+  Object.entries(LOOT_TABLE).forEach(([rar,pool])=>{pool.forEach(it=>{
+    if(it.badgeId)itemById[it.badgeId]={...it,rarity:rar};
+    itemById['item_'+it.key]={...it,rarity:rar};
+    const oldName=I18N.zh['item.'+it.key+'.n'];
+    if(oldName)itemById['item_'+oldName]={...it,rarity:rar};
+  })});
+  const it=itemById[id];if(!it)return;
+  const color=RARITY_COLORS[it.rarity];const count=badges[id]||0;
+  openModal(`<button class="modal-close" onclick="closeModal()">×</button>
+    <div style="text-align:center;padding:10px 0">
+      <div class="loot-rarity rar-${it.rarity}">${RARITY_LABEL(it.rarity)}</div>
+      <div style="font-size:80px;margin:16px 0">${it.icon}</div>
+      <div style="font-size:22px;font-weight:700;color:${color};margin-bottom:6px">${itemName(it)}</div>
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:16px">${itemDesc(it)}</div>
+      <div style="font-size:14px">${t('badge.count')}<b>${count}</b></div>
+    </div>`);
+}
+
+// —— Shop ——
+const SHOP_ITEMS=[
+  {id:'freeze',icon:'🛡️',nameKey:'shop.freeze.n',descKey:'shop.freeze.d',price:80,action:()=>{if(freezes>=5){showToast(t('toast.freezeFull'),'var(--warning)');return false}addFreeze(1);return true}},
+  {id:'chest',icon:'🎁',nameKey:'shop.chest.n',descKey:'shop.chest.d',price:150,action:()=>{const pomosDone=focusSessions.length;showLootChest(rollLoot(pomosDone));return true}},
+  {id:'big_chest',icon:'📦',nameKey:'shop.bigChest.n',descKey:'shop.bigChest.d',price:500,action:()=>{const r=Math.random();let rarity='rare';if(r<0.05)rarity='legendary';else if(r<0.25)rarity='epic';const pool=LOOT_TABLE[rarity];showLootChest({rarity,item:pool[Math.floor(Math.random()*pool.length)]});return true}},
+  {id:'reset_quest',icon:'🔄',nameKey:'shop.resetQ.n',descKey:'shop.resetQ.d',price:40,action:()=>{localStorage.removeItem('phd_dailyQuests');renderDailyQuests();return true}},
+];
+function openShop(){
+  let html=`<button class="modal-close" onclick="closeModal()">×</button>
+    <h2>${t('shop.title')}</h2>
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:20px">${t('shop.coins')}<b style="color:#f59e0b;font-family:'JetBrains Mono',monospace;font-size:16px">🪙 ${coins}</b></div>`;
+  SHOP_ITEMS.forEach(it=>{
+    const canAfford=coins>=it.price;
+    html+=`<div class="shop-item">
+      <div class="shop-ico">${it.icon}</div>
+      <div class="shop-body">
+        <div class="shop-name">${t(it.nameKey)}</div>
+        <div class="shop-desc">${t(it.descKey)}</div>
+      </div>
+      <button class="shop-buy" ${canAfford?'':'disabled'} onclick="buyShopItem('${it.id}')">🪙 ${it.price}</button>
+    </div>`;
+  });
+  html+=`<div style="margin-top:16px;padding:12px;background:var(--bg);border-radius:10px;font-size:12px;color:var(--text-dim);line-height:1.6">
+    ${t('shop.tip')}
+  </div>`;
+  openModal(html);
+}
+function buyShopItem(id){
+  const it=SHOP_ITEMS.find(x=>x.id===id);if(!it)return;
+  if(coins<it.price){showToast(t('toast.coinLow'),'var(--danger)');return}
+  if(!spendCoins(it.price))return;
+  gameState.shopPurchases[id]=(gameState.shopPurchases[id]||0)+1;saveGameState();
+  const ok=it.action();
+  if(ok!==false){closeModal();showToast(t('toast.shop.bought',{name:t(it.nameKey)}))}
+  else {coins+=it.price;save('coins',coins);updateTopStatus()} // 退款
+}
+
+function showFreezeInfo(){
+  openModal(`<button class="modal-close" onclick="closeModal()">×</button>
+    <h2>${t('freeze.title')}</h2>
+    <p style="font-size:14px;line-height:1.8;color:var(--text);margin-bottom:14px">
+      ${t('freeze.p1')}
+    </p>
+    <p style="font-size:13px;line-height:1.8;color:var(--text-dim);margin-bottom:18px">
+      ${t('freeze.p2')}
+    </p>
+    <div style="background:var(--bg);padding:14px;border-radius:12px;font-size:13px;line-height:1.8">
+      ${t('freeze.cur',{n:freezes})}
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">${t('btn.ok')}</button>
+      <button class="btn btn-accent" onclick="closeModal();openShop()">${t('btn.goShop')}</button>
+    </div>`);
+}
+
+// —— Level up detection ——
+let _lastKnownLevel=load('_lastKnownLevel',0);
+function checkLevelUp(newLevel,newLevelName){
+  if(newLevel>_lastKnownLevel){
+    const overlay=document.createElement('div');overlay.className='levelup-overlay';
+    overlay.innerHTML=`<div class="levelup-text">LEVEL UP!<br>Lv.${newLevel+1}</div>`;
+    document.body.appendChild(overlay);
+    setTimeout(()=>overlay.remove(),2500);
+    fireConfetti();
+    const reward=(newLevel+1)*50;
+    setTimeout(()=>{
+      addCoins(reward,t('reward.upgrade'));
+      addFreeze(1);
+      showAchieve(t('stats.level.up'),newLevel+1,'🎓 '+newLevelName,t('stats.level.reward',{c:reward}),'#f59e0b');
+    },800);
+    _lastKnownLevel=newLevel;save('_lastKnownLevel',newLevel);
+  }
+}
+
+
+/* ═══ Confetti ═══ */
+function fireConfetti(){
+  const c=document.createElement('div');c.className='confetti-container';document.body.appendChild(c);
+  const colors=['#6366f1','#f59e0b','#10b981','#ef4444','#ec4899','#8b5cf6','#14b8a6'];
+  for(let i=0;i<50;i++){const p=document.createElement('div');p.className='confetti-piece';p.style.left=Math.random()*100+'%';p.style.background=colors[Math.floor(Math.random()*colors.length)];p.style.animationDelay=Math.random()*0.8+'s';p.style.animationDuration=(2+Math.random()*1.5)+'s';c.appendChild(p)}
+  setTimeout(()=>c.remove(),4000);
+}
+
+/* ═══ Achievement popup ═══ */
+function showAchieve(title,num,unit,sub,color){
+  const el=document.createElement('div');el.className='achieve-overlay';el.onclick=function(){el.remove()};
+  el.innerHTML=`<div class="achieve-card" onclick="event.stopPropagation()"><div style="font-size:16px;font-weight:700">${title}</div><div class="achieve-num" style="color:${color||'var(--accent)'}">${num}</div><div class="achieve-label">${unit}</div>${sub?'<div class="achieve-sub">'+sub+'</div>':''}<button class="btn btn-accent" onclick="this.closest('.achieve-overlay').remove()" style="min-width:120px">${t('btn.continue')}</button></div>`;
+  document.body.appendChild(el);
+  setTimeout(()=>{if(el.parentNode)el.remove()},6000);
+}
+
+/* ═══ Streak ═══ */
+// 带护盾保护的连续天数计算
+// 关键设计：每天首次访问时才结算护盾消耗，避免重复扣除
+function calcStreak(){
+  const today=new Date();
+  const allLogs=load('logs',[]);const allFocus=load('focusSessions',[]);
+  let consumedFreezeDates=load('consumedFreezeDates',[]);
+  const consumedSet=new Set(consumedFreezeDates);
+  let lastSettled=load('lastStreakSettleDate','');
+  const todayS=today.toLocaleDateString('zh-CN');
+
+  // Build active-date set ONCE. Previous: 365 × (some() || some())
+  // became O(365 × (logs.length + focus.length)). Now O(N+M+365).
+  const activeSet=new Set();
+  for(let i=0;i<allLogs.length;i++)activeSet.add(allLogs[i].date);
+  for(let i=0;i<allFocus.length;i++)activeSet.add(allFocus[i].date);
+
+  // 是否需要本次结算护盾（每天只结算一次）
+  const shouldSettle=(lastSettled!==todayS);
+  let newConsumedToday=[];
+
+  let s=0;
+  for(let d=0;d<365;d++){
+    const dd=new Date(today);dd.setDate(dd.getDate()-d);
+    const ds=dd.toLocaleDateString('zh-CN');
+    if(activeSet.has(ds)){s++;continue}
+    if(d===0){continue} // 今天不活跃不算断（今天还没过完）
+    if(consumedSet.has(ds)){s++;continue} // 已用护盾的日子
+    if(shouldSettle&&freezes>newConsumedToday.length){
+      // 这一天可以用护盾保护
+      newConsumedToday.push(ds);
+      s++;continue;
+    }
+    break;
+  }
+
+  // 结算
+  if(shouldSettle){
+    if(newConsumedToday.length>0){
+      consumedFreezeDates=[...consumedFreezeDates,...newConsumedToday];
+      save('consumedFreezeDates',consumedFreezeDates);
+      freezes-=newConsumedToday.length;save('freezes',freezes);
+      setTimeout(()=>{
+        if(typeof updateTopStatus==='function')updateTopStatus();
+        showToast(t('toast.shield',{n:newConsumedToday.length}),'#38bdf8');
+      },1000);
+    }
+    save('lastStreakSettleDate',todayS);
+  }
+  return s;
+}
+function updateStreak(){
+  const s=calcStreak();const el=document.getElementById('streakBadge');
+  if(s>=2){el.style.display='';el.textContent=t('streak.badge',{n:s})}else{el.style.display='none'}
+}
+updateStreak();
+
+/* ═══ Dropdown / Export / Import ═══ */
+function toggleDropdown(){document.getElementById('dataDropdown').classList.toggle('open')}
+document.addEventListener('click',e=>{if(!e.target.closest('.dropdown'))document.getElementById('dataDropdown').classList.remove('open')});
+const KEYS=['dark','pomoSessions','focusSessions','feynmanHistory','notes','tasks','logs'];
+function exportData(){const data={};KEYS.forEach(k=>{const v=localStorage.getItem('phd_'+k);if(v!==null)data[k]=JSON.parse(v)});const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download='PhD-Study-Lab-'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(a.href);showToast(t('toast.exported'));document.getElementById('dataDropdown').classList.remove('open')}
+function importData(ev){
+  const f=ev.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=function(e){
+    try{
+      const d=JSON.parse(e.target.result);
+      if(!d||typeof d!=='object'||Array.isArray(d))throw new Error('root must be object');
+      // Only accept known keys. Unknown keys (including malicious ones) silently dropped.
+      const allowed=new Set(['dark','pomoSessions','focusSessions','feynmanHistory','notes','tasks','logs','coins','freezes','badges','gameState','dailyQuests','consumedFreezeDates','_lastKnownLevel','lastStreakSettleDate']);
+      const MAXSTR=50000,MAXARR=10000,MAXKEYS=200;
+      const sanitize=(v,depth)=>{
+        if(depth>8)return null; // prevent stack bombs
+        if(v==null)return v;
+        if(typeof v==='string')return v.slice(0,MAXSTR);
+        if(typeof v==='number'||typeof v==='boolean')return v;
+        if(Array.isArray(v))return v.slice(0,MAXARR).map(x=>sanitize(x,depth+1));
+        if(typeof v==='object'){const o={};Object.keys(v).slice(0,MAXKEYS).forEach(k=>{o[k]=sanitize(v[k],depth+1)});return o}
+        return null;
+      };
+      let applied=0;
+      Object.keys(d).forEach(k=>{
+        if(!allowed.has(k))return;
+        try{localStorage.setItem('phd_'+k,JSON.stringify(sanitize(d[k],0)));applied++}catch(_){}
+      });
+      if(!applied)throw new Error('no valid keys');
+      showToast(t('toast.imported'));
+      setTimeout(()=>location.reload(),800);
+    }catch(err){showToast(t('toast.importFail'),'var(--danger)')}
+  };
+  r.readAsText(f);
+  ev.target.value='';
+  document.getElementById('dataDropdown').classList.remove('open');
+}
+function clearAllData(){openModal('<button class="modal-close" onclick="closeModal()">×</button><h2>'+t('confirm.clear.title')+'</h2><p style="color:var(--text-dim);font-size:14px;line-height:1.7;margin-bottom:24px">'+t('confirm.clear.msg')+'</p><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">'+t('btn.cancel')+'</button><button class="btn btn-danger" onclick="confirmClearAll()">'+t('btn.confirm')+'</button></div>');document.getElementById('dataDropdown').classList.remove('open')}
+function confirmClearAll(){KEYS.forEach(k=>localStorage.removeItem('phd_'+k));closeModal();showToast(t('toast.cleared'));setTimeout(()=>location.reload(),800)}
+
+/* ═══ Theme & Tabs ═══ */
+let darkMode=load('dark',true);
+function applyTheme(){document.body.classList.toggle('light',!darkMode);document.getElementById('themeBtn').textContent=darkMode?'☀️':'🌙'}
+function toggleTheme(){darkMode=!darkMode;save('dark',darkMode);applyTheme()}
+applyTheme();
+function switchTab(id){document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));document.getElementById('sec-'+id).classList.add('active');document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));if(id==='stats')renderStats()}
+
+/* ══════════════════════════════════
+   POMODORO — real-time synced timer
+   ══════════════════════════════════
+   Core idea: record the wall-clock timestamp when the timer should
+   end (pDeadline). Every tick computes remaining = deadline - now.
+   This way the display stays correct even when the browser throttles
+   setInterval in background tabs or after sleep/resume.
+   ══════════════════════════════════ */
+const PD={focus:25*60,short:5*60,long:15*60};
+function PL(m){return t('pomo.mode.'+m)}
+const CIR=2*Math.PI*120;
+let pMode='focus',pRun=false,pInt=null;
+let pDeadline=null;   // Date.now() + remaining ms when running
+let pPausedLeft=PD.focus; // seconds left when paused
+let focusSessions=load('focusSessions',[]);
+let pSessionStart=null; // HH:MM string when this focus session began
+
+function todayFocus(){return focusSessions.filter(s=>s.date===todayStr())}
+function todayFocusMins(){return todayFocus().reduce((a,s)=>a+s.duration,0)}
+
+function pRemaining(){
+  if(pRun){const left=Math.round((pDeadline-Date.now())/1000);return Math.max(left,0)}
+  return pPausedLeft;
+}
+
+function pR(){
+  const rem=pRemaining();
+  document.getElementById('pomoTime').textContent=String(Math.floor(rem/60)).padStart(2,'0')+':'+String(rem%60).padStart(2,'0');
+  document.getElementById('pomoLabel').textContent=PL(pMode);
+  document.getElementById('pomoArc').setAttribute('stroke-dashoffset',CIR*(1-(1-rem/PD[pMode])));
+  const b=document.getElementById('pomoStartBtn');b.textContent=pRun?t('pomo.pause'):t('pomo.start');b.style.background=pRun?'var(--danger)':'var(--accent)';
+  b.style.boxShadow=pRun?'0 4px 20px rgba(220,60,60,.3)':'0 4px 20px rgba(99,102,241,.3)';
+  const tf=todayFocus();
+  document.getElementById('pomoSessions').textContent=t('pomo.sessions',{n:tf.length});
+  document.getElementById('pomoMins').textContent=t('pomo.mins',{n:todayFocusMins()});
+  document.querySelectorAll('.pomo-mode-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===pMode));
+  let sl='';
+  if(tf.length){sl='<div style="width:100%;max-width:360px"><div class="history-title" style="margin-top:8px">'+t('pomo.todayList')+'</div>';
+    tf.forEach(s=>{sl+=`<div class="focus-item"><span>🎯 ${tE('pomo.session.start',{t:s.startTime})}</span><span style="color:var(--accent);font-weight:600">${t('pomo.session.dur',{n:s.duration|0})}</span></div>`});sl+='</div>'}
+  document.getElementById('pomoTodayList').innerHTML=sl;
+}
+
+function pTick(){
+  const rem=pRemaining();
+  if(rem<=0&&pRun){
+    // Timer finished
+    clearInterval(pInt);pRun=false;pPausedLeft=0;
+    if(pMode==='focus'){
+      const dur=PD.focus/60;
+      focusSessions.push({date:todayStr(),startTime:pSessionStart||timeStr(new Date()),duration:dur});
+      save('focusSessions',focusSessions);
+      const tf=todayFocus();const totalM=todayFocusMins();
+      updateStreak();
+      // === 游戏化奖励 ===
+      // 1. 连击更新
+      updateCombo(true);
+      // 2. 金币奖励（基础 10 × 连击倍数，向下取整）
+      const mult=comboMultiplier();
+      const coinReward=Math.floor(10*mult);
+      addCoins(coinReward,t('reward.pomo',{m:mult}));
+      // 3. 可变比例宝箱掉落（约 35% 概率，保底机制见 rollLoot）
+      const dropChance=0.35+(gameState.comboCount>=4?0.15:0); // 连击高时提升掉落
+      const totalPomos=focusSessions.length;
+      const shouldDropChest=Math.random()<dropChance||tf.length%5===0; // 第 5/10/15... 个必掉
+      if(shouldDropChest){
+        setTimeout(()=>showLootChest(rollLoot(totalPomos)),1800);
+      }
+      // 4. 更新任务进度
+      renderDailyQuests();
+      // 5. 原有的成就提示
+      const msgIdx=Math.min(tf.length,9);
+      const sub=t('pomo.msg.'+msgIdx)||'';
+      const comboStr=mult>1?t('pomo.complete.combo',{m:mult}):'';
+      showAchieve(t('pomo.complete'),totalM,t('pomo.complete.unit',{n:tf.length,c:coinReward,combo:comboStr}),sub,'var(--accent)');
+      if(tf.length>=4)fireConfetti();
+      renderMotivBanner();
+    }
+    pSessionStart=null;pDeadline=null;pR();
+    try{new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQQAAAB/f39/").play()}catch(e){}
+  } else {
+    pR();
+  }
+}
+
+function pomoToggle(){
+  if(!pRun){
+    // Start / Resume
+    if(pPausedLeft<=0)pPausedLeft=PD[pMode]; // reset if was finished
+    if(pMode==='focus'&&pPausedLeft===PD.focus)pSessionStart=timeStr(new Date());
+    pDeadline=Date.now()+pPausedLeft*1000;
+    pRun=true;
+    // Use a short interval (250ms) so we catch up quickly after throttling
+    pInt=setInterval(pTick,250);
+  } else {
+    // Pause — snapshot remaining time
+    pPausedLeft=pRemaining();
+    pRun=false;pDeadline=null;
+    clearInterval(pInt);
+  }
+  pR();
+}
+function pomoReset(){clearInterval(pInt);pRun=false;pDeadline=null;pPausedLeft=PD[pMode];pSessionStart=null;pR()}
+function pomoSwitchMode(m){clearInterval(pInt);pRun=false;pDeadline=null;pMode=m;pPausedLeft=PD[m];pSessionStart=null;pR()}
+// Also sync on visibility change — when user comes back to the tab
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&pRun)pTick()});
+pR();
+
+/* ══════════════════════════════════
+   FEYNMAN
+   ══════════════════════════════════ */
+function FS_step(i){return {title:t('feyn.step.'+(i+1)+'.title'),desc:t('feyn.step.'+(i+1)+'.desc')}}
+let fStep=0,fData=['','','',''],fHist=load('feynmanHistory',[]);
+function fR(){
+  let h='';for(let i=0;i<4;i++){h+='<div style="display:flex;align-items:center;flex:1"><div class="step-circle '+(i<=fStep?'active':'')+'">'+(i+1)+'</div>';if(i<3)h+='<div class="step-line '+(i<fStep?'active':'')+'"></div>';h+='</div>'}
+  document.getElementById('feynmanSteps').innerHTML=h;
+  const step=FS_step(fStep);
+  document.getElementById('feynmanTitle').textContent=step.title;document.getElementById('feynmanDesc').textContent=step.desc;
+  document.getElementById('feynmanInput').value=fData[fStep];
+  document.getElementById('feynmanPrev').disabled=fStep===0;document.getElementById('feynmanPrev').style.color=fStep===0?'var(--border)':'var(--text-dim)';
+  const nb=document.getElementById('feynmanNext');if(fStep<3){nb.textContent=t('feyn.next');nb.className='btn btn-accent'}else{nb.textContent=t('feyn.done');nb.className='btn btn-success'}
+  let hh='';if(fHist.length){hh='<div class="history-title">'+t('feyn.history')+'</div><div style="display:flex;flex-direction:column;gap:8px">';fHist.forEach((r,i)=>{hh+=`<div class="fh-item" onclick="fView(${i})"><span style="font-weight:600;flex:1">${esc(r.concept)}</span><span style="font-size:12px;color:var(--text-dim);margin-right:10px">${esc(r.date)}</span><button class="btn btn-sm btn-outline" onclick="event.stopPropagation();fEdit(${i})" style="margin-right:4px">${t('btn.edit')}</button><button class="btn btn-sm btn-outline" style="color:var(--danger);border-color:var(--danger)" onclick="event.stopPropagation();fDel(${i})">${t('btn.delete')}</button></div>`});hh+='</div>'}
+  document.getElementById('feynmanHistory').innerHTML=hh;
+}
+function fView(i){const r=fHist[i];openModal(`<button class="modal-close" onclick="closeModal()">×</button><h2>${tE('feyn.view.t',{name:r.concept})}</h2><div style="font-size:12px;color:var(--text-dim);margin-bottom:20px">${tE('feyn.view.recorded',{d:r.date})}</div><div class="modal-section"><div class="modal-section-title">${t('feyn.label.1')}</div><div class="modal-section-content">${esc(r.concept)}</div></div><div class="modal-section"><div class="modal-section-title">${t('feyn.label.2')}</div><div class="modal-section-content">${esc(r.explanation)||'<em style="color:var(--text-dim)">'+t('feyn.empty')+'</em>'}</div></div><div class="modal-section"><div class="modal-section-title">${t('feyn.label.3')}</div><div class="modal-section-content">${esc(r.gaps)||'<em style="color:var(--text-dim)">'+t('feyn.empty')+'</em>'}</div></div><div class="modal-section"><div class="modal-section-title">${t('feyn.label.4')}</div><div class="modal-section-content">${esc(r.simplified)||'<em style="color:var(--text-dim)">'+t('feyn.empty')+'</em>'}</div></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal();fEdit(${i})">${t('btn.edit')}</button><button class="btn btn-danger" onclick="closeModal();fDel(${i})">${t('btn.delete')}</button></div>`)}
+function fEdit(i){const r=fHist[i];openModal(`<button class="modal-close" onclick="closeModal()">×</button><h2>${t('feyn.edit')}</h2><div class="modal-section"><div class="modal-section-title">${t('feyn.label.1')}</div><input id="fe0" value="${esc(r.concept)}" style="margin-top:4px"></div><div class="modal-section"><div class="modal-section-title">${t('feyn.label.2')}</div><textarea id="fe1" style="margin-top:4px;min-height:100px">${esc(r.explanation)}</textarea></div><div class="modal-section"><div class="modal-section-title">${t('feyn.label.3')}</div><textarea id="fe2" style="margin-top:4px;min-height:100px">${esc(r.gaps)}</textarea></div><div class="modal-section"><div class="modal-section-title">${t('feyn.label.4')}</div><textarea id="fe3" style="margin-top:4px;min-height:100px">${esc(r.simplified)}</textarea></div><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">${t('btn.cancel')}</button><button class="btn btn-accent" onclick="fSaveEdit(${i})">${t('btn.saveEdit')}</button></div>`)}
+function fSaveEdit(i){fHist[i].concept=document.getElementById('fe0').value;fHist[i].explanation=document.getElementById('fe1').value;fHist[i].gaps=document.getElementById('fe2').value;fHist[i].simplified=document.getElementById('fe3').value;save('feynmanHistory',fHist);closeModal();fR();showToast(t('feyn.updated'))}
+function fDel(i){openModal(`<button class="modal-close" onclick="closeModal()">×</button><h2>${t('feyn.del.title')}</h2><p style="color:var(--text-dim);margin-bottom:24px">${t('feyn.del.msg',{name:esc(fHist[i].concept)})}</p><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">${t('btn.cancel')}</button><button class="btn btn-danger" onclick="fConfDel(${i})">${t('btn.confirmDel')}</button></div>`)}
+function fConfDel(i){fHist.splice(i,1);save('feynmanHistory',fHist);closeModal();fR();showToast(t('feyn.deleted'))}
+document.getElementById('feynmanInput').addEventListener('input',e=>{fData[fStep]=e.target.value});
+function feynmanPrev(){if(fStep>0){fStep--;fR()}}
+function feynmanNext(){if(fStep<3){fStep++;fR()}else{if(fData[0]){fHist.push({concept:fData[0],explanation:fData[1],gaps:fData[2],simplified:fData[3],date:todayStr()});save('feynmanHistory',fHist);showToast(t('feyn.saved'));addCoins(25,t('reward.feyn'));renderDailyQuests()}fStep=0;fData=['','','',''];fR()}}
+fR();
+
+/* ══════════════════════════════════
+   NOTES
+   ══════════════════════════════════ */
+const NC=['#6366f1','#f59e0b','#10b981','#ef4444','#8b5cf6','#ec4899','#14b8a6'];
+let notes=load('notes',[]),eNote=-1;
+function nR(){
+  if(!notes.length){document.getElementById('notesContainer').innerHTML='<div class="empty-state"><div class="emoji">📚</div><p style="font-size:15px">'+t('note.empty')+'</p></div>'}
+  else{let h='<div class="notes-grid">';notes.forEach((n,i)=>{const c=n.color||NC[i%NC.length];h+=`<div class="note-card" style="border-top:3px solid ${c}" onclick="nView(${i})"><div class="note-card-header"><h4>${esc(n.title)}</h4><div class="note-card-actions"><button onclick="event.stopPropagation();noteEdit(${i})">✏️</button><button onclick="event.stopPropagation();noteDel(${i})">🗑</button></div></div><div class="note-meta">${esc(n.authors)} ${n.year?'('+esc(n.year)+')':''}</div>${n.keyPoints?'<div class="note-excerpt">'+esc(n.keyPoints.slice(0,120))+(n.keyPoints.length>120?'...':'')+'</div>':''}${n.tags?'<div class="tags">'+n.tags.split(',').map(t=>'<span class="tag" style="background:'+c+'18;color:'+c+'">'+esc(t.trim())+'</span>').join('')+'</div>':''}</div>`});h+='</div>';document.getElementById('notesContainer').innerHTML=h}
+  document.getElementById('noteSubmitBtn').textContent=eNote>=0?t('note.update'):t('note.add');document.getElementById('noteCancelBtn').style.display=eNote>=0?'':'none';
+}
+function nView(i){const n=notes[i],c=n.color||NC[i%NC.length];openModal(`<button class="modal-close" onclick="closeModal()">×</button><h2 style="border-left:4px solid ${c};padding-left:14px">${esc(n.title)}</h2><div style="font-size:13px;color:var(--text-dim);margin-bottom:20px">${esc(n.authors)} ${n.year?'('+esc(n.year)+')':''}</div>${n.keyPoints?'<div class="modal-section"><div class="modal-section-title">'+t('note.key')+'</div><div class="modal-section-content">'+esc(n.keyPoints)+'</div></div>':''}${n.questions?'<div class="modal-section"><div class="modal-section-title">'+t('note.q')+'</div><div class="modal-section-content">'+esc(n.questions)+'</div></div>':''}${n.tags?'<div class="modal-section"><div class="modal-section-title">'+t('note.tags.short')+'</div><div class="tags">'+n.tags.split(',').map(tg=>'<span class="tag" style="background:'+c+'18;color:'+c+'">'+esc(tg.trim())+'</span>').join('')+'</div></div>':''}<div class="modal-footer"><button class="btn btn-outline" onclick="closeModal();noteEdit(${i})">${t('btn.edit')}</button><button class="btn btn-danger" onclick="closeModal();noteDel(${i})">${t('btn.delete')}</button></div>`)}
+function noteSave(){const tt=document.getElementById('noteTitle').value.trim();if(!tt)return;const o={title:tt,authors:document.getElementById('noteAuthors').value,year:document.getElementById('noteYear').value,keyPoints:document.getElementById('noteKey').value,questions:document.getElementById('noteQ').value,tags:document.getElementById('noteTags').value};if(eNote>=0){o.color=notes[eNote].color;o._createdDate=notes[eNote]._createdDate;notes[eNote]=o;eNote=-1;showToast(t('feyn.updated'))}else{o.color=NC[notes.length%NC.length];o._createdDate=todayStr();notes.push(o);addCoins(15,t('reward.newNote'));renderDailyQuests()}save('notes',notes);noteClear();nR()}
+function noteEdit(i){eNote=i;const n=notes[i];document.getElementById('noteTitle').value=n.title;document.getElementById('noteAuthors').value=n.authors;document.getElementById('noteYear').value=n.year;document.getElementById('noteKey').value=n.keyPoints;document.getElementById('noteQ').value=n.questions;document.getElementById('noteTags').value=n.tags;nR();window.scrollTo({top:0,behavior:'smooth'})}
+function noteDel(i){openModal(`<button class="modal-close" onclick="closeModal()">×</button><h2>${t('confirm.del.title')}</h2><p style="color:var(--text-dim);margin-bottom:24px">${t('note.del.msg',{name:esc(notes[i].title)})}</p><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">${t('btn.cancel')}</button><button class="btn btn-danger" onclick="nConfDel(${i})">${t('btn.confirmDel')}</button></div>`)}
+function nConfDel(i){notes.splice(i,1);save('notes',notes);if(eNote===i){eNote=-1;noteClear()}closeModal();nR();showToast(t('feyn.deleted'))}
+function noteCancel(){eNote=-1;noteClear();nR()}
+function noteClear(){['noteTitle','noteAuthors','noteYear','noteKey','noteQ','noteTags'].forEach(id=>document.getElementById(id).value='')}
+nR();
+
+/* ══════════════════════════════════
+   TRACKER (per-day tasks, save snapshot)
+   ══════════════════════════════════ */
+const MOOD_EMOJIS=['😩','😔','😐','🙂','🔥'];
+function MOODS_get(){return MOOD_EMOJIS.map((e,i)=>({emoji:e,label:t('mood.label.'+i)}))}
+// tasks: current day's editable list
+let tasks=load('tasks',[]);
+let selMood=-1;
+// logs: [{date,mood,tasks:[{text,done}],focusSessions:[{startTime,duration}],reflection}]
+let logs=load('logs',[]);
+
+function tR(){
+  const MOODS=MOODS_get();
+  const dn=tasks.filter(t=>t.done).length,pct=tasks.length?Math.round(dn/tasks.length*100):0;
+  document.getElementById('trackPct').textContent=pct+'%';document.getElementById('trackBar').style.width=pct+'%';
+  document.getElementById('trackBar').style.background=pct===100?'var(--success)':'var(--accent)';
+  document.getElementById('trackCount').textContent=t('tracker.done',{d:dn,t:tasks.length});
+  let th='';tasks.forEach((tk,i)=>{th+=`<div class="task-item"><div class="checkbox ${tk.done?'checked':''}" onclick="toggleTask(${i})">${tk.done?'✓':''}</div><span class="task-text ${tk.done?'done':''}">${esc(tk.text)}</span><button class="task-remove" onclick="removeTask(${i})">×</button></div>`});
+  document.getElementById('taskList').innerHTML='<div style="display:flex;flex-direction:column;gap:8px">'+th+'</div>';
+  let mh='';MOODS.forEach((m,i)=>{mh+=`<button class="mood-btn ${selMood===i?'active':''}" onclick="selectMood(${i})" title="${m.label}">${m.emoji}</button>`});document.getElementById('moodRow').innerHTML=mh;
+  // Logs
+  let lh='';
+  if(logs.length){lh='<div class="history-title">'+t('tracker.history')+'</div><div style="display:flex;flex-direction:column;gap:8px">';
+    [...logs].reverse().forEach((l,ri)=>{const idx=logs.length-1-ri;const dn2=l.tasks?l.tasks.filter(t=>t.done).length:l.done||0;const tot=l.tasks?l.tasks.length:l.total||0;const fm=l.focusSessions?l.focusSessions.reduce((a,s)=>a+s.duration,0):0;
+    lh+=`<div class="log-item" onclick="lView(${idx})"><span style="font-size:22px">${esc(l.mood)}</span><span style="font-size:13px;color:var(--text-dim);min-width:80px">${esc(l.date)}</span><span style="font-size:13px">${t('tracker.tasks',{d:dn2,t:tot})}</span><span style="font-size:12px;color:var(--accent);margin-left:4px">${fm?t('tracker.focus.min',{n:fm}):''}  </span>${l.reflection?'<span style="font-size:12px;color:var(--text-dim);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">— '+esc(l.reflection)+'</span>':''}</div>`});lh+='</div>'}
+  document.getElementById('logHistory').innerHTML=lh;
+}
+
+function lView(i){
+  const l=logs[i];
+  const taskList=l.tasks||[];const doneT=taskList.filter(t=>t.done);const undoneT=taskList.filter(t=>!t.done);
+  const fs=l.focusSessions||[];const totalFM=fs.reduce((a,s)=>a+s.duration,0);
+  const pct=taskList.length?Math.round(doneT.length/taskList.length*100):0;
+  let taskHtml='';
+  if(doneT.length){taskHtml+='<div style="margin-bottom:8px;font-size:12px;color:var(--success);font-weight:600">'+t('tracker.log.doneHead')+'</div>';doneT.forEach(tk=>{taskHtml+=`<div class="task-done-item"><div class="dot" style="background:var(--success)"></div><span>${esc(tk.text)}</span></div>`})}
+  if(undoneT.length){taskHtml+='<div style="margin-top:8px;margin-bottom:8px;font-size:12px;color:var(--text-dim);font-weight:600">'+t('tracker.log.undoneHead')+'</div>';undoneT.forEach(tk=>{taskHtml+=`<div class="task-done-item"><div class="dot" style="background:var(--border)"></div><span style="color:var(--text-dim)">${esc(tk.text)}</span></div>`})}
+  let focusHtml='';
+  if(fs.length){fs.forEach(s=>{focusHtml+=`<div class="focus-item"><span>🎯 ${tE('pomo.session.start',{t:s.startTime})}</span><span style="color:var(--accent);font-weight:600">${t('pomo.session.dur',{n:s.duration|0})}</span></div>`});focusHtml+=`<div style="text-align:right;font-size:13px;margin-top:8px;color:var(--accent);font-weight:700">${t('tracker.log.focus.total',{m:totalFM,n:fs.length})}</div>`}else{focusHtml='<span style="color:var(--text-dim);font-size:13px">'+t('tracker.log.nofocus')+'</span>'}
+  openModal(`<button class="modal-close" onclick="closeModal()">×</button>
+    <h2>${tE('tracker.log.title',{mood:l.mood,date:l.date})}</h2>
+    <div class="modal-section"><div class="modal-section-title">${t('tracker.log.taskpct',{pct:pct})}</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><div class="progress-bar-wrap" style="flex:1"><div class="progress-bar-fill" style="width:${pct}%;background:${pct===100?'var(--success)':'var(--accent)'}"></div></div><span style="font-weight:700;color:var(--accent)">${pct}%</span></div>
+      ${taskHtml}
+    </div>
+    <div class="modal-section"><div class="modal-section-title">${t('tracker.log.focus')}</div>${focusHtml}</div>
+    ${l.reflection?'<div class="modal-section"><div class="modal-section-title">'+t('tracker.log.reflect')+'</div><div class="modal-section-content">'+esc(l.reflection)+'</div></div>':''}
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal();lEdit(${i})">${t('btn.edit')}</button><button class="btn btn-danger" onclick="closeModal();lDel(${i})">${t('btn.delete')}</button></div>`);
+}
+
+function lEdit(i){
+  const l=logs[i];let mh='';
+  const MOODS=MOODS_get();
+  MOODS.forEach((m,mi)=>{const a=l.mood===m.emoji;mh+=`<button class="mood-btn ${a?'active':''}" onclick="this.parentNode.querySelectorAll('.mood-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')" data-emoji="${m.emoji}" style="width:44px;height:44px;font-size:22px">${m.emoji}</button>`});
+  openModal(`<button class="modal-close" onclick="closeModal()">×</button><h2>${tE('tracker.log.edit',{date:l.date})}</h2>
+    <div class="modal-section"><div class="modal-section-title">${t('tracker.log.mood')}</div><div style="display:flex;gap:10px;margin-top:8px" id="eMoodRow">${mh}</div></div>
+    <div class="modal-section"><div class="modal-section-title">${t('tracker.log.reflection')}</div><textarea id="eLogRef" style="margin-top:6px;min-height:100px">${esc(l.reflection)}</textarea></div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">${t('btn.cancel')}</button><button class="btn btn-accent" onclick="lSaveEdit(${i})">${t('btn.save')}</button></div>`);
+}
+function lSaveEdit(i){const ab=document.querySelector('#eMoodRow .mood-btn.active');if(ab)logs[i].mood=ab.dataset.emoji;logs[i].reflection=document.getElementById('eLogRef').value;save('logs',logs);closeModal();tR();showToast(t('toast.updated'))}
+function lDel(i){openModal(`<button class="modal-close" onclick="closeModal()">×</button><h2>${t('confirm.del.title')}</h2><p style="color:var(--text-dim);margin-bottom:24px">${tE('tracker.log.del.msg',{date:logs[i].date})}</p><div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">${t('btn.cancel')}</button><button class="btn btn-danger" onclick="lConfDel(${i})">${t('btn.confirm')}</button></div>`)}
+function lConfDel(i){logs.splice(i,1);save('logs',logs);closeModal();tR();showToast(t('toast.deleted'))}
+
+function toggleTask(i){
+  const wasDone=tasks[i].done;
+  tasks[i].done=!tasks[i].done;save('tasks',tasks);tR();
+  // 完成时奖励金币
+  if(!wasDone&&tasks[i].done){
+    addCoins(3,t('reward.taskDone'));
+    renderDailyQuests();
+  }
+  // Celebrate if all done
+  const allDone=tasks.length>0&&tasks.every(tk=>tk.done);
+  if(allDone){
+    fireConfetti();
+    addCoins(20,t('reward.taskAllDone'));
+    showAchieve(t('achieve.allDone'),tasks.length,t('achieve.allDone.unit'),t('achieve.allDone.sub'),'var(--success)')
+  }
+}
+function removeTask(i){tasks.splice(i,1);save('tasks',tasks);tR()}
+function addTask(){const v=document.getElementById('newTaskInput').value.trim();if(!v)return;tasks.push({text:v,done:false});save('tasks',tasks);document.getElementById('newTaskInput').value='';tR()}
+function selectMood(i){selMood=i;tR()}
+function saveDay(){
+  const MOODS=MOODS_get();
+  const todayFS=todayFocus().map(s=>({startTime:s.startTime,duration:s.duration}));
+  const totalFM=todayFS.reduce((a,s)=>a+s.duration,0);
+  const doneCount=tasks.filter(tk=>tk.done).length;
+  const totalCount=tasks.length;
+  const pct=totalCount?Math.round(doneCount/totalCount*100):0;
+  const moodEmoji=selMood>=0?MOODS[selMood].emoji:'—';
+
+  logs.push({date:todayStr(),mood:moodEmoji,tasks:JSON.parse(JSON.stringify(tasks)),focusSessions:todayFS,reflection:document.getElementById('reflectionInput').value});
+  save('logs',logs);
+  selMood=-1;tasks=[];save('tasks',tasks);
+  document.getElementById('reflectionInput').value='';
+  tR();updateStreak();
+
+  // Day summary
+  let summaryLines=[];
+  if(totalFM)summaryLines.push(t('tracker.summary.focus',{m:totalFM,n:todayFS.length}));
+  if(totalCount)summaryLines.push(t('tracker.summary.tasks',{d:doneCount,t:totalCount}));
+  const streak=calcStreak();if(streak>=2)summaryLines.push(t('tracker.summary.streak',{n:streak}));
+  const summaryText=summaryLines.join('<br>');
+  if(totalFM>=50||pct===100)fireConfetti();
+  showAchieve(t('tracker.summary'),moodEmoji,'',summaryText,'var(--text)');
+}
+tR();
+
+/* ══════════════════════════════════
+   STATISTICS — rich analytics
+   ══════════════════════════════════ */
+let statRange=7;
+function setRange(n){
+  statRange=n;
+  document.querySelectorAll('.stat-range').forEach(b=>b.classList.toggle('active',+b.dataset.range===n));
+  document.querySelectorAll('.stat-range').forEach(b=>{if(+b.dataset.range===n){b.style.background='var(--accent)';b.style.color='#fff';b.style.borderColor='var(--accent)'}else{b.style.background='transparent';b.style.color='var(--text-dim)';b.style.borderColor='var(--border)'}});
+  renderStats();
+}
+
+function getDays(n){
+  const today=new Date(),arr=[];const count=n||Math.max(90,logs.length?Math.ceil((today-new Date(Math.min(...logs.map(l=>new Date(l.date).getTime()))))/86400000)+7:90);
+  for(let d=count-1;d>=0;d--){const dd=new Date(today);dd.setDate(dd.getDate()-d);arr.push({date:dd.toLocaleDateString('zh-CN'),short:(dd.getMonth()+1)+'/'+dd.getDate(),dow:dd.getDay(),obj:dd})}return arr;
+}
+
+function renderStats(){
+  const today=new Date();
+  const days=getDays(statRange);
+  const rangeLabel=statRange?t('stats.range.label',{n:statRange}):t('stats.range.label.all');
+
+  // Index data by date
+  // Build per-date indexes once (was: 3 separate forEach passes)
+  const _idx=buildDataIndex(logs,focusSessions);
+  const logByDay=_idx.logByDay,focusByDay=_idx.focusByDay,focusCountByDay=_idx.focusCountByDay;
+
+  // ── KPI computation ──
+  const rangeDates=days.map(d=>d.date);
+  const rFocus=rangeDates.reduce((a,d)=>a+(focusByDay[d]||0),0);
+  const rSessions=rangeDates.reduce((a,d)=>a+(focusCountByDay[d]||0),0);
+  const rLogs=rangeDates.filter(d=>logByDay[d]).length;
+  const rTaskPcts=rangeDates.map(d=>{const l=logByDay[d];if(!l||!l.tasks||!l.tasks.length)return null;return l.tasks.filter(t=>t.done).length/l.tasks.length*100}).filter(x=>x!==null);
+  const rAvgTask=rTaskPcts.length?Math.round(rTaskPcts.reduce((a,b)=>a+b,0)/rTaskPcts.length):0;
+
+  // Previous period for comparison
+  const prevDays=[];if(statRange){for(let d=statRange*2-1;d>=statRange;d--){const dd=new Date(today);dd.setDate(dd.getDate()-d);prevDays.push(dd.toLocaleDateString('zh-CN'))}}
+  const prevFocus=prevDays.reduce((a,d)=>a+(focusByDay[d]||0),0);
+  const prevTaskPcts=prevDays.map(d=>{const l=logByDay[d];if(!l||!l.tasks||!l.tasks.length)return null;return l.tasks.filter(t=>t.done).length/l.tasks.length*100}).filter(x=>x!==null);
+  const prevAvgTask=prevTaskPcts.length?Math.round(prevTaskPcts.reduce((a,b)=>a+b,0)/prevTaskPcts.length):0;
+  const prevLogs=prevDays.filter(d=>logByDay[d]).length;
+
+  // Streak
+  let streak=0;for(let d=0;d<365;d++){const dd=new Date(today);dd.setDate(dd.getDate()-d);const ds=dd.toLocaleDateString('zh-CN');if(logByDay[ds]||focusByDay[ds])streak++;else break}
+
+  // Sparklines (last N days focus)
+  const sparkVals=days.slice(-Math.min(days.length,14)).map(d=>focusByDay[d.date]||0);
+  const sparkMax=Math.max(...sparkVals,1);
+  const sparkHtml=sparkVals.map(v=>`<div class="spark-bar" style="height:${Math.max(2,v/sparkMax*28)}px;background:var(--accent)"></div>`).join('');
+
+  function delta(cur,prev,unit=''){if(!statRange)return '';const diff=cur-prev;if(diff>0)return `<div class="delta delta-up">↑ ${diff}${unit}</div>`;if(diff<0)return `<div class="delta delta-down">↓ ${Math.abs(diff)}${unit}</div>`;return `<div class="delta delta-flat">${t('stats.delta.flat')}</div>`}
+
+  document.getElementById('statCards').innerHTML=`
+    <div class="stat-card"><div class="stat-number" style="color:var(--accent)">${rFocus}</div><div class="stat-label">${t('stats.kpi.focusMin')}</div>${delta(rFocus,prevFocus,t('stats.unit.min'))}<div class="sparkline">${sparkHtml}</div></div>
+    <div class="stat-card"><div class="stat-number" style="color:var(--success)">${rSessions}</div><div class="stat-label">${t('stats.kpi.sessions')}</div>${delta(rSessions,prevDays.reduce((a,d)=>a+(focusCountByDay[d]||0),0),t('stats.unit.times'))}</div>
+    <div class="stat-card"><div class="stat-number" style="color:#8b5cf6">${rAvgTask}%</div><div class="stat-label">${t('stats.kpi.avgTask')}</div>${delta(rAvgTask,prevAvgTask,t('stats.unit.percent'))}</div>
+    <div class="stat-card"><div class="stat-number" style="color:var(--warning)">${streak}</div><div class="stat-label">${t('stats.kpi.streak')}</div></div>
+    <div class="stat-card"><div class="stat-number" style="color:#ec4899">${rLogs}</div><div class="stat-label">${t('stats.kpi.logDays')}</div>${delta(rLogs,prevLogs,t('stats.unit.day'))}</div>
+    <div class="stat-card"><div class="stat-number" style="color:#14b8a6">${notes.length+fHist.length}</div><div class="stat-label">${t('stats.kpi.notesFeyn')}</div></div>`;
+
+  // ── Level / XP system ──
+  // XP = total focus minutes + completed tasks×5 + logs×10 + notes×15 + feynman×20
+  const allFocusTotal=focusSessions.reduce((a,s)=>a+s.duration,0);
+  const allTasksDone=logs.reduce((a,l)=>{const ts=l.tasks||[];return a+ts.filter(t=>t.done).length},0);
+  const xp=allFocusTotal+allTasksDone*5+logs.length*10+notes.length*15+fHist.length*20;
+  // Levels (name resolved via i18n)
+  const levelMins=[0,50,150,350,700,1200,2000,3500,5500,8000];
+  const levels=levelMins.map((mn,i)=>({name:t('level.'+(i+1)),min:mn}));
+  let curLevel=0;for(let i=levels.length-1;i>=0;i--){if(xp>=levels[i].min){curLevel=i;break}}
+  const nextLevel=curLevel<levels.length-1?levels[curLevel+1]:null;
+  const lvProgress=nextLevel?Math.min(100,Math.round((xp-levels[curLevel].min)/(nextLevel.min-levels[curLevel].min)*100)):100;
+  document.getElementById('levelCard').innerHTML=`
+    <div class="level-title" style="color:var(--text-dim)">${t('stats.level.current')}</div>
+    <div class="level-num" style="background:linear-gradient(135deg,var(--accent),#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Lv.${curLevel+1}</div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">${levels[curLevel].name}</div>
+    <div class="xp-bar-bg"><div class="xp-bar-fill" style="width:${lvProgress}%"></div></div>
+    <div style="font-size:12px;color:var(--text-dim)">${nextLevel?t('stats.level.next',{xp:xp,min:nextLevel.min,name:nextLevel.name}):t('stats.level.max',{xp:xp})}</div>
+    <div style="margin-top:10px;font-size:11px;color:var(--text-dim)">${t('stats.level.legend')}</div>`;
+  // 检查是否升级
+  checkLevelUp(curLevel,levels[curLevel].name);
+
+  // ── Milestones ──
+  const milestones=[
+    {k:'1',check:allFocusTotal>=25,progress:Math.min(allFocusTotal,25),target:25,unit:t('stats.unit.min')},
+    {k:'2',check:allFocusTotal>=60,progress:Math.min(allFocusTotal,60),target:60,unit:t('stats.unit.min')},
+    {k:'3',check:allFocusTotal>=240,progress:Math.min(allFocusTotal,240),target:240,unit:t('stats.unit.min')},
+    {k:'4',check:allFocusTotal>=600,progress:Math.min(allFocusTotal,600),target:600,unit:t('stats.unit.min')},
+    {k:'5',check:allFocusTotal>=6000,progress:Math.min(allFocusTotal,6000),target:6000,unit:t('stats.unit.min')},
+    {k:'6',check:logs.length>=7,progress:Math.min(logs.length,7),target:7,unit:t('stats.unit.day')},
+    {k:'7',check:logs.length>=30,progress:Math.min(logs.length,30),target:30,unit:t('stats.unit.day')},
+    {k:'8',check:streak>=7,progress:Math.min(streak,7),target:7,unit:t('stats.unit.day')},
+    {k:'9',check:streak>=30,progress:Math.min(streak,30),target:30,unit:t('stats.unit.day')},
+    {k:'10',check:notes.length>=10,progress:Math.min(notes.length,10),target:10,unit:t('stats.unit.pc')},
+    {k:'11',check:fHist.length>=10,progress:Math.min(fHist.length,10),target:10,unit:t('stats.unit.times')},
+  ].map(m=>({...m,name:t('stats.ms.'+m.k+'.n'),desc:t('stats.ms.'+m.k+'.d')}));
+  // Show: next 3 uncompleted + all completed
+  const done=milestones.filter(m=>m.check);
+  const pending=milestones.filter(m=>!m.check).slice(0,3);
+  const showMs=[...pending,...done];
+  let msHtml='<h3 style="font-size:15px;margin-bottom:14px">'+t('stats.ms.title')+'　<span style="font-size:12px;color:var(--text-dim);font-weight:400">'+done.length+' / '+milestones.length+'</span></h3>';
+  showMs.forEach(m=>{
+    const pct=Math.round(m.progress/m.target*100);
+    msHtml+=`<div class="milestone-row"><div class="ms-check ${m.check?'done':'pending'}">${m.check?'✓':''}</div><div class="ms-info"><div class="ms-name" style="${m.check?'':'color:var(--text)'}">${m.name}</div><div class="ms-desc">${m.desc}</div>${!m.check?'<div style="margin-top:4px"><div class="mini-bar-bg" style="height:5px"><div class="mini-bar-fill" style="width:'+pct+'%;background:var(--accent)"></div></div></div>':''}</div><div class="ms-progress" style="color:${m.check?'var(--success)':'var(--text-dim)'}">${m.check?t('stats.ms.achieved'):m.progress+'/'+m.target}</div></div>`;
+  });
+  document.getElementById('milestonesCard').innerHTML=msHtml;
+
+  // ── Personal Records ──
+  // Best single day focus, longest streak, most tasks in a day, most pomodoros in a day
+  let recBestFocus=0,recBestFocusDay='—';
+  let recBestTasks=0,recBestTasksDay='—';
+  let recBestPomos=0,recBestPomosDay='—';
+  Object.keys(focusByDay).forEach(d=>{if(focusByDay[d]>recBestFocus){recBestFocus=focusByDay[d];recBestFocusDay=d}});
+  Object.keys(focusCountByDay).forEach(d=>{if(focusCountByDay[d]>recBestPomos){recBestPomos=focusCountByDay[d];recBestPomosDay=d}});
+  logs.forEach(l=>{const dn=l.tasks?l.tasks.filter(t=>t.done).length:0;if(dn>recBestTasks){recBestTasks=dn;recBestTasksDay=l.date}});
+  // Longest ever streak
+  let longestStreak=0,tempStreak=0;
+  const allDates=[];for(let d=365;d>=0;d--){const dd=new Date(today);dd.setDate(dd.getDate()-d);allDates.push(dd.toLocaleDateString('zh-CN'))}
+  allDates.forEach(d=>{if(focusByDay[d]||logByDay[d]){tempStreak++;if(tempStreak>longestStreak)longestStreak=tempStreak}else tempStreak=0});
+
+  const U={min:t('stats.unit.min'),day:t('stats.unit.day'),pc:t('stats.unit.pc'),n:t('stats.unit.times')};
+  const sp=(v,u)=>u?v+' '+u:v;
+  document.getElementById('recordsCard').innerHTML=`
+    <h3 style="font-size:15px;margin-bottom:14px">${t('stats.records.title')}</h3>
+    <div class="record-row"><span style="color:var(--text-dim)">${t('stats.records.bestFocus')}</span><span class="record-val">${sp(recBestFocus,U.min)}</span></div>
+    <div class="record-row"><span style="color:var(--text-dim)">${t('stats.records.bestPomos')}</span><span class="record-val">${sp(recBestPomos,U.n)}</span></div>
+    <div class="record-row"><span style="color:var(--text-dim)">${t('stats.records.bestTasks')}</span><span class="record-val">${sp(recBestTasks,U.pc)}</span></div>
+    <div class="record-row"><span style="color:var(--text-dim)">${t('stats.records.longestStreak')}</span><span class="record-val">${sp(longestStreak,U.day)}</span></div>
+    <div class="record-row"><span style="color:var(--text-dim)">${t('stats.records.totalFocus')}</span><span class="record-val">${sp(allFocusTotal,U.min)}</span></div>
+    <div class="record-row"><span style="color:var(--text-dim)">${t('stats.records.totalTasks')}</span><span class="record-val">${sp(allTasksDone,U.pc)}</span></div>`;
+
+  // ── Insights ──
+  const insights=[];
+  // Best day
+  let bestDay=null,bestFocus=0;rangeDates.forEach(d=>{if((focusByDay[d]||0)>bestFocus){bestFocus=focusByDay[d];bestDay=d}});
+  if(bestDay)insights.push({k:t('stats.insights.bestDay'),v:`${bestDay}　${bestFocus} ${U.min}`});
+  // Average daily
+  const activeDays=rangeDates.filter(d=>focusByDay[d]||logByDay[d]).length;
+  if(activeDays){
+    insights.push({k:t('stats.insights.avgDay'),v:`${Math.round(rFocus/activeDays)} ${U.min}`});
+    insights.push({k:t('stats.insights.activeRate'),v:t('stats.insights.activeFmt',{a:activeDays,t:days.length,p:Math.round(activeDays/days.length*100)})});
+  }
+  // Peak hour
+  const hourBuckets=Array(24).fill(0);
+  const hourSessions=Array(24).fill(0);
+  const rangeDateSet=new Set(rangeDates);
+  focusSessions.forEach(s=>{if(!rangeDateSet.has(s.date))return;const hMatch=s.startTime?s.startTime.match(/^(\d+)/):null;if(hMatch){const h=parseInt(hMatch[1]);hourBuckets[h]+=s.duration;hourSessions[h]++}});
+  const peakHour=hourBuckets.indexOf(Math.max(...hourBuckets));
+  if(hourBuckets[peakHour]>0)insights.push({k:t('stats.insights.peakHour'),v:`${peakHour}:00 – ${peakHour+1}:00`});
+  // Mood correlation
+  const moodMap={'😩':1,'😔':2,'😐':3,'🙂':4,'🔥':5};
+  const highMoodDays=[],lowMoodDays=[];
+  rangeDates.forEach(d=>{const l=logByDay[d];if(!l)return;const mv=moodMap[l.mood]||0;if(mv>=4)highMoodDays.push(d);if(mv<=2)lowMoodDays.push(d)});
+  const highMoodFocus=highMoodDays.length?Math.round(highMoodDays.reduce((a,d)=>a+(focusByDay[d]||0),0)/highMoodDays.length):0;
+  const lowMoodFocus=lowMoodDays.length?Math.round(lowMoodDays.reduce((a,d)=>a+(focusByDay[d]||0),0)/lowMoodDays.length):0;
+  if(highMoodDays.length&&lowMoodDays.length){
+    insights.push({k:t('stats.insights.goodMood'),v:`${highMoodFocus} ${U.min}`});
+    insights.push({k:t('stats.insights.badMood'),v:`${lowMoodFocus} ${U.min}`});
+  }
+
+  if(!insights.length)insights.push({k:t('stats.insights.hint'),v:t('stats.insights.empty')});
+  document.getElementById('insightsCard').innerHTML='<h3 style="font-size:15px;margin-bottom:8px">'+t('stats.insights.title')+'</h3>'+insights.map(i=>`<div class="insight-row"><span class="insight-key">${i.k}</span><span class="insight-val">${i.v}</span></div>`).join('');
+
+  // ── Focus hour distribution ──
+  const maxHour=Math.max(...hourBuckets,1);
+  let hcHtml='';
+  // Show 6am–1am range (relevant hours)
+  for(let h=6;h<=24;h++){
+    const hr=h%24;const val=hourBuckets[hr];const barH=Math.max(2,val/maxHour*80);
+    const isPeak=hr===peakHour&&val>0;
+    hcHtml+=`<div class="hour-bar-wrap"><div class="hour-val">${val||''}</div><div class="hour-bar" style="height:${barH}px;background:${isPeak?'var(--accent)':val?'var(--accent)50':'var(--border)'}"></div><div class="hour-label">${t('stats.hour.label',{h:hr})}</div></div>`;
+  }
+  document.getElementById('hourChart').innerHTML=hcHtml;
+
+  // ── Weekly comparison ──
+  // Group by calendar week
+  const weeks={};
+  const allDays=getDays(statRange||90);
+  allDays.forEach(d=>{
+    const wStart=new Date(d.obj);wStart.setDate(wStart.getDate()-wStart.getDay());
+    const wKey=wStart.toLocaleDateString('zh-CN');
+    if(!weeks[wKey])weeks[wKey]={label:wKey,focus:0,tasks:0,tasksDone:0,days:0};
+    weeks[wKey].focus+=focusByDay[d.date]||0;
+    const l=logByDay[d.date];if(l&&l.tasks){weeks[wKey].tasks+=l.tasks.length;weeks[wKey].tasksDone+=l.tasks.filter(t=>t.done).length}
+    if(focusByDay[d.date]||logByDay[d.date])weeks[wKey].days++;
+  });
+  const weekArr=Object.values(weeks).slice(-6);// last 6 weeks
+  const maxWF=Math.max(...weekArr.map(w=>w.focus),1);
+  let wtHtml=`<div class="weekly-row" style="font-weight:700;color:var(--text-dim);font-size:11px;border-bottom:2px solid var(--border)"><span>${t('stats.weekly.start')}</span><span>${t('stats.weekly.focus')}</span><span>${t('stats.weekly.rate')}</span></div>`;
+  weekArr.forEach(w=>{
+    const pct=w.tasks?Math.round(w.tasksDone/w.tasks*100):0;
+    wtHtml+=`<div class="weekly-row"><span style="color:var(--text-dim)">${w.label.slice(5)}</span><div><div class="mini-bar-bg"><div class="mini-bar-fill" style="width:${Math.round(w.focus/maxWF*100)}%;background:var(--accent)"></div></div><span style="font-size:11px;color:var(--text-dim)">${t('stats.weekly.info',{m:w.focus,d:w.days})}</span></div><span style="font-weight:700;color:${pct>=70?'var(--success)':pct>=40?'var(--warning)':'var(--text-dim)'}">${w.tasks?pct+'%':'—'}</span></div>`;
+  });
+  document.getElementById('weeklyTable').innerHTML=wtHtml;
+
+  // ── Mood statistics ──
+  const moodEmojis=['😩','😔','😐','🙂','🔥'];
+  const moodColors2={'😩':'#ef4444','😔':'#f97316','😐':'#eab308','🙂':'#22c55e','🔥':'#6366f1'};
+
+  // Count mood occurrences in range
+  const moodCounts={};moodEmojis.forEach(e=>{moodCounts[e]=0});
+  const rangeLogs=rangeDates.map(d=>logByDay[d]).filter(Boolean);
+  rangeLogs.forEach(l=>{if(moodCounts.hasOwnProperty(l.mood))moodCounts[l.mood]++});
+  const maxMoodCount=Math.max(...Object.values(moodCounts),1);
+  const totalMoodLogs=rangeLogs.filter(l=>moodEmojis.includes(l.mood)).length;
+
+  // Distribution bars
+  let mdHtml='';
+  moodEmojis.forEach((e,i)=>{
+    const cnt=moodCounts[e];const pct=totalMoodLogs?Math.round(cnt/totalMoodLogs*100):0;
+    mdHtml+=`<div class="mood-dist-row"><div class="mood-dist-emoji">${e}</div><div style="flex:1"><div class="mood-dist-bar"><div class="mood-dist-fill" style="width:${maxMoodCount?cnt/maxMoodCount*100:0}%;background:${moodColors2[e]}"></div></div></div><div class="mood-dist-info">${t('stats.mood.dist',{n:cnt,p:pct})}</div></div>`;
+  });
+  // Average mood score
+  const moodScores=rangeLogs.map(l=>moodMap[l.mood]).filter(Boolean);
+  const avgMood=moodScores.length?(moodScores.reduce((a,b)=>a+b,0)/moodScores.length).toFixed(1):0;
+  const avgMoodEmoji=avgMood>=4.5?'🔥':avgMood>=3.5?'🙂':avgMood>=2.5?'😐':avgMood>=1.5?'😔':'😩';
+  if(moodScores.length)mdHtml+=`<div style="text-align:center;margin-top:12px;padding:10px;background:var(--bg);border-radius:10px;font-size:14px">${t('stats.mood.avg')} <span style="font-size:20px;margin:0 4px">${avgMoodEmoji}</span> <b>${avgMood}</b> / 5</div>`;
+  document.getElementById('moodDistribution').innerHTML=mdHtml;
+
+  // Timeline (dots for each day)
+  let mtHtml='';
+  days.forEach(d=>{
+    const l=logByDay[d.date];
+    const emoji=l&&moodEmojis.includes(l.mood)?l.mood:'';
+    const bg=emoji?moodColors2[emoji]+'30':'var(--border)';
+    const border=emoji?moodColors2[emoji]:'transparent';
+    mtHtml+=`<div class="mood-dot" style="background:${bg};border:1.5px solid ${border}" title="${d.date}${emoji?' '+emoji:' '+t('stats.mood.no.record')}">${emoji||'·'}</div>`;
+  });
+  document.getElementById('moodTimeline').innerHTML=mtHtml;
+
+  // Mood × Focus correlation table
+  let mcHtml=`<div style="font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px">${t('stats.mood.corr')}</div>`;
+  const moodFocusData={};moodEmojis.forEach(e=>{moodFocusData[e]={totalFocus:0,count:0,totalTaskPct:0}});
+  rangeLogs.forEach(l=>{
+    if(!moodFocusData[l.mood])return;
+    moodFocusData[l.mood].totalFocus+=(focusByDay[l.date]||0);
+    moodFocusData[l.mood].count++;
+    if(l.tasks&&l.tasks.length)moodFocusData[l.mood].totalTaskPct+=l.tasks.filter(t=>t.done).length/l.tasks.length*100;
+  });
+  const hasCorrelationData=moodEmojis.some(e=>moodFocusData[e].count>0);
+  if(hasCorrelationData){
+    const maxAvgFocus=Math.max(...moodEmojis.map(e=>moodFocusData[e].count?moodFocusData[e].totalFocus/moodFocusData[e].count:0),1);
+    moodEmojis.forEach((e,i)=>{
+      const d=moodFocusData[e];if(!d.count)return;
+      const avgF=Math.round(d.totalFocus/d.count);
+      const avgT=Math.round(d.totalTaskPct/d.count);
+      mcHtml+=`<div class="mood-corr-row"><div class="mood-corr-emoji">${e}</div><div class="mood-corr-data"><div style="display:flex;align-items:center;gap:8px"><span class="mood-corr-label">${t('stats.mood.corr.focus')}</span><div class="mini-bar-bg" style="flex:1;height:6px"><div class="mini-bar-fill" style="width:${Math.round(avgF/maxAvgFocus*100)}%;background:${moodColors2[e]}"></div></div><span style="font-size:12px;font-weight:700">${avgF}${U.min}</span></div><div style="display:flex;align-items:center;gap:8px"><span class="mood-corr-label">${t('stats.mood.corr.done')}</span><div class="mini-bar-bg" style="flex:1;height:6px"><div class="mini-bar-fill" style="width:${avgT}%;background:${moodColors2[e]}80"></div></div><span style="font-size:12px;font-weight:700">${avgT}%</span></div></div><div style="font-size:11px;color:var(--text-dim);text-align:center;min-width:36px">${t('stats.mood.corr.days',{n:d.count})}</div></div>`;
+    });
+  } else {
+    mcHtml+=`<div style="color:var(--text-dim);font-size:13px;padding:8px 0">${t('stats.mood.corr.empty')}</div>`;
+  }
+  document.getElementById('moodCorrelation').innerHTML=mcHtml;
+
+  // ── Heatmap (90 days) ──
+  const hmDays=getDays(statRange||90);
+  let hmHtml='';
+  hmDays.forEach(d=>{
+    const fm=focusByDay[d.date]||0;
+    const hasLog=!!logByDay[d.date];
+    const activity=fm/25+(hasLog?1:0);
+    let color='var(--border)';
+    if(activity>0)color='#6366f130';if(activity>=2)color='#6366f160';if(activity>=4)color='#6366f1a0';if(activity>=6)color='#6366f1';
+    hmHtml+=`<div class="heat-cell" style="background:${color}" title="${t('stats.heat.tip',{d:d.date,m:fm,log:hasLog?t('stats.heat.hasLog'):''})}" onclick="heatDetail('${d.date}')"></div>`;
+  });
+  document.getElementById('heatmap').innerHTML=hmHtml;
+  // 渲染徽章收藏
+  renderBadgeCollection();
+}
+
+function heatDetail(dateStr){
+  const l=logs.find(x=>x.date===dateStr);
+  const fs=focusSessions.filter(s=>s.date===dateStr);
+  const totalM=fs.reduce((a,s)=>a+s.duration,0);
+  let body='';
+  if(fs.length){body+='<div class="modal-section"><div class="modal-section-title">'+t('stats.heat.focus')+'</div>';fs.forEach(s=>{body+=`<div class="focus-item"><span>🎯 ${s.startTime}</span><span style="color:var(--accent);font-weight:600">${s.duration}${t('stats.unit.min')}</span></div>`});body+=`<div style="text-align:right;margin-top:6px;font-size:13px;color:var(--accent);font-weight:700">${t('stats.heat.total',{m:totalM})}</div></div>`}
+  if(l){
+    const ts=l.tasks||[];const dn=ts.filter(t=>t.done);const und=ts.filter(t=>!t.done);
+    if(ts.length){body+='<div class="modal-section"><div class="modal-section-title">'+t('stats.heat.tasks')+'</div>';dn.forEach(tk=>{body+=`<div class="task-done-item"><div class="dot" style="background:var(--success)"></div><span>${esc(tk.text)}</span></div>`});und.forEach(tk=>{body+=`<div class="task-done-item"><div class="dot" style="background:var(--border)"></div><span style="color:var(--text-dim)">${esc(tk.text)}</span></div>`});body+='</div>'}
+    if(l.reflection)body+=`<div class="modal-section"><div class="modal-section-title">${t('stats.heat.reflect')}</div><div class="modal-section-content">${esc(l.reflection)}</div></div>`;
+    body+=`<div style="font-size:14px;margin-top:8px">${t('stats.heat.mood',{m:l.mood})}</div>`;
+  }
+  if(!body)body='<p style="color:var(--text-dim)">'+t('stats.heat.empty')+'</p>';
+  openModal(`<button class="modal-close" onclick="closeModal()">×</button><h2>📅 ${dateStr}</h2>${body}`);
+}
+
+/* ═══════════════════════════════════════════════
+   🚀 Initialization — wire up all gamification
+   ═══════════════════════════════════════════════ */
+// 每分钟刷新一次任务倒计时
+function initGamification(){
+  applyI18n(); // 首次应用语言到所有 data-i18n 元素
+  updateTopStatus();
+  renderMotivBanner();
+  renderDailyQuests();
+  renderCombo();
+  // 延迟显示签到奖励（避免和其他弹窗冲突）
+  setTimeout(()=>tryDailyLogin(),600);
+  // 单一的每分钟 tick：合并了原来的两个 setInterval(..., 60000)，
+  // 并且在页面隐藏时暂停，省 CPU 也避免浪费的 DOM 重建。
+  let _gameTick=null;
+  function startGameTick(){
+    if(_gameTick)return;
+    _gameTick=setInterval(()=>{
+      if(document.hidden)return;
+      const today=todayStr();
+      if(document.getElementById('sec-pomodoro').classList.contains('active')){
+        renderDailyQuests();
+        renderMotivBanner();
+      }
+      if(gameState.lastActiveDate&&gameState.lastActiveDate!==today){
+        // 跨天：刷新鼓励语和任务
+        renderMotivBanner();
+        renderDailyQuests();
+      }
+      gameState.lastActiveDate=today;saveGameState();
+    },60000);
+  }
+  function stopGameTick(){if(_gameTick){clearInterval(_gameTick);_gameTick=null}}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stopGameTick():startGameTick()});
+  startGameTick();
+}
+initGamification();
+
+// 导出时包含游戏化数据
+const _origExport=exportData;
+window.exportData=function(){
+  // 临时把游戏化 key 加入 KEYS
+  const extraKeys=['coins','freezes','badges','gameState','dailyQuests','consumedFreezeDates','_lastKnownLevel'];
+  extraKeys.forEach(k=>{if(!KEYS.includes(k))KEYS.push(k)});
+  _origExport();
+};
+</script>
+</body>
+</html>
