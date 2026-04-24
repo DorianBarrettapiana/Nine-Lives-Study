@@ -376,3 +376,133 @@ h3 {
   padding: 1rem;
   background: #111827;
 }
+
+.tracker-progress {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #d1d5db;
+}
+
+.progress-bar {
+  height: 0.75rem;
+  border-radius: 999px;
+  background: #374151;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #6366f1, #a78bfa);
+  transition: width 0.25s ease;
+}
+
+.task-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.task-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.task-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  border: 1px solid #374151;
+  border-radius: 14px;
+  padding: 0.75rem;
+  background: #111827;
+}
+
+.task-checkbox {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9px;
+  padding: 0;
+  border: 2px solid #4b5563;
+  background: transparent;
+  color: white;
+}
+
+.task-checkbox.checked {
+  border-color: #10b981;
+  background: #10b981;
+}
+
+.task-text {
+  color: #e5e7eb;
+}
+
+.task-text.done {
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+
+.task-delete {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 1.2rem;
+}
+
+.task-delete:hover {
+  background: #7f1d1d;
+  color: #fecaca;
+}
+
+.mood-row {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.mood-button {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 14px;
+  padding: 0;
+  border: 2px solid #374151;
+  background: #111827;
+  font-size: 1.45rem;
+}
+
+.mood-button:hover {
+  border-color: #6366f1;
+  background: #1f2937;
+}
+
+.mood-button.active {
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.25);
+  transform: scale(1.08);
+}
+
+@media (max-width: 600px) {
+  .task-form {
+    grid-template-columns: 1fr;
+  }
+}

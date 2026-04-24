@@ -11,11 +11,19 @@ import {
   type FeynmanEntryRead,
 } from "./api/feynman";
 import { createNote, deleteNote, listNotes, updateNote, type PaperNoteRead } from "./api/notes";
+import {
+  createDailyTask,
+  deleteDailyTask,
+  getDailyState,
+  saveDailyLog,
+  updateDailyTask,
+  type DailyStateRead,
+} from "./api/tracker";
 import { createUser, listUsers, type UserRead } from "./api/users";
 
 const CURRENT_USER_ID_KEY = "phdstudylab_current_user_id";
 
-type AppView = "notes" | "feynman";
+type AppView = "notes" | "feynman" | "tracker";
 
 const FEYNMAN_STEPS = [
   {
@@ -44,6 +52,14 @@ const FEYNMAN_STEPS = [
   },
 ] as const;
 
+const MOODS = [
+  { emoji: "😩", label: "Exhausted" },
+  { emoji: "😔", label: "Low" },
+  { emoji: "😐", label: "Neutral" },
+  { emoji: "🙂", label: "Good" },
+  { emoji: "🔥", label: "On fire" },
+] as const;
+
 const app = document.querySelector<HTMLDivElement>("#app");
 
 if (!app) {
@@ -62,6 +78,9 @@ let feynmanEntries: FeynmanEntryRead[] = [];
 let feynmanStep = 0;
 let feynmanDraft = ["", "", "", ""];
 let editedFeynmanId: number | null = null;
+
+let dailyState: DailyStateRead | null = null;
+let selectedMood = "";
 
 app.innerHTML = `
   <div class="app-shell">
@@ -121,8 +140,8 @@ app.innerHTML = `
           <ol class="roadmap">
             <li class="done">Users</li>
             <li class="done">Paper notes</li>
-            <li class="active">Feynman</li>
-            <li>Daily tracker</li>
+            <li class="done">Feynman</li>
+            <li class="active">Daily tracker</li>
             <li>Pomodoro</li>
             <li>Stats</li>
             <li>Gamification</li>
@@ -134,6 +153,7 @@ app.innerHTML = `
         <nav class="feature-tabs">
           <button class="feature-tab active" data-view="notes">Paper notes</button>
           <button class="feature-tab" data-view="feynman">Feynman</button>
+          <button class="feature-tab" data-view="tracker">Daily tracker</button>
         </nav>
 
         <div id="notes-view">
@@ -230,6 +250,52 @@ app.innerHTML = `
             <div id="feynman-list" class="feynman-list"></div>
           </section>
         </div>
+
+        <div id="tracker-view" class="hidden">
+          <section class="card">
+            <div class="section-header">
+              <div>
+                <h2>Daily tracker</h2>
+                <p class="hint">Tasks, mood and daily reflection.</p>
+              </div>
+              <button id="refresh-tracker-button" class="secondary">Refresh</button>
+            </div>
+
+            <div class="tracker-progress">
+              <div class="progress-header">
+                <span>Today progress</span>
+                <strong id="tracker-percent">0%</strong>
+              </div>
+              <div class="progress-bar">
+                <div id="tracker-progress-fill" class="progress-fill"></div>
+              </div>
+              <p id="tracker-count" class="hint">0 / 0 tasks done</p>
+            </div>
+
+            <form id="task-form" class="task-form">
+              <input id="task-input" type="text" placeholder="Add a task for today..." />
+              <button type="submit">Add task</button>
+            </form>
+
+            <div id="task-list" class="task-list"></div>
+
+            <div class="divider"></div>
+
+            <h3>How do you feel today?</h3>
+            <div id="mood-row" class="mood-row"></div>
+
+            <label>
+              Daily reflection
+              <textarea id="reflection-input" placeholder="What did you do, learn, unblock or struggle with today?"></textarea>
+            </label>
+
+            <div class="button-row">
+              <button id="save-log-button" type="button">Save daily log</button>
+            </div>
+
+            <p id="tracker-message" class="message"></p>
+          </section>
+        </div>
       </section>
     </main>
   </div>
@@ -247,6 +313,7 @@ const userMessage = document.querySelector<HTMLParagraphElement>("#user-message"
 const featureTabs = document.querySelectorAll<HTMLButtonElement>(".feature-tab");
 const notesView = document.querySelector<HTMLDivElement>("#notes-view");
 const feynmanView = document.querySelector<HTMLDivElement>("#feynman-view");
+const trackerView = document.querySelector<HTMLDivElement>("#tracker-view");
 
 const noteForm = document.querySelector<HTMLFormElement>("#note-form");
 const noteTitleInput = document.querySelector<HTMLInputElement>("#note-title");
@@ -273,6 +340,18 @@ const feynmanMessage = document.querySelector<HTMLParagraphElement>("#feynman-me
 const feynmanList = document.querySelector<HTMLDivElement>("#feynman-list");
 const refreshFeynmanButton = document.querySelector<HTMLButtonElement>("#refresh-feynman-button");
 
+const refreshTrackerButton = document.querySelector<HTMLButtonElement>("#refresh-tracker-button");
+const trackerPercent = document.querySelector<HTMLStrongElement>("#tracker-percent");
+const trackerProgressFill = document.querySelector<HTMLDivElement>("#tracker-progress-fill");
+const trackerCount = document.querySelector<HTMLParagraphElement>("#tracker-count");
+const taskForm = document.querySelector<HTMLFormElement>("#task-form");
+const taskInput = document.querySelector<HTMLInputElement>("#task-input");
+const taskList = document.querySelector<HTMLDivElement>("#task-list");
+const moodRow = document.querySelector<HTMLDivElement>("#mood-row");
+const reflectionInput = document.querySelector<HTMLTextAreaElement>("#reflection-input");
+const saveLogButton = document.querySelector<HTMLButtonElement>("#save-log-button");
+const trackerMessage = document.querySelector<HTMLParagraphElement>("#tracker-message");
+
 if (
   !currentUserLabel ||
   !userSelect ||
@@ -284,6 +363,7 @@ if (
   !userMessage ||
   !notesView ||
   !feynmanView ||
+  !trackerView ||
   !noteForm ||
   !noteTitleInput ||
   !noteAuthorsInput ||
@@ -306,7 +386,18 @@ if (
   !feynmanResetButton ||
   !feynmanMessage ||
   !feynmanList ||
-  !refreshFeynmanButton
+  !refreshFeynmanButton ||
+  !refreshTrackerButton ||
+  !trackerPercent ||
+  !trackerProgressFill ||
+  !trackerCount ||
+  !taskForm ||
+  !taskInput ||
+  !taskList ||
+  !moodRow ||
+  !reflectionInput ||
+  !saveLogButton ||
+  !trackerMessage
 ) {
   throw new Error("Could not find one or more DOM elements.");
 }
@@ -349,6 +440,7 @@ function switchView(view: AppView): void {
 
   notesView.classList.toggle("hidden", view !== "notes");
   feynmanView.classList.toggle("hidden", view !== "feynman");
+  trackerView.classList.toggle("hidden", view !== "tracker");
 
   featureTabs.forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.view === view);
@@ -548,6 +640,78 @@ function renderFeynmanEntries(): void {
     .join("");
 }
 
+function renderTracker(): void {
+  if (!currentUser) {
+    taskList.innerHTML = `
+      <div class="empty-state">
+        Select or create a user before using the daily tracker.
+      </div>
+    `;
+    trackerPercent.textContent = "0%";
+    trackerProgressFill.style.width = "0%";
+    trackerCount.textContent = "0 / 0 tasks done";
+    return;
+  }
+
+  if (!dailyState) {
+    taskList.innerHTML = `
+      <div class="empty-state">
+        Daily tracker not loaded yet.
+      </div>
+    `;
+    return;
+  }
+
+  trackerPercent.textContent = `${dailyState.completion_percent}%`;
+  trackerProgressFill.style.width = `${dailyState.completion_percent}%`;
+  trackerCount.textContent = `${dailyState.done_count} / ${dailyState.total_count} tasks done`;
+
+  if (dailyState.tasks.length === 0) {
+    taskList.innerHTML = `
+      <div class="empty-state">
+        No task for today.
+      </div>
+    `;
+  } else {
+    taskList.innerHTML = dailyState.tasks
+      .map(
+        (task) => `
+          <div class="task-item">
+            <button
+              class="task-checkbox ${task.is_done ? "checked" : ""}"
+              data-task-action="toggle"
+              data-id="${task.id}"
+              aria-label="Toggle task"
+            >
+              ${task.is_done ? "✓" : ""}
+            </button>
+            <span class="task-text ${task.is_done ? "done" : ""}">
+              ${escapeHtml(task.text)}
+            </span>
+            <button class="task-delete" data-task-action="delete" data-id="${task.id}">×</button>
+          </div>
+        `,
+      )
+      .join("");
+  }
+
+  selectedMood = dailyState.log?.mood ?? "";
+  reflectionInput.value = dailyState.log?.reflection ?? "";
+
+  moodRow.innerHTML = MOODS.map((mood) => {
+    const activeClass = selectedMood === mood.emoji ? "active" : "";
+    return `
+      <button
+        class="mood-button ${activeClass}"
+        data-mood="${mood.emoji}"
+        title="${mood.label}"
+      >
+        ${mood.emoji}
+      </button>
+    `;
+  }).join("");
+}
+
 async function refreshUsers(): Promise<void> {
   try {
     users = await listUsers();
@@ -600,17 +764,34 @@ async function refreshFeynmanEntries(): Promise<void> {
   }
 }
 
+async function refreshTracker(): Promise<void> {
+  if (!currentUser) {
+    dailyState = null;
+    renderTracker();
+    return;
+  }
+
+  try {
+    dailyState = await getDailyState(currentUser.id);
+    renderTracker();
+  } catch (error) {
+    console.error(error);
+    setMessage(trackerMessage, "Could not load daily tracker.", "error");
+  }
+}
+
 async function refreshAll(): Promise<void> {
   await refreshUsers();
   await refreshNotes();
   await refreshFeynmanEntries();
+  await refreshTracker();
 }
 
 featureTabs.forEach((tab) => {
   tab.addEventListener("click", () => {
     const view = tab.dataset.view;
 
-    if (view === "notes" || view === "feynman") {
+    if (view === "notes" || view === "feynman" || view === "tracker") {
       switchView(view);
     }
   });
@@ -665,6 +846,7 @@ selectUserButton.addEventListener("click", async () => {
 
   await refreshNotes();
   await refreshFeynmanEntries();
+  await refreshTracker();
 });
 
 noteForm.addEventListener("submit", async (event) => {
@@ -897,6 +1079,118 @@ feynmanList.addEventListener("click", async (event) => {
       console.error(error);
       setMessage(feynmanMessage, "Could not delete Feynman record.", "error");
     }
+  }
+});
+
+refreshTrackerButton.addEventListener("click", async () => {
+  await refreshTracker();
+});
+
+taskForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  if (!currentUser) {
+    setMessage(trackerMessage, "Select or create a user first.", "error");
+    return;
+  }
+
+  const text = taskInput.value.trim();
+
+  if (!text) {
+    setMessage(trackerMessage, "Task text is required.", "error");
+    return;
+  }
+
+  try {
+    await createDailyTask(currentUser.id, {
+      text,
+    });
+    taskInput.value = "";
+    setMessage(trackerMessage, "Task created.", "success");
+    await refreshTracker();
+  } catch (error) {
+    console.error(error);
+    setMessage(trackerMessage, "Could not create task.", "error");
+  }
+});
+
+taskList.addEventListener("click", async (event) => {
+  const target = event.target;
+
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+
+  const action = target.dataset.taskAction;
+  const taskId = Number(target.dataset.id);
+
+  if (!action || !Number.isFinite(taskId) || !dailyState) {
+    return;
+  }
+
+  const task = dailyState.tasks.find((item) => item.id === taskId);
+
+  if (!task) {
+    return;
+  }
+
+  try {
+    if (action === "toggle") {
+      await updateDailyTask(task.id, {
+        is_done: !task.is_done,
+      });
+      await refreshTracker();
+      return;
+    }
+
+    if (action === "delete") {
+      await deleteDailyTask(task.id);
+      setMessage(trackerMessage, "Task deleted.", "success");
+      await refreshTracker();
+    }
+  } catch (error) {
+    console.error(error);
+    setMessage(trackerMessage, "Could not update task.", "error");
+  }
+});
+
+moodRow.addEventListener("click", (event) => {
+  const target = event.target;
+
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+
+  const mood = target.dataset.mood;
+
+  if (!mood) {
+    return;
+  }
+
+  selectedMood = mood;
+
+  moodRow.querySelectorAll(".mood-button").forEach((button) => {
+    button.classList.toggle("active", button instanceof HTMLElement && button.dataset.mood === mood);
+  });
+});
+
+saveLogButton.addEventListener("click", async () => {
+  if (!currentUser) {
+    setMessage(trackerMessage, "Select or create a user first.", "error");
+    return;
+  }
+
+  try {
+    await saveDailyLog(currentUser.id, {
+      mood: selectedMood,
+      reflection: reflectionInput.value.trim(),
+    });
+
+    setMessage(trackerMessage, "Daily log saved.", "success");
+    await refreshTracker();
+  } catch (error) {
+    console.error(error);
+    setMessage(trackerMessage, "Could not save daily log.", "error");
   }
 });
 
