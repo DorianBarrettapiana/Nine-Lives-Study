@@ -303,3 +303,76 @@ h3 {
     flex-direction: column;
   }
 }
+
+.feature-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.35rem;
+  border: 1px solid #2a2d3a;
+  border-radius: 999px;
+  background: rgba(26, 29, 39, 0.92);
+}
+
+.feature-tab {
+  flex: 1;
+  background: transparent;
+  color: #9ca3af;
+  border: none;
+}
+
+.feature-tab:hover {
+  background: #1f2937;
+}
+
+.feature-tab.active {
+  background: #6366f1;
+  color: white;
+}
+
+.steps-bar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.step-dot {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  border: 1px solid #374151;
+  background: #111827;
+  color: #9ca3af;
+  font-weight: 800;
+}
+
+.step-dot.active {
+  border-color: #6366f1;
+  background: #6366f1;
+  color: white;
+}
+
+.step-dot.done {
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.16);
+  color: #34d399;
+}
+
+.feynman-editor {
+  display: grid;
+  gap: 1rem;
+}
+
+.feynman-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.feynman-card {
+  border: 1px solid #374151;
+  border-radius: 16px;
+  padding: 1rem;
+  background: #111827;
+}

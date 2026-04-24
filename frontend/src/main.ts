@@ -3,10 +3,46 @@
  */
 
 import "./style.css";
+import {
+  createFeynmanEntry,
+  deleteFeynmanEntry,
+  listFeynmanEntries,
+  updateFeynmanEntry,
+  type FeynmanEntryRead,
+} from "./api/feynman";
 import { createNote, deleteNote, listNotes, updateNote, type PaperNoteRead } from "./api/notes";
 import { createUser, listUsers, type UserRead } from "./api/users";
 
 const CURRENT_USER_ID_KEY = "phdstudylab_current_user_id";
+
+type AppView = "notes" | "feynman";
+
+const FEYNMAN_STEPS = [
+  {
+    title: "1. Pick a concept",
+    description: "Write down one concept or theory you want to understand deeply.",
+    fieldLabel: "Concept",
+    placeholder: "e.g. Monte Carlo ray tracing, separatrix, BRDF, heat flux...",
+  },
+  {
+    title: "2. Teach it simply",
+    description: "Explain it with the simplest possible words, as if teaching someone unfamiliar with it.",
+    fieldLabel: "Simple explanation",
+    placeholder: "Explain the concept without jargon...",
+  },
+  {
+    title: "3. Find the gaps",
+    description: "Identify vague parts, hidden assumptions, missing definitions or weak points.",
+    fieldLabel: "Knowledge gaps",
+    placeholder: "What remains unclear? What should you verify?",
+  },
+  {
+    title: "4. Build an analogy",
+    description: "Summarize the concept with a compact analogy or mental image.",
+    fieldLabel: "Analogy",
+    placeholder: "This is like...",
+  },
+] as const;
 
 const app = document.querySelector<HTMLDivElement>("#app");
 
@@ -16,8 +52,16 @@ if (!app) {
 
 let users: UserRead[] = [];
 let currentUser: UserRead | null = null;
+
+let currentView: AppView = "notes";
+
 let notes: PaperNoteRead[] = [];
 let editedNoteId: number | null = null;
+
+let feynmanEntries: FeynmanEntryRead[] = [];
+let feynmanStep = 0;
+let feynmanDraft = ["", "", "", ""];
+let editedFeynmanId: number | null = null;
 
 app.innerHTML = `
   <div class="app-shell">
@@ -76,8 +120,8 @@ app.innerHTML = `
           <h2>Roadmap</h2>
           <ol class="roadmap">
             <li class="done">Users</li>
-            <li class="active">Paper notes</li>
-            <li>Feynman</li>
+            <li class="done">Paper notes</li>
+            <li class="active">Feynman</li>
             <li>Daily tracker</li>
             <li>Pomodoro</li>
             <li>Stats</li>
@@ -87,61 +131,105 @@ app.innerHTML = `
       </aside>
 
       <section class="content">
-        <section class="card">
-          <h2>Paper notes</h2>
-          <p class="hint">
-            First migrated module from the original monolithic HTML application.
-          </p>
+        <nav class="feature-tabs">
+          <button class="feature-tab active" data-view="notes">Paper notes</button>
+          <button class="feature-tab" data-view="feynman">Feynman</button>
+        </nav>
 
-          <form id="note-form" class="note-form">
-            <label>
-              Paper title *
-              <input id="note-title" type="text" placeholder="Enter paper title..." required />
-            </label>
+        <div id="notes-view">
+          <section class="card">
+            <h2>Paper notes</h2>
+            <p class="hint">
+              Literature notes migrated from the original monolithic HTML application.
+            </p>
 
-            <div class="two-cols">
+            <form id="note-form" class="note-form">
               <label>
-                Authors
-                <input id="note-authors" type="text" placeholder="Author A, Author B..." />
+                Paper title *
+                <input id="note-title" type="text" placeholder="Enter paper title..." required />
+              </label>
+
+              <div class="two-cols">
+                <label>
+                  Authors
+                  <input id="note-authors" type="text" placeholder="Author A, Author B..." />
+                </label>
+
+                <label>
+                  Year
+                  <input id="note-year" type="number" placeholder="2026" />
+                </label>
+              </div>
+
+              <label>
+                Key ideas & method
+                <textarea id="note-key-points" placeholder="Main idea, method, assumptions..."></textarea>
               </label>
 
               <label>
-                Year
-                <input id="note-year" type="number" placeholder="2026" />
+                Questions & thoughts
+                <textarea id="note-questions" placeholder="Open questions, limitations, links with your work..."></textarea>
               </label>
+
+              <label>
+                Tags
+                <input id="note-tags" type="text" placeholder="fusion, ray tracing, heat loads" />
+              </label>
+
+              <div class="button-row">
+                <button type="submit" id="note-submit-button">Add note</button>
+                <button type="button" id="note-cancel-button" class="secondary hidden">Cancel edit</button>
+              </div>
+            </form>
+
+            <p id="note-message" class="message"></p>
+          </section>
+
+          <section class="card">
+            <div class="section-header">
+              <h2>Saved notes</h2>
+              <button id="refresh-notes-button" class="secondary">Refresh</button>
             </div>
+            <div id="notes-list" class="notes-list"></div>
+          </section>
+        </div>
 
-            <label>
-              Key ideas & method
-              <textarea id="note-key-points" placeholder="Main idea, method, assumptions..."></textarea>
-            </label>
+        <div id="feynman-view" class="hidden">
+          <section class="card">
+            <h2>Feynman method</h2>
+            <p class="hint">
+              Build a compact understanding record in four steps.
+            </p>
 
-            <label>
-              Questions & thoughts
-              <textarea id="note-questions" placeholder="Open questions, limitations, links with your work..."></textarea>
-            </label>
+            <div class="steps-bar" id="feynman-steps"></div>
 
-            <label>
-              Tags
-              <input id="note-tags" type="text" placeholder="fusion, ray tracing, heat loads" />
-            </label>
+            <div class="feynman-editor">
+              <h3 id="feynman-step-title"></h3>
+              <p id="feynman-step-description" class="hint"></p>
 
-            <div class="button-row">
-              <button type="submit" id="note-submit-button">Add note</button>
-              <button type="button" id="note-cancel-button" class="secondary hidden">Cancel edit</button>
+              <label>
+                <span id="feynman-field-label"></span>
+                <textarea id="feynman-input"></textarea>
+              </label>
+
+              <div class="button-row">
+                <button type="button" id="feynman-prev-button" class="secondary">Previous</button>
+                <button type="button" id="feynman-next-button">Next</button>
+                <button type="button" id="feynman-reset-button" class="secondary">Reset</button>
+              </div>
+
+              <p id="feynman-message" class="message"></p>
             </div>
-          </form>
+          </section>
 
-          <p id="note-message" class="message"></p>
-        </section>
-
-        <section class="card">
-          <div class="section-header">
-            <h2>Saved notes</h2>
-            <button id="refresh-notes-button" class="secondary">Refresh</button>
-          </div>
-          <div id="notes-list" class="notes-list"></div>
-        </section>
+          <section class="card">
+            <div class="section-header">
+              <h2>Feynman records</h2>
+              <button id="refresh-feynman-button" class="secondary">Refresh</button>
+            </div>
+            <div id="feynman-list" class="feynman-list"></div>
+          </section>
+        </div>
       </section>
     </main>
   </div>
@@ -156,6 +244,10 @@ const languageSelect = document.querySelector<HTMLSelectElement>("#language");
 const themeSelect = document.querySelector<HTMLSelectElement>("#theme");
 const userMessage = document.querySelector<HTMLParagraphElement>("#user-message");
 
+const featureTabs = document.querySelectorAll<HTMLButtonElement>(".feature-tab");
+const notesView = document.querySelector<HTMLDivElement>("#notes-view");
+const feynmanView = document.querySelector<HTMLDivElement>("#feynman-view");
+
 const noteForm = document.querySelector<HTMLFormElement>("#note-form");
 const noteTitleInput = document.querySelector<HTMLInputElement>("#note-title");
 const noteAuthorsInput = document.querySelector<HTMLInputElement>("#note-authors");
@@ -169,6 +261,18 @@ const noteMessage = document.querySelector<HTMLParagraphElement>("#note-message"
 const notesList = document.querySelector<HTMLDivElement>("#notes-list");
 const refreshNotesButton = document.querySelector<HTMLButtonElement>("#refresh-notes-button");
 
+const feynmanSteps = document.querySelector<HTMLDivElement>("#feynman-steps");
+const feynmanStepTitle = document.querySelector<HTMLHeadingElement>("#feynman-step-title");
+const feynmanStepDescription = document.querySelector<HTMLParagraphElement>("#feynman-step-description");
+const feynmanFieldLabel = document.querySelector<HTMLSpanElement>("#feynman-field-label");
+const feynmanInput = document.querySelector<HTMLTextAreaElement>("#feynman-input");
+const feynmanPrevButton = document.querySelector<HTMLButtonElement>("#feynman-prev-button");
+const feynmanNextButton = document.querySelector<HTMLButtonElement>("#feynman-next-button");
+const feynmanResetButton = document.querySelector<HTMLButtonElement>("#feynman-reset-button");
+const feynmanMessage = document.querySelector<HTMLParagraphElement>("#feynman-message");
+const feynmanList = document.querySelector<HTMLDivElement>("#feynman-list");
+const refreshFeynmanButton = document.querySelector<HTMLButtonElement>("#refresh-feynman-button");
+
 if (
   !currentUserLabel ||
   !userSelect ||
@@ -178,6 +282,8 @@ if (
   !languageSelect ||
   !themeSelect ||
   !userMessage ||
+  !notesView ||
+  !feynmanView ||
   !noteForm ||
   !noteTitleInput ||
   !noteAuthorsInput ||
@@ -189,7 +295,18 @@ if (
   !noteCancelButton ||
   !noteMessage ||
   !notesList ||
-  !refreshNotesButton
+  !refreshNotesButton ||
+  !feynmanSteps ||
+  !feynmanStepTitle ||
+  !feynmanStepDescription ||
+  !feynmanFieldLabel ||
+  !feynmanInput ||
+  !feynmanPrevButton ||
+  !feynmanNextButton ||
+  !feynmanResetButton ||
+  !feynmanMessage ||
+  !feynmanList ||
+  !refreshFeynmanButton
 ) {
   throw new Error("Could not find one or more DOM elements.");
 }
@@ -200,7 +317,15 @@ function escapeHtml(value: string): string {
   return div.innerHTML;
 }
 
-function setMessage(element: HTMLElement, text: string, kind: "success" | "error" | "neutral" = "neutral"): void {
+function formatDate(value: string): string {
+  return new Date(value).toLocaleString();
+}
+
+function setMessage(
+  element: HTMLElement,
+  text: string,
+  kind: "success" | "error" | "neutral" = "neutral",
+): void {
   element.textContent = text;
   element.className = `message ${kind}`;
 }
@@ -217,6 +342,17 @@ function getStoredUserId(): number | null {
 
 function storeCurrentUserId(userId: number): void {
   localStorage.setItem(CURRENT_USER_ID_KEY, String(userId));
+}
+
+function switchView(view: AppView): void {
+  currentView = view;
+
+  notesView.classList.toggle("hidden", view !== "notes");
+  feynmanView.classList.toggle("hidden", view !== "feynman");
+
+  featureTabs.forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.view === view);
+  });
 }
 
 function renderUserSelect(): void {
@@ -320,6 +456,98 @@ function renderNotes(): void {
     .join("");
 }
 
+function renderFeynmanStep(): void {
+  const step = FEYNMAN_STEPS[feynmanStep];
+
+  feynmanSteps.innerHTML = FEYNMAN_STEPS.map((_, index) => {
+    const stateClass = index === feynmanStep ? "active" : index < feynmanStep ? "done" : "";
+    return `<div class="step-dot ${stateClass}">${index + 1}</div>`;
+  }).join("");
+
+  feynmanStepTitle.textContent = step.title;
+  feynmanStepDescription.textContent = step.description;
+  feynmanFieldLabel.textContent = step.fieldLabel;
+  feynmanInput.placeholder = step.placeholder;
+  feynmanInput.value = feynmanDraft[feynmanStep] ?? "";
+
+  feynmanPrevButton.disabled = feynmanStep === 0;
+  feynmanNextButton.textContent =
+    feynmanStep === FEYNMAN_STEPS.length - 1
+      ? editedFeynmanId === null
+        ? "Save entry"
+        : "Update entry"
+      : "Next";
+
+  if (editedFeynmanId !== null) {
+    setMessage(feynmanMessage, "Editing an existing Feynman record.", "neutral");
+  }
+}
+
+function clearFeynmanDraft(): void {
+  editedFeynmanId = null;
+  feynmanStep = 0;
+  feynmanDraft = ["", "", "", ""];
+  setMessage(feynmanMessage, "", "neutral");
+  renderFeynmanStep();
+}
+
+function renderFeynmanEntries(): void {
+  if (!currentUser) {
+    feynmanList.innerHTML = `
+      <div class="empty-state">
+        Select or create a user before managing Feynman records.
+      </div>
+    `;
+    return;
+  }
+
+  if (feynmanEntries.length === 0) {
+    feynmanList.innerHTML = `
+      <div class="empty-state">
+        No Feynman record yet.
+      </div>
+    `;
+    return;
+  }
+
+  feynmanList.innerHTML = feynmanEntries
+    .map(
+      (entry) => `
+        <article class="feynman-card">
+          <div class="note-header">
+            <div>
+              <h3>${escapeHtml(entry.concept)}</h3>
+              <p class="note-meta">Updated ${formatDate(entry.updated_at)}</p>
+            </div>
+            <div class="note-actions">
+              <button class="secondary" data-feynman-action="edit" data-id="${entry.id}">Edit</button>
+              <button class="danger" data-feynman-action="delete" data-id="${entry.id}">Delete</button>
+            </div>
+          </div>
+
+          ${
+            entry.explanation
+              ? `<p class="note-text"><strong>Simple explanation:</strong> ${escapeHtml(entry.explanation)}</p>`
+              : ""
+          }
+
+          ${
+            entry.gaps
+              ? `<p class="note-text"><strong>Gaps:</strong> ${escapeHtml(entry.gaps)}</p>`
+              : ""
+          }
+
+          ${
+            entry.analogy
+              ? `<p class="note-text"><strong>Analogy:</strong> ${escapeHtml(entry.analogy)}</p>`
+              : ""
+          }
+        </article>
+      `,
+    )
+    .join("");
+}
+
 async function refreshUsers(): Promise<void> {
   try {
     users = await listUsers();
@@ -356,10 +584,37 @@ async function refreshNotes(): Promise<void> {
   }
 }
 
+async function refreshFeynmanEntries(): Promise<void> {
+  if (!currentUser) {
+    feynmanEntries = [];
+    renderFeynmanEntries();
+    return;
+  }
+
+  try {
+    feynmanEntries = await listFeynmanEntries(currentUser.id);
+    renderFeynmanEntries();
+  } catch (error) {
+    console.error(error);
+    setMessage(feynmanMessage, "Could not load Feynman records.", "error");
+  }
+}
+
 async function refreshAll(): Promise<void> {
   await refreshUsers();
   await refreshNotes();
+  await refreshFeynmanEntries();
 }
+
+featureTabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    const view = tab.dataset.view;
+
+    if (view === "notes" || view === "feynman") {
+      switchView(view);
+    }
+  });
+});
 
 userForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -404,9 +659,12 @@ selectUserButton.addEventListener("click", async () => {
   currentUser = selectedUser;
   storeCurrentUserId(selectedUser.id);
   renderCurrentUser();
+  clearNoteForm();
+  clearFeynmanDraft();
   setMessage(userMessage, `Selected user: ${selectedUser.username}`, "success");
 
   await refreshNotes();
+  await refreshFeynmanEntries();
 });
 
 noteForm.addEventListener("submit", async (event) => {
@@ -497,6 +755,7 @@ notesList.addEventListener("click", async (event) => {
     noteTagsInput.value = note.tags;
     noteSubmitButton.textContent = "Update note";
     noteCancelButton.classList.remove("hidden");
+    switchView("notes");
     window.scrollTo({ top: 0, behavior: "smooth" });
     return;
   }
@@ -519,4 +778,128 @@ notesList.addEventListener("click", async (event) => {
   }
 });
 
+feynmanInput.addEventListener("input", () => {
+  feynmanDraft[feynmanStep] = feynmanInput.value;
+});
+
+feynmanPrevButton.addEventListener("click", () => {
+  feynmanDraft[feynmanStep] = feynmanInput.value;
+
+  if (feynmanStep > 0) {
+    feynmanStep -= 1;
+    renderFeynmanStep();
+  }
+});
+
+feynmanNextButton.addEventListener("click", async () => {
+  feynmanDraft[feynmanStep] = feynmanInput.value;
+
+  if (feynmanStep < FEYNMAN_STEPS.length - 1) {
+    feynmanStep += 1;
+    renderFeynmanStep();
+    return;
+  }
+
+  if (!currentUser) {
+    setMessage(feynmanMessage, "Select or create a user first.", "error");
+    return;
+  }
+
+  const concept = feynmanDraft[0].trim();
+
+  if (!concept) {
+    feynmanStep = 0;
+    renderFeynmanStep();
+    setMessage(feynmanMessage, "Concept is required.", "error");
+    return;
+  }
+
+  const payload = {
+    concept,
+    explanation: feynmanDraft[1].trim(),
+    gaps: feynmanDraft[2].trim(),
+    analogy: feynmanDraft[3].trim(),
+  };
+
+  try {
+    if (editedFeynmanId === null) {
+      await createFeynmanEntry(currentUser.id, payload);
+      setMessage(feynmanMessage, "Feynman record created.", "success");
+    } else {
+      await updateFeynmanEntry(editedFeynmanId, payload);
+      setMessage(feynmanMessage, "Feynman record updated.", "success");
+    }
+
+    clearFeynmanDraft();
+    await refreshFeynmanEntries();
+  } catch (error) {
+    console.error(error);
+    setMessage(feynmanMessage, "Could not save Feynman record.", "error");
+  }
+});
+
+feynmanResetButton.addEventListener("click", () => {
+  clearFeynmanDraft();
+});
+
+refreshFeynmanButton.addEventListener("click", async () => {
+  await refreshFeynmanEntries();
+});
+
+feynmanList.addEventListener("click", async (event) => {
+  const target = event.target;
+
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+
+  const action = target.dataset.feynmanAction;
+  const entryId = Number(target.dataset.id);
+
+  if (!action || !Number.isFinite(entryId)) {
+    return;
+  }
+
+  const entry = feynmanEntries.find((item) => item.id === entryId);
+
+  if (!entry) {
+    return;
+  }
+
+  if (action === "edit") {
+    editedFeynmanId = entry.id;
+    feynmanStep = 0;
+    feynmanDraft = [
+      entry.concept,
+      entry.explanation,
+      entry.gaps,
+      entry.analogy,
+    ];
+
+    switchView("feynman");
+    renderFeynmanStep();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+
+  if (action === "delete") {
+    const confirmed = window.confirm(`Delete Feynman record "${entry.concept}"?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await deleteFeynmanEntry(entry.id);
+      setMessage(feynmanMessage, "Feynman record deleted.", "success");
+      await refreshFeynmanEntries();
+    } catch (error) {
+      console.error(error);
+      setMessage(feynmanMessage, "Could not delete Feynman record.", "error");
+    }
+  }
+});
+
+switchView(currentView);
+renderFeynmanStep();
 void refreshAll();
