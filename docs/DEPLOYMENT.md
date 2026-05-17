@@ -111,9 +111,11 @@ cd ..
 
 ### 3.4 Run the install script (in admin PowerShell)
 
+> ⚠️ **Remplace `<...>` par tes vraies valeurs avant d'exécuter.** Le script refuse les placeholders qui commencent par `<` et finissent par `>`, mais une chaîne courte ou tronquée passerait silencieusement et casserait Caddy.
+
 ```powershell
-$env:CF_API_TOKEN = "your_cloudflare_token"
-$env:INVITE_CODE  = "the_shared_invite_code_for_signups"
+$env:CF_API_TOKEN = "<colle ici ton vrai token Cloudflare (~48 chars, commence par cfut_)>"
+$env:INVITE_CODE  = "<colle ici l'invite code que tu veux partager>"
 powershell -ExecutionPolicy Bypass -File .\deploy\install-services.ps1
 ```
 
@@ -271,6 +273,22 @@ Caddy renews automatically. If `caddy.log` shows ACME errors:
 - Verify `CF_API_TOKEN` env var is still valid: `[Environment]::GetEnvironmentVariable("CF_API_TOKEN", "Machine")`
 - Verify the token's permissions (Zone:DNS:Edit on `foussistan.fr`).
 - Caddy stores certs at `C:\Windows\System32\config\systemprofile\AppData\Roaming\Caddy\` (because it runs as SYSTEM).
+
+### Caddy refuses to start with "API token '<...>' appears invalid"
+
+The Cloudflare API token got overwritten with a placeholder (typically by re-running `install-services.ps1` with the doc command pasted verbatim — `$env:CF_API_TOKEN = "<...>"` literally). Manually validate `caddy.exe validate --config C:\srv\caddy\Caddyfile` will show the corrupt value.
+
+Fix in **admin PowerShell**:
+
+```powershell
+$Token = "your_real_cloudflare_token"   # ~48 chars, starts with cfut_
+Set-Content -Path "C:\srv\ddns\.cf-token" -Value $Token -NoNewline
+[Environment]::SetEnvironmentVariable("CF_API_TOKEN", $Token, "Machine")
+Stop-ScheduledTask  -TaskName "NineLives-Caddy" -ErrorAction SilentlyContinue
+Stop-ScheduledTask  -TaskName "NineLives-DDNS"  -ErrorAction SilentlyContinue
+Start-ScheduledTask -TaskName "NineLives-DDNS"
+Start-ScheduledTask -TaskName "NineLives-Caddy"
+```
 
 ### "Could not load users" in the browser
 

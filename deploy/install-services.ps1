@@ -44,6 +44,12 @@ if (-not $Token) {
     Read-Host "Appuie sur Entrée pour quitter"
     exit 1
 }
+# Garde-fou : refuse les valeurs placeholder copiées-collées depuis la doc
+if ($Token -match '^<.*>$' -or $Token.Length -lt 30) {
+    Write-Host "ERREUR : CF_API_TOKEN ressemble à un placeholder ('$Token'). Renseigne le vrai token (~48 chars)." -ForegroundColor Red
+    Read-Host "Appuie sur Entrée pour quitter"
+    exit 1
+}
 
 # Lecture de l'invite code : env var d'abord, sinon fichier
 $InviteCode = $env:INVITE_CODE
@@ -55,6 +61,11 @@ if (-not $InviteCode) {
 }
 if (-not $InviteCode) {
     Write-Host "ERREUR : INVITE_CODE non défini. Voir l'en-tête de ce script." -ForegroundColor Red
+    Read-Host "Appuie sur Entrée pour quitter"
+    exit 1
+}
+if ($InviteCode -match '^<.*>$') {
+    Write-Host "ERREUR : INVITE_CODE ressemble à un placeholder ('$InviteCode'). Renseigne une vraie valeur." -ForegroundColor Red
     Read-Host "Appuie sur Entrée pour quitter"
     exit 1
 }
