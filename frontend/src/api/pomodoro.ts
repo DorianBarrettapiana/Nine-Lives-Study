@@ -1,0 +1,37 @@
+/**
+ * Pomodoro session API functions.
+ */
+
+import { apiFetch } from "./client";
+
+export interface PomodoroSessionRead {
+  id: number;
+  user_id: number;
+  session_type: "work" | "break";
+  duration_minutes: number;
+  is_completed: boolean;
+  started_at: string;
+  ended_at: string | null;
+}
+
+export async function listSessions(userId: number): Promise<PomodoroSessionRead[]> {
+  return apiFetch<PomodoroSessionRead[]>(`/users/${userId}/pomodoro`);
+}
+
+export async function startSession(
+  userId: number,
+  sessionType: "work" | "break",
+  durationMinutes: number,
+): Promise<PomodoroSessionRead> {
+  return apiFetch<PomodoroSessionRead>(`/users/${userId}/pomodoro`, {
+    method: "POST",
+    body: JSON.stringify({ session_type: sessionType, duration_minutes: durationMinutes }),
+  });
+}
+
+export async function completeSession(sessionId: number): Promise<PomodoroSessionRead> {
+  return apiFetch<PomodoroSessionRead>(`/pomodoro/${sessionId}/complete`, {
+    method: "PATCH",
+    body: JSON.stringify({}),
+  });
+}

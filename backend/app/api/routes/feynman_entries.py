@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.xp import XP_FEYNMAN_CREATE, award_xp
 from app.models.feynman_entry import FeynmanEntry
 from app.models.user import User
 from app.schemas.feynman_entry import (
@@ -54,6 +55,7 @@ def create_user_feynman_entry(
     )
 
     db.add(entry)
+    award_xp(user_id, XP_FEYNMAN_CREATE, db)
     db.commit()
     db.refresh(entry)
     return entry

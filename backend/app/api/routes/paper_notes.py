@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.xp import XP_NOTE_CREATE, award_xp
 from app.models.paper_note import PaperNote
 from app.models.user import User
 from app.schemas.paper_note import PaperNoteCreate, PaperNoteRead, PaperNoteUpdate
@@ -49,6 +50,7 @@ def create_user_note(
     )
 
     db.add(note)
+    award_xp(user_id, XP_NOTE_CREATE, db)
     db.commit()
     db.refresh(note)
     return note
