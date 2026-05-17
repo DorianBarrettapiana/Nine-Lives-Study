@@ -29,6 +29,7 @@ export interface UserStatsRead {
   total_pomodoros: number;
   total_notes: number;
   total_feynman: number;
+  total_moods?: number;
 }
 
 export interface UserProgressRead {

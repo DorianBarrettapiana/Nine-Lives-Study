@@ -7,8 +7,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.daily_tracker import DailyLog, DailyTask
+from app.models.daily_tracker import DailyTask
 from app.models.feynman_entry import FeynmanEntry
+from app.models.mood_entry import MoodEntry
 from app.models.paper_note import PaperNote
 from app.models.pomodoro_session import PomodoroSession
 from app.models.user import User
@@ -49,19 +50,25 @@ def get_user_stats(
         for row in task_rows
     ]
 
-    # Mood per day
+    # Mood per day — one entry per day (most recent), from mood_entries
     mood_rows = db.execute(
-        select(DailyLog.log_date, DailyLog.mood)
-        .where(DailyLog.user_id == user_id)
-        .where(DailyLog.log_date >= since)
-        .order_by(DailyLog.log_date)
+        select(
+            func.date(MoodEntry.created_at).label("day"),
+            MoodEntry.mood,
+        )
+        .where(MoodEntry.user_id == user_id)
+        .where(func.date(MoodEntry.created_at) >= since.isoformat())
+        .order_by(func.date(MoodEntry.created_at), MoodEntry.created_at.desc())
     ).all()
 
-    daily_moods = [
-        DailyMoodStat(date=row.log_date, mood=row.mood)
-        for row in mood_rows
-        if row.mood
-    ]
+    seen_days: set[str] = set()
+    daily_moods = []
+    for row in mood_rows:
+        if row.day not in seen_days:
+            seen_days.add(row.day)
+            from datetime import date as date_type
+            daily_moods.append(DailyMoodStat(date=date_type.fromisoformat(row.day), mood=row.mood))
+    daily_moods.sort(key=lambda d: d.date)
 
     # Pomodoros per day
     pomodoro_rows = db.execute(
@@ -104,6 +111,10 @@ def get_user_stats(
         select(func.count(FeynmanEntry.id)).where(FeynmanEntry.user_id == user_id)
     ) or 0
 
+    total_moods = db.scalar(
+        select(func.count(MoodEntry.id)).where(MoodEntry.user_id == user_id)
+    ) or 0
+
     return UserStatsRead(
         days=days,
         daily_tasks=daily_tasks,
@@ -113,4 +124,5 @@ def get_user_stats(
         total_pomodoros=total_pomodoros,
         total_notes=total_notes,
         total_feynman=total_feynman,
+        total_moods=total_moods,
     )

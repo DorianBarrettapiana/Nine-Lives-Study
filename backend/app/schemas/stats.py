@@ -30,3 +30,4 @@ class UserStatsRead(BaseModel):
     total_pomodoros: int
     total_notes: int
     total_feynman: int
+    total_moods: int = 0

@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.daily_tracker import router as daily_tracker_router
+from app.api.routes.mood import router as mood_router
 from app.api.routes.feynman_entries import router as feynman_entries_router
 from app.api.routes.health import router as health_router
 from app.api.routes.paper_notes import router as paper_notes_router
@@ -21,6 +22,7 @@ from app.core.database import Base, engine
 from app.models.daily_tracker import DailyLog, DailyTask  # noqa: F401
 from app.models.feynman_entry import FeynmanEntry  # noqa: F401
 from app.models.paper_note import PaperNote  # noqa: F401
+from app.models.mood_entry import MoodEntry  # noqa: F401
 from app.models.pomodoro_session import PomodoroSession  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.user_progress import UserProgress  # noqa: F401
@@ -53,4 +55,5 @@ app.include_router(feynman_entries_router)
 app.include_router(daily_tracker_router)
 app.include_router(pomodoro_router)
 app.include_router(xp_router)
+app.include_router(mood_router)
 app.include_router(stats_router)

@@ -8,9 +8,10 @@ import * as NotesView from "./views/notes";
 import * as FeynmanView from "./views/feynman";
 import * as TrackerView from "./views/tracker";
 import * as PomodoroView from "./views/pomodoro";
+import * as MoodView from "./views/mood";
 import * as StatsView from "./views/stats";
 
-type AppView = "notes" | "feynman" | "tracker" | "pomodoro" | "stats";
+type AppView = "notes" | "feynman" | "tracker" | "pomodoro" | "stats" | "mood";
 
 let currentView: AppView = "notes";
 
@@ -70,6 +71,7 @@ app.innerHTML = `
             <li class="done">Pomodoro</li>
             <li class="done">Stats</li>
             <li class="done">Gamification</li>
+            <li class="done">Mood journal</li>
           </ol>
         </section>
       </aside>
@@ -81,6 +83,7 @@ app.innerHTML = `
           <button class="feature-tab" data-view="tracker">Daily tracker</button>
           <button class="feature-tab" data-view="pomodoro">Pomodoro</button>
           <button class="feature-tab" data-view="stats">Stats</button>
+          <button class="feature-tab" data-view="mood">Mood</button>
         </nav>
 
         <div id="notes-view">
@@ -215,6 +218,31 @@ app.innerHTML = `
             <div id="stats-mood-chart" class="mood-history"></div>
           </section>
         </div>
+        <div id="mood-view" class="hidden">
+          <section class="card">
+            <h2>How are you feeling?</h2>
+            <p class="hint">Record your mood at any time — multiple entries per day are fine.</p>
+            <div id="mood-picker" class="mood-row"></div>
+            <label>Reflection (optional)<textarea id="mood-reflection-input" placeholder="What's on your mind? What happened today?"></textarea></label>
+            <div class="button-row"><button id="save-mood-button">Record mood</button></div>
+            <p id="mood-message" class="message"></p>
+          </section>
+          <section class="card">
+            <div class="section-header">
+              <h2>Mood history</h2>
+              <div class="button-row">
+                <div class="days-selector" id="mood-days-selector">
+                  <button class="days-btn active" data-days="7">7 days</button>
+                  <button class="days-btn" data-days="30">30 days</button>
+                  <button class="days-btn" data-days="90">90 days</button>
+                </div>
+                <button id="refresh-mood-button" class="secondary">Refresh</button>
+              </div>
+            </div>
+            <div id="mood-list" class="mood-history-list"></div>
+          </section>
+        </div>
+
       </section>
     </main>
   </div>
@@ -226,6 +254,7 @@ const views: Record<AppView, HTMLElement> = {
   tracker: document.querySelector<HTMLDivElement>("#tracker-view")!,
   pomodoro: document.querySelector<HTMLDivElement>("#pomodoro-view")!,
   stats: document.querySelector<HTMLDivElement>("#stats-view")!,
+  mood: document.querySelector<HTMLDivElement>("#mood-view")!,
 };
 
 const featureTabs = document.querySelectorAll<HTMLButtonElement>(".feature-tab");
@@ -243,6 +272,7 @@ async function refreshAll(): Promise<void> {
     FeynmanView.refresh(user),
     TrackerView.refresh(user),
     PomodoroView.refresh(user),
+    MoodView.refresh(user),
     StatsView.refresh(user),
   ]);
 }
@@ -263,6 +293,7 @@ FeynmanView.init(
 );
 TrackerView.init(() => Promise.all([TrackerView.refresh(UsersView.getCurrentUser()), StatsView.refresh(UsersView.getCurrentUser())]).then());
 PomodoroView.init(() => Promise.all([PomodoroView.refresh(UsersView.getCurrentUser()), StatsView.refresh(UsersView.getCurrentUser())]).then());
+MoodView.init(() => Promise.all([MoodView.refresh(UsersView.getCurrentUser()), StatsView.refresh(UsersView.getCurrentUser())]).then());
 StatsView.init(() => StatsView.refresh(UsersView.getCurrentUser()));
 
 featureTabs.forEach((tab) => {

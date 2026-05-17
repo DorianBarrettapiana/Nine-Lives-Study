@@ -64,6 +64,7 @@ export function render(): void {
     { label: "Pomodoros", value: userStats.total_pomodoros },
     { label: "Paper notes", value: userStats.total_notes },
     { label: "Feynman records", value: userStats.total_feynman },
+    { label: "Mood entries", value: userStats.total_moods ?? 0 },
   ].map((item) => `<div class="stat-card"><strong>${item.value}</strong><span>${item.label}</span></div>`).join("");
 
   const maxTasks = Math.max(...userStats.daily_tasks.map((d) => d.total), 1);
