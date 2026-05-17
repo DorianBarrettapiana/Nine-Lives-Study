@@ -20,7 +20,7 @@ PhDStudyLab is a lightweight web application designed to **gamify focused work s
 
 #### Requirements
 
-- Python ≥ 3.10
+- Python ≥ 3.11
 - FastAPI
 - Uvicorn
 - SQLAlchemy
