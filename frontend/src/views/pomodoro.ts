@@ -18,7 +18,8 @@ let pomodoroList: HTMLDivElement;
 
 let sessions: PomodoroSessionRead[] = [];
 let pomodoroMode: "work" | "break" = "work";
-let pomodoroTimeLeft = WORK_DURATION;
+let pomodoroTimeLeft = WORK_DURATION;   // seconds remaining (updated on pause/reset)
+let pomodoroEndTime: number | null = null; // Date.now() ms when timer should reach 0
 let pomodoroRunning = false;
 let pomodoroIntervalId: ReturnType<typeof setInterval> | null = null;
 let activeSessionId: number | null = null;
@@ -61,6 +62,10 @@ export async function refresh(currentUser: UserRead | null): Promise<void> {
 
 function stopTimer(): void {
   if (pomodoroIntervalId !== null) { clearInterval(pomodoroIntervalId); pomodoroIntervalId = null; }
+  // Snapshot remaining time from wall clock so resume/reset uses accurate value
+  if (pomodoroEndTime !== null) {
+    pomodoroTimeLeft = Math.max(0, Math.ceil((pomodoroEndTime - Date.now()) / 1000));
+  }
   pomodoroRunning = false;
 }
 
@@ -103,18 +108,30 @@ export function init(onDataChanged: () => Promise<void>): void {
         activeSessionId = s.id;
       } catch (error) { console.error(error); setMessage(pomodoroMessage, "Could not start session.", "error"); return; }
     }
+    // Set absolute end time from current remaining seconds
+    pomodoroEndTime = Date.now() + pomodoroTimeLeft * 1000;
     pomodoroRunning = true;
     pomodoroIntervalId = setInterval(async () => {
-      pomodoroTimeLeft -= 1;
+      pomodoroTimeLeft = Math.max(0, Math.ceil((pomodoroEndTime! - Date.now()) / 1000));
       pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
       if (pomodoroTimeLeft <= 0) await onComplete();
-    }, 1000);
+    }, 500); // poll at 500ms so display stays crisp even after background throttling
     render(user);
   });
 
   pomodoroResetButton.addEventListener("click", () => {
     stopTimer(); activeSessionId = null; pomodoroMode = "work";
-    pomodoroTimeLeft = WORK_DURATION; setMessage(pomodoroMessage, "", "neutral"); render(null);
+    pomodoroTimeLeft = WORK_DURATION; pomodoroEndTime = null;
+    setMessage(pomodoroMessage, "", "neutral"); render(null);
+  });
+
+  // When user returns to this tab, immediately sync display to wall clock
+  document.addEventListener("visibilitychange", async () => {
+    if (document.visibilityState === "visible" && pomodoroRunning && pomodoroEndTime !== null) {
+      pomodoroTimeLeft = Math.max(0, Math.ceil((pomodoroEndTime - Date.now()) / 1000));
+      pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
+      if (pomodoroTimeLeft <= 0) await onComplete();
+    }
   });
 
 }
