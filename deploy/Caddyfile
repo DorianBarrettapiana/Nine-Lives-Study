@@ -1,0 +1,32 @@
+{
+	# ACME via Let's Encrypt, DNS-01 challenge through Cloudflare API.
+	# Le token Cloudflare est lu depuis l'env var CF_API_TOKEN (définie par install-services.ps1).
+	email admin@foussistan.fr
+}
+
+ninelives.foussistan.fr {
+	encode zstd gzip
+
+	# /api/* → backend FastAPI (préfixe stripé)
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	# Tout le reste : SPA buildé par Vite, fallback /index.html pour le routing client
+	handle {
+		root * D:\Documents\Dev\srv\PhD-Study-Lab\frontend\dist
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output file C:\srv\caddy\logs\access.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+	}
+
+	tls {
+		dns cloudflare {env.CF_API_TOKEN}
+	}
+}

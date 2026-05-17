@@ -1,44 +1,63 @@
-# PhDStudyLab
+# Nine Lives Study
 
-PhDStudyLab is a lightweight web application designed to **gamify focused work sessions** in order to improve motivation, consistency, and productivity over long periods of study or research.
+Nine Lives Study is a lightweight web application designed to **gamify focused work sessions** in order to improve motivation, consistency, and productivity over long periods of study or research.
 
-![PhD Study Lab Home Page](docs/home_page.png "Home Page")
+It is live at **<https://ninelives.foussistan.fr>**.
 
-## ✨ Features (planned)
+![Nine Lives Study Home Page](docs/home_page.png "Home Page")
 
-- Work session tracking (Pomodoro-style or free sessions)
-- Gamification system (XP, levels, rewards)
-- Progress visualization (daily / weekly stats)
-- Achievements & milestones
-- Multi-user support (local first, web-ready later)
-- Persistent storage with SQLite
-- Clean and extensible architecture
+## ✨ Features
 
-## 🚀 Getting Started
+- Paper notes — keep track of read literature
+- Feynman method — four-step understanding records
+- Daily tracker — tasks, mood and daily reflection
+- Pomodoro — 25 / 5 timer with session history
+- Mood journal — log mood anytime, history over 7/30/90 days
+- Stats — overview, tasks/pomodoros/mood charts
+- Gamification — XP and levels
+- Multi-user (local), persistent SQLite storage
+
+## 🏗️ Architecture
+
+```
+ ┌─────────────────┐
+ │  Vite SPA       │  built into frontend/dist
+ │  (TypeScript)   │
+ └────────┬────────┘
+          │ fetch /api/*
+          ▼
+ ┌─────────────────┐
+ │  FastAPI        │  uvicorn on 127.0.0.1:8000
+ │  (Python)       │
+ └────────┬────────┘
+          │
+          ▼
+ ┌─────────────────┐
+ │  SQLite         │  backend/phdstudylab.db
+ └─────────────────┘
+```
+
+In production, Caddy serves `frontend/dist/` and reverse-proxies `/api/*` to the backend.
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the full server architecture.
+
+## 🚀 Quickstart (local dev)
+
+### Requirements
+
+- Python ≥ 3.10
+- Node.js ≥ 18
 
 ### Backend
 
-#### Requirements
-
-- Python ≥ 3.10
-- FastAPI
-- Uvicorn
-- SQLAlchemy
-- Pydantic
-- Node.js (npm)
-
-#### Create a virtual environment if needed (recommended)
-
 ```bash
 cd backend
-conda create -n env_name python=3.12
-pip install fastapi uvicorn sqlalchemy
-```
-
-Run the backend
-```bash
+conda create -n ninelives python=3.12
+conda activate ninelives
+pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
+
+The API listens on <http://127.0.0.1:8000>.
 
 ### Frontend
 
@@ -48,18 +67,21 @@ npm install
 npm run dev
 ```
 
-## 🔁 Example Workflow
+The dev server runs on <http://127.0.0.1:5173> and proxies API calls to `127.0.0.1:8000`.
 
-1. User starts a session
-2. Data sent to backend
-3. Stored in SQLite
-4. XP computed
-5. UI updated
+## 📚 Documentation
 
-## 🔮 Future Improvements
+- [docs/USER.md](docs/USER.md) — end-user guide (how to use the app)
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — development workflow, code layout, conventions
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — production server (foussistan.fr), ops manual
 
-- Authentication system
-- Public deployment
+## 🔮 Roadmap
+
+- CI/CD pipeline (GitHub Actions → auto-deploy on merge)
+- Authentication (per-user data isolation on the public deployment)
 - Real-time updates
-- Advanced analytics
-- Mobile UI
+- Mobile-first UI improvements
+
+## 📄 License
+
+See [LICENSE](LICENSE).

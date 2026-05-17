@@ -236,3 +236,10 @@ dist-ssr
 
 # Claude.ai
 .claude
+
+# Nine Lives — secrets / runtime artifacts
+.cf-token
+*.token
+backend/phdstudylab.db-journal
+backend/phdstudylab.db-wal
+backend/phdstudylab.db-shm

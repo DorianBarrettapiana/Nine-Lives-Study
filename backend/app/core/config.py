@@ -12,5 +12,5 @@ if _raw_db_url.startswith("postgres://"):
     _raw_db_url = _raw_db_url.replace("postgres://", "postgresql://", 1)
 DATABASE_URL = _raw_db_url
 
-APP_NAME = "PhDStudyLab API"
+APP_NAME = "Nine Lives Study API"
 APP_VERSION = "0.1.0"
