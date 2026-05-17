@@ -10,9 +10,10 @@ Open <https://ninelives.foussistan.fr> in any modern browser.
 
 ## First steps
 
-1. **Pick or create a user.** In the left sidebar, the *Local user* card lets you choose an existing user from the dropdown or click *New user* to create one. The chosen user is remembered in your browser (localStorage), so you don't have to pick again on the same device.
-2. **Pick a language.** French / English / 中文. Set once at user creation.
-3. **Start using the tabs.**
+1. **Create an account or log in.** On first visit you'll see a login screen. Click *Create account*, enter your username, password (≥ 8 characters), and the **invite code** the admin sent you. Future visits keep you logged in via a secure HTTP-only session cookie.
+2. **Pick a language at signup.** French / English / 中文.
+3. **Start using the tabs.** Your data is private — only you see your notes, mood, tasks, etc.
+4. **Log out** anytime from the button in the top-right.
 
 ## Features
 
@@ -91,7 +92,18 @@ Top-right ☀️ / 🌙 toggle switches between light and dark. The choice is sa
 
 ## Data & privacy
 
+- Each account is **isolated**: you only see and modify your own data.
+- Passwords are stored as bcrypt hashes (not in plaintext), and never returned by the API.
 - All data is stored in a SQLite file on the server (no cloud, no analytics).
 - The server is a personal PC at the admin's home. Availability is best-effort.
-- Backups are the admin's responsibility — see [DEPLOYMENT.md](DEPLOYMENT.md#backups).
-- There is no password protection currently — anyone with the URL can use the app. Don't put confidential data in it.
+- Backups are the admin's responsibility — see [DEPLOYMENT.md](DEPLOYMENT.md#5-backups).
+- Account creation requires an **invite code** the admin shares out of band. There is no public open registration.
+
+## Troubleshooting auth
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| "Invalid invite code." | Code typo or expired | Ask the admin for the current code. |
+| "Username already exists." | Someone took it already | Pick a different username. |
+| "Invalid username or password." | Typo, or you forgot the password | Try again. No password reset flow yet — ask the admin to delete your account so you can re-register. |
+| You're logged out unexpectedly | Session cookie cleared, or 30-day expiry reached | Log back in. |

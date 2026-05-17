@@ -7,7 +7,6 @@ import {
   updateFeynmanEntry, type FeynmanEntryRead,
 } from "../api/feynman";
 import { escapeHtml, formatDate, setMessage } from "../utils";
-import type { UserRead } from "../api/users";
 
 const FEYNMAN_STEPS = [
   { title: "1. Pick a concept", description: "Write down one concept or theory you want to understand deeply.", fieldLabel: "Concept", placeholder: "e.g. Monte Carlo ray tracing, separatrix, BRDF, heat flux..." },
@@ -57,11 +56,7 @@ export function clearDraft(): void {
 
 export function renderInitial(): void { renderStep(); }
 
-export function render(currentUser: UserRead | null): void {
-  if (!currentUser) {
-    feynmanList.innerHTML = `<div class="empty-state">Select or create a user before managing Feynman records.</div>`;
-    return;
-  }
+export function render(): void {
   if (feynmanEntries.length === 0) {
     feynmanList.innerHTML = `<div class="empty-state">No Feynman record yet.</div>`;
     return;
@@ -84,11 +79,10 @@ export function render(currentUser: UserRead | null): void {
     </article>`).join("");
 }
 
-export async function refresh(currentUser: UserRead | null): Promise<void> {
-  if (!currentUser) { feynmanEntries = []; render(null); return; }
+export async function refresh(): Promise<void> {
   try {
-    feynmanEntries = await listFeynmanEntries(currentUser.id);
-    render(currentUser);
+    feynmanEntries = await listFeynmanEntries();
+    render();
   } catch (error) {
     console.error(error);
     setMessage(feynmanMessage, "Could not load Feynman records.", "error");
@@ -115,15 +109,12 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
   feynmanNextButton.addEventListener("click", async () => {
     feynmanDraft[feynmanStep] = feynmanInput.value;
     if (feynmanStep < FEYNMAN_STEPS.length - 1) { feynmanStep += 1; renderStep(); return; }
-    const { getCurrentUser } = await import("../views/users");
-    const user = getCurrentUser();
-    if (!user) { setMessage(feynmanMessage, "Select or create a user first.", "error"); return; }
     const concept = feynmanDraft[0].trim();
     if (!concept) { feynmanStep = 0; renderStep(); setMessage(feynmanMessage, "Concept is required.", "error"); return; }
     const payload = { concept, explanation: feynmanDraft[1].trim(), gaps: feynmanDraft[2].trim(), analogy: feynmanDraft[3].trim() };
     try {
       if (editedFeynmanId === null) {
-        await createFeynmanEntry(user.id, payload);
+        await createFeynmanEntry(payload);
         setMessage(feynmanMessage, "Feynman record created. +15 XP", "success");
       } else {
         await updateFeynmanEntry(editedFeynmanId, payload);

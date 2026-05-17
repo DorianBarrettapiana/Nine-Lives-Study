@@ -1,71 +1,49 @@
-"""User routes."""
+"""User routes (self-only)."""
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, Response, status
 
+from app.core.auth import clear_session_cookie, get_current_user
 from app.core.database import get_db
+from app.models.session import Session as SessionModel
 from app.models.user import User
-from app.schemas.user import UserCreate, UserRead, UserUpdate
+from app.schemas.user import UserRead, UserUpdate
+from sqlalchemy import delete
+from sqlalchemy.orm import Session as DbSession
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.get("", response_model=list[UserRead])
-def list_users(db: Session = Depends(get_db)) -> list[User]:
-    """Return all users."""
-    statement = select(User).order_by(User.id)
-    return list(db.scalars(statement).all())
+@router.get("/me", response_model=UserRead)
+def get_me(current_user: User = Depends(get_current_user)) -> User:
+    """Return the current user (alias of /auth/me, kept for convenience)."""
+    return current_user
 
 
-@router.get("/{user_id}", response_model=UserRead)
-def get_user(user_id: int, db: Session = Depends(get_db)) -> User:
-    """Return a single user by ID."""
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
-    return user
-
-
-@router.patch("/{user_id}", response_model=UserRead)
-def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)) -> User:
-    """Partially update a user's language, theme, or active status."""
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
-
-    update_data = payload.model_dump(exclude_unset=True)
-    for field_name, field_value in update_data.items():
-        setattr(user, field_name, field_value)
-
+@router.patch("/me", response_model=UserRead)
+def update_me(
+    payload: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: DbSession = Depends(get_db),
+) -> User:
+    """Partially update the current user's profile (language, theme, ...)."""
+    data = payload.model_dump(exclude_unset=True)
+    for field_name, field_value in data.items():
+        setattr(current_user, field_name, field_value)
     db.commit()
-    db.refresh(user)
-    return user
+    db.refresh(current_user)
+    return current_user
 
 
-@router.delete("/{user_id}", status_code=204)
-def delete_user(user_id: int, db: Session = Depends(get_db)) -> None:
-    """Delete a user and all their associated data (cascade)."""
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
-    db.delete(user)
+@router.delete("/me", status_code=204)
+def delete_me(
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: DbSession = Depends(get_db),
+) -> Response:
+    """Delete the current user's account and all their data (cascade)."""
+    # Drop all sessions for this user first so the cookie is invalidated.
+    db.execute(delete(SessionModel).where(SessionModel.user_id == current_user.id))
+    db.delete(current_user)
     db.commit()
-
-
-@router.post("", response_model=UserRead, status_code=201)
-def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> User:
-    """Create a new user if the username is not already taken."""
-    existing = db.scalar(select(User).where(User.username == payload.username))
-    if existing is not None:
-        raise HTTPException(status_code=409, detail="Username already exists.")
-
-    user = User(
-        username=payload.username,
-        language=payload.language,
-        theme=payload.theme,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
+    clear_session_cookie(response)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

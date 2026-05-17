@@ -4,7 +4,6 @@
 
 import { getUserStats, getUserXp, type UserProgressRead, type UserStatsRead } from "../api/stats";
 import { makeDateLabel } from "../utils";
-import type { UserRead } from "../api/users";
 
 let statsTotals: HTMLDivElement;
 let statsTasksChart: HTMLDivElement;
@@ -83,12 +82,11 @@ export function render(): void {
       ).join("");
 }
 
-export async function refresh(currentUser: UserRead | null): Promise<void> {
-  if (!currentUser) { userStats = null; render(); renderXp(); return; }
+export async function refresh(): Promise<void> {
   try {
     [userStats, userProgress] = await Promise.all([
-      getUserStats(currentUser.id, statsDays),
-      getUserXp(currentUser.id),
+      getUserStats(statsDays),
+      getUserXp(),
     ]);
     render();
     renderXp();

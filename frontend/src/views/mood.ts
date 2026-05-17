@@ -4,7 +4,6 @@
 
 import { createMoodEntry, deleteMoodEntry, listMoodEntries, type MoodEntryRead } from "../api/mood";
 import { escapeHtml, setMessage } from "../utils";
-import type { UserRead } from "../api/users";
 
 const MOODS = [
   { emoji: "😩", label: "Exhausted" },
@@ -36,13 +35,9 @@ function formatDateTime(iso: string): string {
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-export function render(currentUser: UserRead | null): void {
+export function render(): void {
   renderPicker();
 
-  if (!currentUser) {
-    moodList.innerHTML = `<div class="empty-state">Select a user first.</div>`;
-    return;
-  }
   if (entries.length === 0) {
     moodList.innerHTML = `<div class="empty-state">No mood entries yet. How are you feeling?</div>`;
     return;
@@ -69,11 +64,10 @@ export function render(currentUser: UserRead | null): void {
   }).join("");
 }
 
-export async function refresh(currentUser: UserRead | null): Promise<void> {
-  if (!currentUser) { entries = []; render(null); return; }
+export async function refresh(): Promise<void> {
   try {
-    entries = await listMoodEntries(currentUser.id, moodDays);
-    render(currentUser);
+    entries = await listMoodEntries(moodDays);
+    render();
   } catch (error) {
     console.error(error);
     setMessage(moodMessage, "Could not load mood entries.", "error");
@@ -98,12 +92,9 @@ export function init(onDataChanged: () => Promise<void>): void {
   });
 
   saveMoodButton.addEventListener("click", async () => {
-    const { getCurrentUser } = await import("../views/users");
-    const user = getCurrentUser();
-    if (!user) { setMessage(moodMessage, "Select a user first.", "error"); return; }
     if (!selectedMood) { setMessage(moodMessage, "Pick a mood first.", "error"); return; }
     try {
-      await createMoodEntry(user.id, { mood: selectedMood, reflection: moodReflectionInput.value.trim() });
+      await createMoodEntry({ mood: selectedMood, reflection: moodReflectionInput.value.trim() });
       selectedMood = "";
       moodReflectionInput.value = "";
       setMessage(moodMessage, "Mood recorded. +3 XP", "success");
@@ -141,8 +132,7 @@ export function init(onDataChanged: () => Promise<void>): void {
       try {
         await deleteMoodEntry(Number(deleteId));
         setMessage(moodMessage, "Entry deleted.", "success");
-        const { getCurrentUser } = await import("../views/users");
-        await refresh(getCurrentUser());
+        await refresh();
       } catch (error) {
         console.error(error);
         setMessage(moodMessage, "Could not delete entry.", "error");
@@ -159,8 +149,7 @@ export function init(onDataChanged: () => Promise<void>): void {
       document.querySelectorAll<HTMLButtonElement>("#mood-days-selector .days-btn").forEach((b) =>
         b.classList.toggle("active", b === btn),
       );
-      const { getCurrentUser } = await import("../views/users");
-      await refresh(getCurrentUser());
+      await refresh();
     });
   });
 }

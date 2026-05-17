@@ -4,7 +4,6 @@
 
 import { completeSession, listSessions, startSession, type PomodoroSessionRead } from "../api/pomodoro";
 import { formatTime, setMessage } from "../utils";
-import type { UserRead } from "../api/users";
 
 const WORK_DURATION = 25 * 60;
 const BREAK_DURATION = 5 * 60;
@@ -24,15 +23,15 @@ let pomodoroRunning = false;
 let pomodoroIntervalId: ReturnType<typeof setInterval> | null = null;
 let activeSessionId: number | null = null;
 
-export function render(currentUser: UserRead | null): void {
+export function render(): void {
   pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
   pomodoroStartButton.textContent = pomodoroRunning ? "⏸ Pause" : "▶ Start";
   pomodoroStartButton.classList.toggle("pomo-running", pomodoroRunning);
   pomodoroModeBadge.textContent = pomodoroMode === "work" ? "Work" : "Break";
   pomodoroModeBadge.className = `tag ${pomodoroMode === "work" ? "" : "tag-break"}`;
 
-  if (!currentUser || sessions.length === 0) {
-    pomodoroList.innerHTML = `<div class="empty-state">${currentUser ? "No sessions yet." : "Select a user first."}</div>`;
+  if (sessions.length === 0) {
+    pomodoroList.innerHTML = `<div class="empty-state">No sessions yet.</div>`;
     return;
   }
   const todayCount = sessions.filter(
@@ -49,11 +48,10 @@ export function render(currentUser: UserRead | null): void {
   ].join("");
 }
 
-export async function refresh(currentUser: UserRead | null): Promise<void> {
-  if (!currentUser) { sessions = []; render(null); return; }
+export async function refresh(): Promise<void> {
   try {
-    sessions = await listSessions(currentUser.id);
-    render(currentUser);
+    sessions = await listSessions();
+    render();
   } catch (error) {
     console.error(error);
     setMessage(pomodoroMessage, "Could not load sessions.", "error");
@@ -80,31 +78,24 @@ export function init(onDataChanged: () => Promise<void>): void {
   async function onComplete(): Promise<void> {
     stopTimer();
     if (activeSessionId !== null) {
-      const { getCurrentUser } = await import("../views/users");
-      const user = getCurrentUser();
-      if (user) {
-        try {
-          await completeSession(activeSessionId);
-          activeSessionId = null;
-          const msg = pomodoroMode === "work" ? "Work session done! +25 XP" : "Break over!";
-          setMessage(pomodoroMessage, msg, "success");
-          await onDataChanged();
-        } catch (error) { console.error(error); }
-      }
+      try {
+        await completeSession(activeSessionId);
+        activeSessionId = null;
+        const msg = pomodoroMode === "work" ? "Work session done! +25 XP" : "Break over!";
+        setMessage(pomodoroMessage, msg, "success");
+        await onDataChanged();
+      } catch (error) { console.error(error); }
     }
     pomodoroMode = pomodoroMode === "work" ? "break" : "work";
     pomodoroTimeLeft = pomodoroMode === "work" ? WORK_DURATION : BREAK_DURATION;
-    render(null);
+    render();
   }
 
   pomodoroStartButton.addEventListener("click", async () => {
-    const { getCurrentUser } = await import("../views/users");
-    const user = getCurrentUser();
-    if (!user) { setMessage(pomodoroMessage, "Select a user first.", "error"); return; }
-    if (pomodoroRunning) { stopTimer(); render(user); return; }
+    if (pomodoroRunning) { stopTimer(); render(); return; }
     if (activeSessionId === null) {
       try {
-        const s = await startSession(user.id, pomodoroMode, pomodoroMode === "work" ? 25 : 5);
+        const s = await startSession(pomodoroMode, pomodoroMode === "work" ? 25 : 5);
         activeSessionId = s.id;
       } catch (error) { console.error(error); setMessage(pomodoroMessage, "Could not start session.", "error"); return; }
     }
@@ -116,13 +107,13 @@ export function init(onDataChanged: () => Promise<void>): void {
       pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
       if (pomodoroTimeLeft <= 0) await onComplete();
     }, 500); // poll at 500ms so display stays crisp even after background throttling
-    render(user);
+    render();
   });
 
   pomodoroResetButton.addEventListener("click", () => {
     stopTimer(); activeSessionId = null; pomodoroMode = "work";
     pomodoroTimeLeft = WORK_DURATION; pomodoroEndTime = null;
-    setMessage(pomodoroMessage, "", "neutral"); render(null);
+    setMessage(pomodoroMessage, "", "neutral"); render();
   });
 
   // When user returns to this tab, immediately sync display to wall clock

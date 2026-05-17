@@ -49,19 +49,13 @@ export interface DailyLogUpsert {
   reflection: string;
 }
 
-export async function getDailyState(
-  userId: number,
-  date?: string,
-): Promise<DailyStateRead> {
+export async function getDailyState(date?: string): Promise<DailyStateRead> {
   const query = date ? `?date=${encodeURIComponent(date)}` : "";
-  return apiFetch<DailyStateRead>(`/users/${userId}/daily${query}`);
+  return apiFetch<DailyStateRead>(`/daily${query}`);
 }
 
-export async function createDailyTask(
-  userId: number,
-  payload: DailyTaskCreate,
-): Promise<DailyTaskRead> {
-  return apiFetch<DailyTaskRead>(`/users/${userId}/daily/tasks`, {
+export async function createDailyTask(payload: DailyTaskCreate): Promise<DailyTaskRead> {
+  return apiFetch<DailyTaskRead>("/daily/tasks", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -83,11 +77,8 @@ export async function deleteDailyTask(taskId: number): Promise<void> {
   });
 }
 
-export async function saveDailyLog(
-  userId: number,
-  payload: DailyLogUpsert,
-): Promise<DailyLogRead> {
-  return apiFetch<DailyLogRead>(`/users/${userId}/daily/log`, {
+export async function saveDailyLog(payload: DailyLogUpsert): Promise<DailyLogRead> {
+  return apiFetch<DailyLogRead>("/daily/log", {
     method: "PUT",
     body: JSON.stringify(payload),
   });

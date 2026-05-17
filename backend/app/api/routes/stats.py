@@ -1,11 +1,12 @@
-"""Stats aggregation routes."""
+"""Stats aggregation routes (scoped to current user)."""
 
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.daily_tracker import DailyTask
 from app.models.feynman_entry import FeynmanEntry
@@ -15,19 +16,17 @@ from app.models.pomodoro_session import PomodoroSession
 from app.models.user import User
 from app.schemas.stats import DailyMoodStat, DailyPomodoroStat, DailyTaskStat, UserStatsRead
 
-router = APIRouter(tags=["stats"])
+router = APIRouter(prefix="/stats", tags=["stats"])
 
 
-@router.get("/users/{user_id}/stats", response_model=UserStatsRead)
-def get_user_stats(
-    user_id: int,
+@router.get("", response_model=UserStatsRead)
+def get_stats(
     days: int = Query(default=7, ge=1, le=90),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> UserStatsRead:
-    """Return aggregated stats for a user over the last N days."""
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
+    """Return aggregated stats for the current user over the last N days."""
+    user_id = current_user.id
 
     today = date.today()
     since = today - timedelta(days=days - 1)
@@ -66,8 +65,7 @@ def get_user_stats(
     for row in mood_rows:
         if row.day not in seen_days:
             seen_days.add(row.day)
-            from datetime import date as date_type
-            daily_moods.append(DailyMoodStat(date=date_type.fromisoformat(row.day), mood=row.mood))
+            daily_moods.append(DailyMoodStat(date=date.fromisoformat(row.day), mood=row.mood))
     daily_moods.sort(key=lambda d: d.date)
 
     # Pomodoros per day

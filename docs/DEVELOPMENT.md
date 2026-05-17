@@ -60,7 +60,7 @@ PhD-Study-Lab/
 
 ### Feature pattern
 
-Each domain (paper notes, Feynman, daily tracker, Pomodoro, mood, stats, users, XP) follows the same pattern across the stack:
+Each domain (paper notes, Feynman, daily tracker, Pomodoro, mood, stats, XP) follows the same pattern across the stack. All resource routes are **scoped to the authenticated user** via the `get_current_user` FastAPI dependency. Authentication itself lives in `app.core.auth` (password hashing, session creation, cookie helpers) and `app.api.routes.auth` (register/login/logout/me/password).
 
 | Layer | File |
 |---|---|
@@ -87,6 +87,22 @@ pip install -r requirements.txt
 ```
 
 The DB file is created on first run (SQLAlchemy `Base.metadata.create_all`).
+
+### Env vars
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `INVITE_CODE` | (empty) | Required string for users to register via `POST /auth/register`. If empty, registration is disabled. |
+| `COOKIE_SECURE` | `1` | If `1`, session cookie is `Secure` (HTTPS only). Set to `0` for local dev over HTTP. |
+| `SESSION_LIFETIME_DAYS` | `30` | Session validity in days. |
+| `DATABASE_URL` | `sqlite:///backend/phdstudylab.db` | SQLAlchemy DB URL. |
+| `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated allowed origins. |
+
+For local dev with the Vite dev server on a different origin, run with:
+
+```bash
+INVITE_CODE=dev COOKIE_SECURE=0 uvicorn app.main:app --reload
+```
 
 ### Frontend
 
@@ -135,7 +151,7 @@ The config normalizes `postgres://` to `postgresql://` for Render-style URLs.
 
 1. Define / extend the ORM model in `backend/app/models/<feature>.py`.
 2. Add the Pydantic schemas in `backend/app/schemas/<feature>.py`.
-3. Add the route in `backend/app/api/routes/<feature>.py`.
+3. Add the route in `backend/app/api/routes/<feature>.py`. **Always inject `current_user: User = Depends(get_current_user)`** and scope all queries to `current_user.id`. For resource-scoped routes (`/notes/{note_id}`), use a helper that 404s if the resource doesn't belong to the user.
 4. If it's a new feature, import the router in `backend/app/main.py` and call `app.include_router(...)`.
 5. Add a typed fetch wrapper in `frontend/src/api/<feature>.ts`.
 6. Use it from the corresponding view in `frontend/src/views/<feature>.ts`.

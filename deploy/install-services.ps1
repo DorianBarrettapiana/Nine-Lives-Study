@@ -8,6 +8,10 @@
 #   $env:CF_API_TOKEN = "ton_token_cloudflare"
 # ou bien crée le fichier C:\srv\ddns\.cf-token (1 ligne, le token).
 #
+# Et ton invite code (mot de passe partagé pour créer un compte) :
+#   $env:INVITE_CODE  = "ton_invite_code_partage"
+# ou bien crée le fichier C:\srv\backend\.invite-code (1 ligne, le code).
+#
 # Ce script :
 #   1. Copie les scripts de deploy/ vers C:\srv\... (emplacements canoniques)
 #   2. Crée la tâche planifiée DDNS Cloudflare (toutes les 5 min)
@@ -41,6 +45,20 @@ if (-not $Token) {
     exit 1
 }
 
+# Lecture de l'invite code : env var d'abord, sinon fichier
+$InviteCode = $env:INVITE_CODE
+if (-not $InviteCode) {
+    $inviteFile = "C:\srv\backend\.invite-code"
+    if (Test-Path $inviteFile) {
+        $InviteCode = (Get-Content $inviteFile -Raw).Trim()
+    }
+}
+if (-not $InviteCode) {
+    Write-Host "ERREUR : INVITE_CODE non défini. Voir l'en-tête de ce script." -ForegroundColor Red
+    Read-Host "Appuie sur Entrée pour quitter"
+    exit 1
+}
+
 $RepoDir   = Split-Path -Parent $PSScriptRoot
 $DeployDir = $PSScriptRoot
 
@@ -53,6 +71,11 @@ foreach ($d in "C:\srv", "C:\srv\caddy", "C:\srv\caddy\logs", "C:\srv\backend", 
 [Environment]::SetEnvironmentVariable("CF_API_TOKEN", $Token, "Machine")
 Set-Content -Path "C:\srv\ddns\.cf-token" -Value $Token -NoNewline
 Write-Host "  -> CF_API_TOKEN persisté (env var Machine + C:\srv\ddns\.cf-token)"
+
+# Persiste l'invite code pour le backend
+[Environment]::SetEnvironmentVariable("INVITE_CODE", $InviteCode, "Machine")
+Set-Content -Path "C:\srv\backend\.invite-code" -Value $InviteCode -NoNewline
+Write-Host "  -> INVITE_CODE persisté (env var Machine + C:\srv\backend\.invite-code)"
 
 Write-Host "`n=== 1. Copie des scripts vers C:\srv ===" -ForegroundColor Cyan
 Copy-Item -Path "$DeployDir\Caddyfile"              -Destination "C:\srv\caddy\Caddyfile" -Force

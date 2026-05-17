@@ -66,6 +66,7 @@ The apex record exists only so DDNS keeps the home IP available for direct acces
 | `C:\srv\backend\backend.log` | uvicorn stdout/stderr |
 | `C:\srv\ddns\update-cloudflare.ps1` | DDNS updater (copy of `deploy/update-cloudflare.ps1`) |
 | `C:\srv\ddns\.cf-token` | Cloudflare API token, **not in git** |
+| `C:\srv\backend\.invite-code` | Invite code required to register, **not in git** |
 | `C:\srv\ddns\update-cloudflare.log` | DDNS log |
 
 The `deploy/` folder in the repo is the source of truth. `install-services.ps1` copies the three scripts (`Caddyfile`, `start-backend.ps1`, `update-cloudflare.ps1`) to their `C:\srv\` destinations.
@@ -112,12 +113,14 @@ cd ..
 
 ```powershell
 $env:CF_API_TOKEN = "your_cloudflare_token"
+$env:INVITE_CODE  = "the_shared_invite_code_for_signups"
 powershell -ExecutionPolicy Bypass -File .\deploy\install-services.ps1
 ```
 
 This:
 - creates `C:\srv\{caddy,backend,ddns}\` directories
-- persists the token in `Machine` env var **and** `C:\srv\ddns\.cf-token`
+- persists the Cloudflare token in `Machine` env var **and** `C:\srv\ddns\.cf-token`
+- persists the invite code in `Machine` env var **and** `C:\srv\backend\.invite-code`
 - copies the three ops scripts to `C:\srv\...`
 - downloads Caddy with the Cloudflare DNS plugin
 - registers three scheduled tasks running as `SYSTEM` at boot:
@@ -292,10 +295,24 @@ Frequent suspects: World Wide Web Publishing Service (IIS), Skype older versions
 
 ## 6. Security notes
 
-- The **Cloudflare API token** lives in `C:\srv\ddns\.cf-token` and as a `Machine` env var. It is **not** committed to git. Never paste it into a script that goes into the repo.
-- The backend listens on **127.0.0.1 only** — it can't be hit directly from the LAN or internet, only through Caddy. Don't change the bind address.
-- There is **no authentication** on the API today. Anyone reaching `ninelives.foussistan.fr` can read/write any user's data. Top roadmap item.
-- The `phdstudylab.db` file contains user data — back it up and don't share it.
+- The **Cloudflare API token** lives in `C:\srv\ddns\.cf-token` and as a `Machine` env var. **Not committed to git.** If it ever leaks, rotate it on the Cloudflare dashboard.
+- The **invite code** lives in `C:\srv\backend\.invite-code` and as a `Machine` env var. **Not committed.** Rotate by updating both and restarting `NineLives-Backend`. Existing accounts are unaffected; only new sign-ups need the new code.
+- The backend listens on **127.0.0.1 only** — it can't be hit directly from the LAN or internet, only through Caddy.
+- **Authentication** uses HTTP-only session cookies. Passwords are bcrypt-hashed. Sessions last 30 days (configurable via `SESSION_LIFETIME_DAYS` env var) and are stored server-side in the `sessions` table.
+- `COOKIE_SECURE` is on by default (cookies only sent over HTTPS). Set to `0` only for local HTTP dev.
+- The `phdstudylab.db` file contains user data and password hashes — back it up, don't share it.
+
+### Managing accounts
+
+There is no admin UI yet. Drop into SQLite to inspect or remove accounts:
+
+```powershell
+sqlite3 D:\Documents\Dev\srv\PhD-Study-Lab\backend\phdstudylab.db
+sqlite> .headers on
+sqlite> SELECT id, username, is_active FROM users;
+sqlite> DELETE FROM users WHERE username = 'spammer';   -- cascades to all their data
+sqlite> .quit
+```
 
 ---
 

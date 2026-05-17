@@ -8,6 +8,7 @@ It is live at **<https://ninelives.foussistan.fr>**.
 
 ## ✨ Features
 
+- **Multi-user with authentication** — bcrypt-hashed passwords, HTTP-only session cookies, invite-code-gated signup
 - Paper notes — keep track of read literature
 - Feynman method — four-step understanding records
 - Daily tracker — tasks, mood and daily reflection
@@ -15,7 +16,7 @@ It is live at **<https://ninelives.foussistan.fr>**.
 - Mood journal — log mood anytime, history over 7/30/90 days
 - Stats — overview, tasks/pomodoros/mood charts
 - Gamification — XP and levels
-- Multi-user (local), persistent SQLite storage
+- Per-user data isolation, persistent SQLite storage
 
 ## 🏗️ Architecture
 
@@ -77,8 +78,9 @@ The dev server runs on <http://127.0.0.1:5173> and proxies API calls to `127.0.0
 
 ## 🔮 Roadmap
 
+- Configurable Pomodoro durations (per-user settings)
+- Password reset / "forgot password" flow
 - CI/CD pipeline (GitHub Actions → auto-deploy on merge)
-- Authentication (per-user data isolation on the public deployment)
 - Real-time updates
 - Mobile-first UI improvements
 

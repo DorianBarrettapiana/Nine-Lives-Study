@@ -13,4 +13,19 @@ if _raw_db_url.startswith("postgres://"):
 DATABASE_URL = _raw_db_url
 
 APP_NAME = "Nine Lives Study API"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
+
+# --- Auth -------------------------------------------------------------------
+
+# Invite code required to register a new account. If unset, registration is
+# disabled entirely (admin-only mode).
+INVITE_CODE = os.environ.get("INVITE_CODE", "")
+
+# Session cookie lifetime, in days.
+SESSION_LIFETIME_DAYS = int(os.environ.get("SESSION_LIFETIME_DAYS", "30"))
+
+# Cookie name and security flags.
+# - secure=True is required in production (HTTPS only). Set COOKIE_SECURE=0 for
+#   local dev over HTTP.
+SESSION_COOKIE_NAME = "nl_session"
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "1") != "0"

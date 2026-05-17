@@ -1,46 +1,50 @@
-"""Paper note routes."""
+"""Paper note routes (scoped to current user)."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.core.xp import XP_NOTE_CREATE, award_xp
 from app.models.paper_note import PaperNote
 from app.models.user import User
 from app.schemas.paper_note import PaperNoteCreate, PaperNoteRead, PaperNoteUpdate
 
-router = APIRouter(tags=["paper-notes"])
+router = APIRouter(prefix="/notes", tags=["paper-notes"])
 
 
-@router.get("/users/{user_id}/notes", response_model=list[PaperNoteRead])
-def list_user_notes(user_id: int, db: Session = Depends(get_db)) -> list[PaperNote]:
-    """Return all paper notes attached to a user."""
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
+def _get_owned_note(note_id: int, current_user: User, db: Session) -> PaperNote:
+    """Fetch a note and ensure it belongs to the current user (else 404)."""
+    note = db.get(PaperNote, note_id)
+    if note is None or note.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paper note not found.")
+    return note
 
+
+@router.get("", response_model=list[PaperNoteRead])
+def list_notes(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[PaperNote]:
+    """Return all paper notes for the current user."""
     statement = (
         select(PaperNote)
-        .where(PaperNote.user_id == user_id)
+        .where(PaperNote.user_id == current_user.id)
         .order_by(PaperNote.updated_at.desc())
     )
     return list(db.scalars(statement).all())
 
 
-@router.post("/users/{user_id}/notes", response_model=PaperNoteRead, status_code=201)
-def create_user_note(
-    user_id: int,
+@router.post("", response_model=PaperNoteRead, status_code=201)
+def create_note(
     payload: PaperNoteCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> PaperNote:
-    """Create a paper note for a user."""
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
-
+    """Create a paper note for the current user."""
     note = PaperNote(
-        user_id=user_id,
+        user_id=current_user.id,
         title=payload.title,
         authors=payload.authors,
         year=payload.year,
@@ -48,28 +52,25 @@ def create_user_note(
         questions=payload.questions,
         tags=payload.tags,
     )
-
     db.add(note)
-    award_xp(user_id, XP_NOTE_CREATE, db)
+    award_xp(current_user.id, XP_NOTE_CREATE, db)
     db.commit()
     db.refresh(note)
     return note
 
 
-@router.patch("/notes/{note_id}", response_model=PaperNoteRead)
+@router.patch("/{note_id}", response_model=PaperNoteRead)
 def update_note(
     note_id: int,
     payload: PaperNoteUpdate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> PaperNote:
-    """Update an existing paper note."""
-    note = db.get(PaperNote, note_id)
-    if note is None:
-        raise HTTPException(status_code=404, detail="Paper note not found.")
+    """Update an existing paper note (must belong to the current user)."""
+    note = _get_owned_note(note_id, current_user, db)
 
-    update_data = payload.model_dump(exclude_unset=True)
-
-    for field_name, field_value in update_data.items():
+    data = payload.model_dump(exclude_unset=True)
+    for field_name, field_value in data.items():
         setattr(note, field_name, field_value)
 
     db.commit()
@@ -77,12 +78,13 @@ def update_note(
     return note
 
 
-@router.delete("/notes/{note_id}", status_code=204)
-def delete_note(note_id: int, db: Session = Depends(get_db)) -> None:
-    """Delete a paper note."""
-    note = db.get(PaperNote, note_id)
-    if note is None:
-        raise HTTPException(status_code=404, detail="Paper note not found.")
-
+@router.delete("/{note_id}", status_code=204)
+def delete_note(
+    note_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    """Delete a paper note (must belong to the current user)."""
+    note = _get_owned_note(note_id, current_user, db)
     db.delete(note)
     db.commit()
