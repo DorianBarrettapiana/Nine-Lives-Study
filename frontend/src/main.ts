@@ -106,10 +106,7 @@ app.innerHTML = `
             <p id="note-message" class="message"></p>
           </section>
           <section class="card">
-            <div class="section-header">
-              <h2>Saved notes</h2>
-              <button id="refresh-notes-button" class="secondary">Refresh</button>
-            </div>
+            <h2>Saved notes</h2>
             <div id="notes-list" class="notes-list"></div>
           </section>
         </div>
@@ -132,19 +129,16 @@ app.innerHTML = `
             </div>
           </section>
           <section class="card">
-            <div class="section-header">
-              <h2>Feynman records</h2>
-              <button id="refresh-feynman-button" class="secondary">Refresh</button>
-            </div>
+            <h2>Feynman records</h2>
             <div id="feynman-list" class="feynman-list"></div>
           </section>
         </div>
 
         <div id="tracker-view" class="hidden">
           <section class="card">
-            <div class="section-header">
-              <div><h2>Daily tracker</h2><p class="hint">Tasks, mood and daily reflection.</p></div>
-              <button id="refresh-tracker-button" class="secondary">Refresh</button>
+            <div>
+              <h2>Daily tracker</h2>
+              <p class="hint">Tasks, mood and daily reflection.</p>
             </div>
             <div class="tracker-progress">
               <div class="progress-header"><span>Today progress</span><strong id="tracker-percent">0%</strong></div>
@@ -181,10 +175,7 @@ app.innerHTML = `
             </div>
           </section>
           <section class="card">
-            <div class="section-header">
-              <h2>Today's sessions</h2>
-              <button id="refresh-pomodoro-button" class="secondary">Refresh</button>
-            </div>
+            <h2>Today's sessions</h2>
             <div id="pomodoro-list" class="task-list"></div>
           </section>
         </div>
@@ -193,13 +184,10 @@ app.innerHTML = `
           <section class="card">
             <div class="section-header">
               <h2>Overview</h2>
-              <div class="button-row">
-                <div class="days-selector">
-                  <button class="days-btn active" data-days="7">7 days</button>
-                  <button class="days-btn" data-days="30">30 days</button>
-                  <button class="days-btn" data-days="90">90 days</button>
-                </div>
-                <button id="refresh-stats-button" class="secondary">Refresh</button>
+              <div class="days-selector">
+                <button class="days-btn active" data-days="7">7 days</button>
+                <button class="days-btn" data-days="30">30 days</button>
+                <button class="days-btn" data-days="90">90 days</button>
               </div>
             </div>
             <div id="stats-totals" class="stats-grid"></div>
@@ -229,13 +217,10 @@ app.innerHTML = `
           <section class="card">
             <div class="section-header">
               <h2>Mood history</h2>
-              <div class="button-row">
-                <div class="days-selector" id="mood-days-selector">
-                  <button class="days-btn active" data-days="7">7 days</button>
-                  <button class="days-btn" data-days="30">30 days</button>
-                  <button class="days-btn" data-days="90">90 days</button>
-                </div>
-                <button id="refresh-mood-button" class="secondary">Refresh</button>
+              <div class="days-selector" id="mood-days-selector">
+                <button class="days-btn active" data-days="7">7 days</button>
+                <button class="days-btn" data-days="30">30 days</button>
+                <button class="days-btn" data-days="90">90 days</button>
               </div>
             </div>
             <div id="mood-list" class="mood-history-list"></div>

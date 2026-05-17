@@ -17,7 +17,6 @@ let noteTagsInput: HTMLInputElement;
 let noteSubmitButton: HTMLButtonElement;
 let noteCancelButton: HTMLButtonElement;
 let noteMessage: HTMLParagraphElement;
-let refreshNotesButton: HTMLButtonElement;
 
 let notes: PaperNoteRead[] = [];
 let editedNoteId: number | null = null;
@@ -90,7 +89,6 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
   noteSubmitButton = document.querySelector<HTMLButtonElement>("#note-submit-button")!;
   noteCancelButton = document.querySelector<HTMLButtonElement>("#note-cancel-button")!;
   noteMessage = document.querySelector<HTMLParagraphElement>("#note-message")!;
-  refreshNotesButton = document.querySelector<HTMLButtonElement>("#refresh-notes-button")!;
 
   noteForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -124,7 +122,6 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
   });
 
   noteCancelButton.addEventListener("click", () => { clearNoteForm(); setMessage(noteMessage, "", "neutral"); });
-  refreshNotesButton.addEventListener("click", async () => { await onRefreshNeeded(); });
 
   notesList.addEventListener("click", async (event) => {
     const target = event.target;

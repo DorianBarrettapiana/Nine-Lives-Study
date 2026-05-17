@@ -26,7 +26,6 @@ let feynmanNextButton: HTMLButtonElement;
 let feynmanResetButton: HTMLButtonElement;
 let feynmanMessage: HTMLParagraphElement;
 let feynmanList: HTMLDivElement;
-let refreshFeynmanButton: HTMLButtonElement;
 
 let feynmanEntries: FeynmanEntryRead[] = [];
 let feynmanStep = 0;
@@ -107,7 +106,6 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
   feynmanResetButton = document.querySelector<HTMLButtonElement>("#feynman-reset-button")!;
   feynmanMessage = document.querySelector<HTMLParagraphElement>("#feynman-message")!;
   feynmanList = document.querySelector<HTMLDivElement>("#feynman-list")!;
-  refreshFeynmanButton = document.querySelector<HTMLButtonElement>("#refresh-feynman-button")!;
 
   feynmanInput.addEventListener("input", () => { feynmanDraft[feynmanStep] = feynmanInput.value; });
   feynmanPrevButton.addEventListener("click", () => {
@@ -139,7 +137,6 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
     }
   });
   feynmanResetButton.addEventListener("click", () => clearDraft());
-  refreshFeynmanButton.addEventListener("click", async () => await onRefreshNeeded());
   feynmanList.addEventListener("click", async (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;

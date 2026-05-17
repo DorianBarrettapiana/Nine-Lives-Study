@@ -19,7 +19,6 @@ let moodReflectionInput: HTMLTextAreaElement;
 let saveMoodButton: HTMLButtonElement;
 let moodMessage: HTMLParagraphElement;
 let moodList: HTMLDivElement;
-let refreshMoodButton: HTMLButtonElement;
 
 let entries: MoodEntryRead[] = [];
 let selectedMood = "";
@@ -87,7 +86,6 @@ export function init(onDataChanged: () => Promise<void>): void {
   saveMoodButton = document.querySelector<HTMLButtonElement>("#save-mood-button")!;
   moodMessage = document.querySelector<HTMLParagraphElement>("#mood-message")!;
   moodList = document.querySelector<HTMLDivElement>("#mood-list")!;
-  refreshMoodButton = document.querySelector<HTMLButtonElement>("#refresh-mood-button")!;
 
   renderPicker();
 
@@ -114,11 +112,6 @@ export function init(onDataChanged: () => Promise<void>): void {
       console.error(error);
       setMessage(moodMessage, "Could not save mood.", "error");
     }
-  });
-
-  refreshMoodButton.addEventListener("click", async () => {
-    const { getCurrentUser } = await import("../views/users");
-    await refresh(getCurrentUser());
   });
 
   moodList.addEventListener("click", async (e) => {

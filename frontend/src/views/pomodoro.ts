@@ -15,7 +15,6 @@ let pomodoroResetButton: HTMLButtonElement;
 let pomodoroModeBadge: HTMLSpanElement;
 let pomodoroMessage: HTMLParagraphElement;
 let pomodoroList: HTMLDivElement;
-let refreshPomodoroButton: HTMLButtonElement;
 
 let sessions: PomodoroSessionRead[] = [];
 let pomodoroMode: "work" | "break" = "work";
@@ -26,7 +25,8 @@ let activeSessionId: number | null = null;
 
 export function render(currentUser: UserRead | null): void {
   pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
-  pomodoroStartButton.textContent = pomodoroRunning ? "Pause" : "Start";
+  pomodoroStartButton.textContent = pomodoroRunning ? "⏸ Pause" : "▶ Start";
+  pomodoroStartButton.classList.toggle("pomo-running", pomodoroRunning);
   pomodoroModeBadge.textContent = pomodoroMode === "work" ? "Work" : "Break";
   pomodoroModeBadge.className = `tag ${pomodoroMode === "work" ? "" : "tag-break"}`;
 
@@ -71,7 +71,6 @@ export function init(onDataChanged: () => Promise<void>): void {
   pomodoroModeBadge = document.querySelector<HTMLSpanElement>("#pomodoro-mode-badge")!;
   pomodoroMessage = document.querySelector<HTMLParagraphElement>("#pomodoro-message")!;
   pomodoroList = document.querySelector<HTMLDivElement>("#pomodoro-list")!;
-  refreshPomodoroButton = document.querySelector<HTMLButtonElement>("#refresh-pomodoro-button")!;
 
   async function onComplete(): Promise<void> {
     stopTimer();
@@ -118,8 +117,4 @@ export function init(onDataChanged: () => Promise<void>): void {
     pomodoroTimeLeft = WORK_DURATION; setMessage(pomodoroMessage, "", "neutral"); render(null);
   });
 
-  refreshPomodoroButton.addEventListener("click", async () => {
-    const { getCurrentUser } = await import("../views/users");
-    await refresh(getCurrentUser());
-  });
 }

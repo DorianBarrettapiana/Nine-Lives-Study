@@ -645,6 +645,13 @@ h3 {
   color: var(--success);
 }
 
+#pomodoro-start-button.pomo-running {
+  background: #d97706;
+}
+#pomodoro-start-button.pomo-running:hover {
+  background: #b45309;
+}
+
 /* Stats */
 .stats-grid {
   display: grid;

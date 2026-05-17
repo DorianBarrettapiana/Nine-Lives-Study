@@ -13,7 +13,6 @@ let statsMoodChart: HTMLDivElement;
 let statsTasksTitle: HTMLHeadingElement;
 let statsPomodoroTitle: HTMLHeadingElement;
 let statsMoodTitle: HTMLHeadingElement;
-let refreshStatsButton: HTMLButtonElement;
 let xpLevel: HTMLSpanElement;
 let xpBarFill: HTMLDivElement;
 let xpLabel: HTMLParagraphElement;
@@ -106,12 +105,9 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
   statsTasksTitle = document.querySelector<HTMLHeadingElement>("#stats-tasks-title")!;
   statsPomodoroTitle = document.querySelector<HTMLHeadingElement>("#stats-pomodoro-title")!;
   statsMoodTitle = document.querySelector<HTMLHeadingElement>("#stats-mood-title")!;
-  refreshStatsButton = document.querySelector<HTMLButtonElement>("#refresh-stats-button")!;
   xpLevel = document.querySelector<HTMLSpanElement>("#xp-level")!;
   xpBarFill = document.querySelector<HTMLDivElement>("#xp-bar-fill")!;
   xpLabel = document.querySelector<HTMLParagraphElement>("#xp-label")!;
-
-  refreshStatsButton.addEventListener("click", async () => await onRefreshNeeded());
 
   document.querySelectorAll<HTMLButtonElement>(".days-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {

@@ -27,7 +27,6 @@ let moodRow: HTMLDivElement;
 let reflectionInput: HTMLTextAreaElement;
 let saveLogButton: HTMLButtonElement;
 let trackerMessage: HTMLParagraphElement;
-let refreshTrackerButton: HTMLButtonElement;
 
 let dailyState: DailyStateRead | null = null;
 let selectedMood = "";
@@ -89,9 +88,6 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
   reflectionInput = document.querySelector<HTMLTextAreaElement>("#reflection-input")!;
   saveLogButton = document.querySelector<HTMLButtonElement>("#save-log-button")!;
   trackerMessage = document.querySelector<HTMLParagraphElement>("#tracker-message")!;
-  refreshTrackerButton = document.querySelector<HTMLButtonElement>("#refresh-tracker-button")!;
-
-  refreshTrackerButton.addEventListener("click", async () => await onRefreshNeeded());
 
   taskForm.addEventListener("submit", async (event) => {
     event.preventDefault();
