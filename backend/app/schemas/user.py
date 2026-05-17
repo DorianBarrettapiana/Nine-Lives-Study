@@ -11,6 +11,14 @@ class UserCreate(BaseModel):
     theme: str = Field(default="dark", max_length=20)
 
 
+class UserUpdate(BaseModel):
+    """Payload used to partially update a user."""
+
+    language: str | None = Field(default=None, max_length=10)
+    theme: str | None = Field(default=None, max_length=20)
+    is_active: bool | None = None
+
+
 class UserRead(BaseModel):
     """Public representation of a user."""
 

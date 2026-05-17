@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.xp import XP_DAILY_LOG_SAVE, XP_TASK_COMPLETE, award_xp
 from app.models.daily_tracker import DailyLog, DailyTask
 from app.models.user import User
 from app.schemas.daily_tracker import (
@@ -112,10 +113,14 @@ def update_daily_task(
     if task is None:
         raise HTTPException(status_code=404, detail="Daily task not found.")
 
+    was_done = task.is_done
     update_data = payload.model_dump(exclude_unset=True)
 
     for field_name, field_value in update_data.items():
         setattr(task, field_name, field_value)
+
+    if not was_done and task.is_done:
+        award_xp(task.user_id, XP_TASK_COMPLETE, db)
 
     db.commit()
     db.refresh(task)
@@ -166,6 +171,7 @@ def upsert_daily_log(
         log.mood = payload.mood
         log.reflection = payload.reflection
 
+    award_xp(user_id, XP_DAILY_LOG_SAVE, db)
     db.commit()
     db.refresh(log)
     return log
