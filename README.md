@@ -25,6 +25,7 @@ PhDStudyLab is a lightweight web application designed to **gamify focused work s
 - Uvicorn
 - SQLAlchemy
 - Pydantic
+- Node.js (npm)
 
 #### Create a virtual environment if needed (recommended)
 
@@ -41,7 +42,11 @@ uvicorn app.main:app --reload
 
 ### Frontend
 
-Open frontend/index.html in your browser.
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
 ## 🔁 Example Workflow
 
