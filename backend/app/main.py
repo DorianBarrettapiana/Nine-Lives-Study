@@ -17,6 +17,7 @@ from app.api.routes.users import router as users_router
 from app.api.routes.xp import router as xp_router
 from app.core.config import APP_NAME, APP_VERSION
 from app.core.database import Base, engine
+from app.core.migrations import run_migrations
 
 # Import ORM models before creating tables.
 # This ensures that SQLAlchemy knows every table definition.
@@ -29,8 +30,10 @@ from app.models.session import Session  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.user_progress import UserProgress  # noqa: F401
 
-# Create missing database tables on startup.
+# Create missing database tables on startup, then apply ad-hoc migrations
+# (e.g. ALTER TABLE for newly-added columns on pre-existing tables).
 Base.metadata.create_all(bind=engine)
+run_migrations(engine)
 
 app = FastAPI(
     title=APP_NAME,

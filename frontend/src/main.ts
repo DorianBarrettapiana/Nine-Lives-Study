@@ -125,9 +125,37 @@ const APP_HTML = `
         <div id="pomodoro-view" class="hidden">
           <section class="card">
             <div class="section-header">
-              <div><h2>Pomodoro</h2><p class="hint">25 min work · 5 min break</p></div>
-              <span id="pomodoro-mode-badge" class="tag">Work</span>
+              <div>
+                <h2>Pomodoro</h2>
+                <p class="hint" id="pomodoro-mode-hint">25 min work · 5 min short break · 15 min long break every 4</p>
+              </div>
+              <div class="pomodoro-header-actions">
+                <span id="pomodoro-mode-badge" class="tag">Work</span>
+                <button id="pomodoro-settings-toggle" class="secondary" type="button" title="Pomodoro settings">⚙️</button>
+              </div>
             </div>
+
+            <div id="pomodoro-settings-panel" class="settings-panel hidden">
+              <form id="pomodoro-settings-form" class="form">
+                <div class="settings-grid">
+                  <label>Work (min)
+                    <input id="pomodoro-setting-work" type="number" min="1" max="240" required />
+                  </label>
+                  <label>Short break (min)
+                    <input id="pomodoro-setting-short" type="number" min="1" max="60" required />
+                  </label>
+                  <label>Long break (min)
+                    <input id="pomodoro-setting-long" type="number" min="1" max="60" required />
+                  </label>
+                  <label>Sessions before long break
+                    <input id="pomodoro-setting-before-long" type="number" min="1" max="10" required />
+                  </label>
+                </div>
+                <div class="button-row"><button type="submit">Save settings</button></div>
+                <p id="pomodoro-settings-message" class="message"></p>
+              </form>
+            </div>
+
             <div class="pomodoro-timer">
               <div id="pomodoro-display" class="pomodoro-display">25:00</div>
               <div class="button-row">
@@ -281,6 +309,7 @@ function mountApp(user: UserRead): void {
   );
   TrackerView.init(() => Promise.all([TrackerView.refresh(), StatsView.refresh()]).then());
   PomodoroView.init(() => Promise.all([PomodoroView.refresh(), StatsView.refresh()]).then());
+  PomodoroView.setUser(user);  // pass settings (work/break durations etc.) to the timer
   MoodView.init(() => Promise.all([MoodView.refresh(), StatsView.refresh()]).then());
   StatsView.init(() => StatsView.refresh());
 

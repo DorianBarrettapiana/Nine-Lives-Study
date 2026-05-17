@@ -18,6 +18,12 @@ class UserUpdate(BaseModel):
     theme: str | None = Field(default=None, max_length=20)
     is_active: bool | None = None
 
+    # Pomodoro settings
+    pomodoro_work_minutes: int | None = Field(default=None, ge=1, le=240)
+    pomodoro_short_break_minutes: int | None = Field(default=None, ge=1, le=60)
+    pomodoro_long_break_minutes: int | None = Field(default=None, ge=1, le=60)
+    pomodoro_sessions_before_long_break: int | None = Field(default=None, ge=1, le=10)
+
 
 class UserRead(BaseModel):
     """Public representation of a user."""
@@ -27,5 +33,10 @@ class UserRead(BaseModel):
     language: str
     theme: str
     is_active: bool
+
+    pomodoro_work_minutes: int
+    pomodoro_short_break_minutes: int
+    pomodoro_long_break_minutes: int
+    pomodoro_sessions_before_long_break: int
 
     model_config = {"from_attributes": True}
