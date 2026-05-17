@@ -233,3 +233,6 @@ dist-ssr
 
 # Database
 *.db
+
+# Claude.ai
+.claude
