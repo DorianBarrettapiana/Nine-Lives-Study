@@ -61,7 +61,7 @@ app.innerHTML = `
           <p class="hint" id="xp-label">0 / 100 XP</p>
         </section>
 
-        <section class="card">
+        <section class="card" style="display:none">
           <h2>Roadmap</h2>
           <ol class="roadmap">
             <li class="done">Users</li>

@@ -54,6 +54,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  line-height: 1.6;
   background:
     radial-gradient(circle at top left, rgba(79, 70, 229, 0.18), transparent 30rem),
     var(--bg);
@@ -107,10 +108,19 @@ select,
 textarea {
   width: 100%;
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
-  padding: 0.75rem;
+  border-radius: 10px;
+  padding: 0.65rem 0.875rem;
   background: var(--bg-input);
   color: var(--text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 
 textarea {
@@ -123,7 +133,8 @@ label {
   display: grid;
   gap: 0.4rem;
   color: var(--text-soft);
-  font-weight: 650;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 
 h1,
@@ -140,18 +151,22 @@ h1 {
 }
 
 h2 {
-  margin-bottom: 1rem;
-  font-size: 1.1rem;
+  margin-bottom: 0.875rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 
 h3 {
   margin-bottom: 0.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 
 .app-shell {
   width: min(1200px, 100%);
   margin: 0 auto;
-  padding: 2rem;
+  padding: clamp(1rem, 3vw, 2rem);
 }
 
 .topbar {
@@ -162,10 +177,16 @@ h3 {
   margin-bottom: 1.5rem;
 }
 
-.subtitle,
+.subtitle {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin-bottom: 0;
+}
+
 .hint,
 .note-meta {
   color: var(--text-muted);
+  font-size: 0.875rem;
 }
 
 .current-user {
@@ -187,8 +208,8 @@ h3 {
 
 .layout {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  gap: 1rem;
+  grid-template-columns: 270px minmax(0, 1fr);
+  gap: 1.25rem;
   align-items: start;
 }
 
@@ -200,10 +221,10 @@ h3 {
 
 .card {
   border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 1.25rem;
+  border-radius: 18px;
+  padding: 1.5rem;
   background: var(--bg-card);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
 }
 
 .form,
@@ -341,27 +362,40 @@ h3 {
 
 .feature-tabs {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.35rem;
   margin-bottom: 1rem;
-  padding: 0.35rem;
+  padding: 0.3rem;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--bg-card);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.feature-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .feature-tab {
-  flex: 1;
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.875rem;
   background: transparent;
   color: var(--text-muted);
   border: none;
+  border-radius: 999px;
+  transition: background 0.15s, color 0.15s;
 }
 
 .feature-tab:hover {
   background: var(--bg-muted);
+  color: var(--text-soft);
 }
 
 .feature-tab.active {
-  background: #6366f1;
+  background: var(--accent);
   color: white;
 }
 
@@ -458,9 +492,14 @@ h3 {
   gap: 0.75rem;
   align-items: center;
   border: 1px solid var(--border-soft);
-  border-radius: 14px;
-  padding: 0.75rem;
+  border-radius: 12px;
+  padding: 0.65rem 0.875rem;
   background: var(--bg-item);
+  transition: border-color 0.15s;
+}
+
+.task-item:hover {
+  border-color: var(--accent);
 }
 
 .task-checkbox {
@@ -598,14 +637,17 @@ h3 {
 }
 
 .stat-card strong {
-  font-size: 2rem;
+  font-size: 2.2rem;
   font-weight: 800;
+  letter-spacing: -0.03em;
   color: var(--text-accent);
+  line-height: 1.1;
 }
 
 .stat-card span {
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
+  line-height: 1.3;
 }
 
 .stats-chart {
