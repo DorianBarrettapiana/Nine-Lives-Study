@@ -3,22 +3,20 @@
  */
 
 import "./style.css";
-import * as UsersView from "./views/users";
-import * as NotesView from "./views/notes";
+import { ApiError, UnauthorizedError } from "./api/client";
+import { getMe, logout, type UserRead } from "./api/users";
+import { applyTheme } from "./theme";
+import { showAuthScreen } from "./views/auth";
 import * as FeynmanView from "./views/feynman";
-import * as TrackerView from "./views/tracker";
-import * as PomodoroView from "./views/pomodoro";
 import * as MoodView from "./views/mood";
+import * as NotesView from "./views/notes";
+import * as PomodoroView from "./views/pomodoro";
 import * as StatsView from "./views/stats";
+import * as TrackerView from "./views/tracker";
 
 type AppView = "notes" | "feynman" | "tracker" | "pomodoro" | "stats" | "mood";
 
-let currentView: AppView = "notes";
-
-const app = document.querySelector<HTMLDivElement>("#app");
-if (!app) throw new Error("Could not find #app root element.");
-
-app.innerHTML = `
+const APP_HTML = `
   <div class="app-shell">
     <header class="topbar">
       <div>
@@ -26,52 +24,17 @@ app.innerHTML = `
       </div>
       <div class="topbar-right">
         <button id="theme-toggle-button" class="theme-toggle" title="Toggle theme">☀️</button>
-        <div class="current-user" id="current-user-label">No user selected</div>
+        <div class="current-user" id="current-user-label">—</div>
+        <button id="logout-button" class="secondary" title="Log out">Log out</button>
       </div>
     </header>
 
     <main class="layout">
       <aside class="sidebar">
-        <section class="card">
-          <h2>Local user</h2>
-          <label>Existing user<select id="user-select"></select></label>
-          <div class="button-row">
-            <button id="select-user-button">Use this user</button>
-            <button type="button" id="new-user-toggle" class="secondary">New user</button>
-          </div>
-          <form id="user-form" class="form hidden">
-            <div class="divider"></div>
-            <label>New username<input id="username" type="text" placeholder="e.g. dorian" /></label>
-            <label>Language
-              <select id="language">
-                <option value="fr">Français</option>
-                <option value="en">English</option>
-                <option value="zh">中文</option>
-              </select>
-            </label>
-            <button type="submit">Create and use user</button>
-          </form>
-          <p id="user-message" class="message"></p>
-        </section>
-
         <section class="card" id="xp-card">
           <h2>Level <span id="xp-level">1</span></h2>
           <div class="xp-bar-wrap"><div class="xp-bar-fill" id="xp-bar-fill"></div></div>
           <p class="hint" id="xp-label">0 / 100 XP</p>
-        </section>
-
-        <section class="card" style="display:none">
-          <h2>Roadmap</h2>
-          <ol class="roadmap">
-            <li class="done">Users</li>
-            <li class="done">Paper notes</li>
-            <li class="done">Feynman</li>
-            <li class="done">Daily tracker</li>
-            <li class="done">Pomodoro</li>
-            <li class="done">Stats</li>
-            <li class="done">Gamification</li>
-            <li class="done">Mood journal</li>
-          </ol>
         </section>
       </aside>
 
@@ -232,62 +195,125 @@ app.innerHTML = `
   </div>
 `;
 
-const views: Record<AppView, HTMLElement> = {
-  notes: document.querySelector<HTMLDivElement>("#notes-view")!,
-  feynman: document.querySelector<HTMLDivElement>("#feynman-view")!,
-  tracker: document.querySelector<HTMLDivElement>("#tracker-view")!,
-  pomodoro: document.querySelector<HTMLDivElement>("#pomodoro-view")!,
-  mood: document.querySelector<HTMLDivElement>("#mood-view")!,
-  stats: document.querySelector<HTMLDivElement>("#stats-view")!,
-};
+let currentUser: UserRead | null = null;
+let currentView: AppView = "notes";
 
-const featureTabs = document.querySelectorAll<HTMLButtonElement>(".feature-tab");
+const app = document.querySelector<HTMLDivElement>("#app");
+if (!app) throw new Error("Could not find #app root element.");
 
-function switchView(view: AppView): void {
+function updateThemeButton(button: HTMLButtonElement, theme: string): void {
+  button.textContent = theme === "dark" ? "☀️" : "🌙";
+  button.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+}
+
+function switchView(views: Record<AppView, HTMLElement>, view: AppView): void {
   currentView = view;
   Object.entries(views).forEach(([key, el]) => el.classList.toggle("hidden", key !== view));
-  featureTabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.view === view));
+  document.querySelectorAll<HTMLButtonElement>(".feature-tab").forEach((tab) =>
+    tab.classList.toggle("active", tab.dataset.view === view),
+  );
 }
 
 async function refreshAll(): Promise<void> {
-  const user = UsersView.getCurrentUser();
-  await Promise.all([
-    NotesView.refresh(user),
-    FeynmanView.refresh(user),
-    TrackerView.refresh(user),
-    PomodoroView.refresh(user),
-    MoodView.refresh(user),
-    StatsView.refresh(user),
-  ]);
+  try {
+    await Promise.all([
+      NotesView.refresh(),
+      FeynmanView.refresh(),
+      TrackerView.refresh(),
+      PomodoroView.refresh(),
+      MoodView.refresh(),
+      StatsView.refresh(),
+    ]);
+  } catch (error) {
+    if (error instanceof UnauthorizedError) {
+      await handleSignedOut();
+    } else {
+      console.error(error);
+    }
+  }
 }
 
-async function onUserChanged(): Promise<void> {
-  await refreshAll();
+async function handleSignedOut(): Promise<void> {
+  currentUser = null;
+  await bootstrap();
 }
 
-// Init all view modules
-UsersView.init(onUserChanged);
-NotesView.init(
-  async () => { await NotesView.refresh(UsersView.getCurrentUser()); await StatsView.refresh(UsersView.getCurrentUser()); },
-  (v) => switchView(v as AppView),
-);
-FeynmanView.init(
-  async () => { await FeynmanView.refresh(UsersView.getCurrentUser()); await StatsView.refresh(UsersView.getCurrentUser()); },
-  (v) => switchView(v as AppView),
-);
-TrackerView.init(() => Promise.all([TrackerView.refresh(UsersView.getCurrentUser()), StatsView.refresh(UsersView.getCurrentUser())]).then());
-PomodoroView.init(() => Promise.all([PomodoroView.refresh(UsersView.getCurrentUser()), StatsView.refresh(UsersView.getCurrentUser())]).then());
-MoodView.init(() => Promise.all([MoodView.refresh(UsersView.getCurrentUser()), StatsView.refresh(UsersView.getCurrentUser())]).then());
-StatsView.init(() => StatsView.refresh(UsersView.getCurrentUser()));
+function mountApp(user: UserRead): void {
+  app!.innerHTML = APP_HTML;
+  applyTheme(user.theme);
 
-featureTabs.forEach((tab) => {
-  tab.addEventListener("click", () => {
-    const view = tab.dataset.view as AppView;
-    if (view in views) switchView(view);
+  const themeToggle = app!.querySelector<HTMLButtonElement>("#theme-toggle-button")!;
+  const userLabel = app!.querySelector<HTMLDivElement>("#current-user-label")!;
+  const logoutBtn = app!.querySelector<HTMLButtonElement>("#logout-button")!;
+
+  userLabel.textContent = user.username;
+  updateThemeButton(themeToggle, user.theme);
+
+  themeToggle.addEventListener("click", () => {
+    const isDark = !document.body.classList.contains("theme-light");
+    const next = isDark ? "light" : "dark";
+    applyTheme(next);
+    updateThemeButton(themeToggle, next);
   });
-});
 
-// Boot
-FeynmanView.renderInitial();
-switchView(currentView);
-void UsersView.refresh().then(() => refreshAll());
+  logoutBtn.addEventListener("click", async () => {
+    try { await logout(); } catch (error) { console.error(error); }
+    await handleSignedOut();
+  });
+
+  const views: Record<AppView, HTMLElement> = {
+    notes:    app!.querySelector<HTMLDivElement>("#notes-view")!,
+    feynman:  app!.querySelector<HTMLDivElement>("#feynman-view")!,
+    tracker:  app!.querySelector<HTMLDivElement>("#tracker-view")!,
+    pomodoro: app!.querySelector<HTMLDivElement>("#pomodoro-view")!,
+    mood:     app!.querySelector<HTMLDivElement>("#mood-view")!,
+    stats:    app!.querySelector<HTMLDivElement>("#stats-view")!,
+  };
+
+  // Init each view module
+  NotesView.init(
+    async () => { await NotesView.refresh(); await StatsView.refresh(); },
+    (v) => switchView(views, v as AppView),
+  );
+  FeynmanView.init(
+    async () => { await FeynmanView.refresh(); await StatsView.refresh(); },
+    (v) => switchView(views, v as AppView),
+  );
+  TrackerView.init(() => Promise.all([TrackerView.refresh(), StatsView.refresh()]).then());
+  PomodoroView.init(() => Promise.all([PomodoroView.refresh(), StatsView.refresh()]).then());
+  MoodView.init(() => Promise.all([MoodView.refresh(), StatsView.refresh()]).then());
+  StatsView.init(() => StatsView.refresh());
+
+  document.querySelectorAll<HTMLButtonElement>(".feature-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const view = tab.dataset.view as AppView;
+      if (view in views) switchView(views, view);
+    });
+  });
+
+  FeynmanView.renderInitial();
+  switchView(views, currentView);
+  void refreshAll();
+}
+
+async function bootstrap(): Promise<void> {
+  applyTheme("dark");
+  try {
+    currentUser = await getMe();
+  } catch (error) {
+    if (!(error instanceof UnauthorizedError) && !(error instanceof ApiError)) {
+      console.error("Unexpected error in bootstrap:", error);
+    }
+    currentUser = null;
+  }
+
+  if (currentUser) {
+    mountApp(currentUser);
+  } else {
+    const user = await showAuthScreen(app!);
+    currentUser = user;
+    mountApp(user);
+  }
+}
+
+void bootstrap();

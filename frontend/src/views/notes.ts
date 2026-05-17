@@ -4,7 +4,6 @@
 
 import { createNote, deleteNote, listNotes, updateNote, type PaperNoteRead } from "../api/notes";
 import { escapeHtml, setMessage } from "../utils";
-import type { UserRead } from "../api/users";
 
 let notesList: HTMLDivElement;
 let noteForm: HTMLFormElement;
@@ -35,11 +34,7 @@ function clearNoteForm(): void {
   noteCancelButton.classList.add("hidden");
 }
 
-export function render(currentUser: UserRead | null): void {
-  if (!currentUser) {
-    notesList.innerHTML = `<div class="empty-state">Select or create a user before managing paper notes.</div>`;
-    return;
-  }
+export function render(): void {
   if (notes.length === 0) {
     notesList.innerHTML = `<div class="empty-state">No paper note yet.</div>`;
     return;
@@ -66,11 +61,10 @@ export function render(currentUser: UserRead | null): void {
   }).join("");
 }
 
-export async function refresh(currentUser: UserRead | null): Promise<void> {
-  if (!currentUser) { notes = []; render(null); return; }
+export async function refresh(): Promise<void> {
   try {
-    notes = await listNotes(currentUser.id);
-    render(currentUser);
+    notes = await listNotes();
+    render();
   } catch (error) {
     console.error(error);
     setMessage(noteMessage, "Could not load notes.", "error");
@@ -105,9 +99,7 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
     };
     try {
       if (editedNoteId === null) {
-        const user = (await import("../views/users")).getCurrentUser();
-        if (!user) { setMessage(noteMessage, "Select or create a user first.", "error"); return; }
-        await createNote(user.id, payload);
+        await createNote(payload);
         setMessage(noteMessage, "Note created. +10 XP", "success");
       } else {
         await updateNote(editedNoteId, payload);

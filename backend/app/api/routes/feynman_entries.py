@@ -1,9 +1,10 @@
-"""Feynman entry routes."""
+"""Feynman entry routes (scoped to current user)."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.core.xp import XP_FEYNMAN_CREATE, award_xp
 from app.models.feynman_entry import FeynmanEntry
@@ -14,83 +15,71 @@ from app.schemas.feynman_entry import (
     FeynmanEntryUpdate,
 )
 
-router = APIRouter(tags=["feynman"])
+router = APIRouter(prefix="/feynman", tags=["feynman"])
 
 
-@router.get("/users/{user_id}/feynman", response_model=list[FeynmanEntryRead])
-def list_user_feynman_entries(
-    user_id: int,
+def _get_owned_entry(entry_id: int, current_user: User, db: Session) -> FeynmanEntry:
+    entry = db.get(FeynmanEntry, entry_id)
+    if entry is None or entry.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feynman entry not found.")
+    return entry
+
+
+@router.get("", response_model=list[FeynmanEntryRead])
+def list_feynman_entries(
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[FeynmanEntry]:
-    """Return all Feynman entries attached to a user."""
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
-
     statement = (
         select(FeynmanEntry)
-        .where(FeynmanEntry.user_id == user_id)
+        .where(FeynmanEntry.user_id == current_user.id)
         .order_by(FeynmanEntry.updated_at.desc())
     )
     return list(db.scalars(statement).all())
 
 
-@router.post("/users/{user_id}/feynman", response_model=FeynmanEntryRead, status_code=201)
-def create_user_feynman_entry(
-    user_id: int,
+@router.post("", response_model=FeynmanEntryRead, status_code=201)
+def create_feynman_entry(
     payload: FeynmanEntryCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FeynmanEntry:
-    """Create a Feynman entry for a user."""
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
-
     entry = FeynmanEntry(
-        user_id=user_id,
+        user_id=current_user.id,
         concept=payload.concept,
         explanation=payload.explanation,
         gaps=payload.gaps,
         analogy=payload.analogy,
     )
-
     db.add(entry)
-    award_xp(user_id, XP_FEYNMAN_CREATE, db)
+    award_xp(current_user.id, XP_FEYNMAN_CREATE, db)
     db.commit()
     db.refresh(entry)
     return entry
 
 
-@router.patch("/feynman/{entry_id}", response_model=FeynmanEntryRead)
+@router.patch("/{entry_id}", response_model=FeynmanEntryRead)
 def update_feynman_entry(
     entry_id: int,
     payload: FeynmanEntryUpdate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FeynmanEntry:
-    """Update an existing Feynman entry."""
-    entry = db.get(FeynmanEntry, entry_id)
-    if entry is None:
-        raise HTTPException(status_code=404, detail="Feynman entry not found.")
-
-    update_data = payload.model_dump(exclude_unset=True)
-
-    for field_name, field_value in update_data.items():
+    entry = _get_owned_entry(entry_id, current_user, db)
+    data = payload.model_dump(exclude_unset=True)
+    for field_name, field_value in data.items():
         setattr(entry, field_name, field_value)
-
     db.commit()
     db.refresh(entry)
     return entry
 
 
-@router.delete("/feynman/{entry_id}", status_code=204)
+@router.delete("/{entry_id}", status_code=204)
 def delete_feynman_entry(
     entry_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> None:
-    """Delete a Feynman entry."""
-    entry = db.get(FeynmanEntry, entry_id)
-    if entry is None:
-        raise HTTPException(status_code=404, detail="Feynman entry not found.")
-
+    entry = _get_owned_entry(entry_id, current_user, db)
     db.delete(entry)
     db.commit()

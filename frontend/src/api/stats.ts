@@ -40,10 +40,10 @@ export interface UserProgressRead {
   xp_to_next_level: number;
 }
 
-export async function getUserStats(userId: number, days = 7): Promise<UserStatsRead> {
-  return apiFetch<UserStatsRead>(`/users/${userId}/stats?days=${days}`);
+export async function getUserStats(days = 7): Promise<UserStatsRead> {
+  return apiFetch<UserStatsRead>(`/stats?days=${days}`);
 }
 
-export async function getUserXp(userId: number): Promise<UserProgressRead> {
-  return apiFetch<UserProgressRead>(`/users/${userId}/xp`);
+export async function getUserXp(): Promise<UserProgressRead> {
+  return apiFetch<UserProgressRead>("/xp");
 }

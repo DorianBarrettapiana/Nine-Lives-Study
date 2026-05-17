@@ -1,11 +1,12 @@
-"""Daily tracker routes."""
+"""Daily tracker routes (scoped to current user)."""
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.core.xp import XP_DAILY_LOG_SAVE, XP_TASK_COMPLETE, award_xp
 from app.models.daily_tracker import DailyLog, DailyTask
@@ -19,42 +20,38 @@ from app.schemas.daily_tracker import (
     DailyTaskUpdate,
 )
 
-router = APIRouter(tags=["daily-tracker"])
+router = APIRouter(prefix="/daily", tags=["daily-tracker"])
 
 
 def resolve_target_date(value: date | None) -> date:
-    """Return the requested date or today's local server date."""
     return value or date.today()
 
 
-def ensure_user_exists(user_id: int, db: Session) -> User:
-    """Return a user or raise a 404 error."""
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
-    return user
-
-
 def compute_completion_percent(done_count: int, total_count: int) -> int:
-    """Compute a rounded task completion percentage."""
     if total_count == 0:
         return 0
     return round(done_count / total_count * 100)
 
 
-@router.get("/users/{user_id}/daily", response_model=DailyStateRead)
+def _get_owned_task(task_id: int, current_user: User, db: Session) -> DailyTask:
+    task = db.get(DailyTask, task_id)
+    if task is None or task.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Daily task not found.")
+    return task
+
+
+@router.get("", response_model=DailyStateRead)
 def get_daily_state(
-    user_id: int,
     target_date: date | None = Query(default=None, alias="date"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DailyStateRead:
-    """Return tasks and daily log for a user at a given date."""
-    ensure_user_exists(user_id, db)
+    """Return tasks and daily log for the current user at a given date."""
     day = resolve_target_date(target_date)
 
     tasks_statement = (
         select(DailyTask)
-        .where(DailyTask.user_id == user_id)
+        .where(DailyTask.user_id == current_user.id)
         .where(DailyTask.task_date == day)
         .order_by(DailyTask.created_at.asc())
     )
@@ -62,7 +59,7 @@ def get_daily_state(
 
     log_statement = (
         select(DailyLog)
-        .where(DailyLog.user_id == user_id)
+        .where(DailyLog.user_id == current_user.id)
         .where(DailyLog.log_date == day)
     )
     log = db.scalar(log_statement)
@@ -80,43 +77,36 @@ def get_daily_state(
     )
 
 
-@router.post("/users/{user_id}/daily/tasks", response_model=DailyTaskRead, status_code=201)
+@router.post("/tasks", response_model=DailyTaskRead, status_code=201)
 def create_daily_task(
-    user_id: int,
     payload: DailyTaskCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DailyTask:
-    """Create a daily task for a user."""
-    ensure_user_exists(user_id, db)
-
     task = DailyTask(
-        user_id=user_id,
+        user_id=current_user.id,
         task_date=resolve_target_date(payload.task_date),
         text=payload.text,
         is_done=False,
     )
-
     db.add(task)
     db.commit()
     db.refresh(task)
     return task
 
 
-@router.patch("/daily/tasks/{task_id}", response_model=DailyTaskRead)
+@router.patch("/tasks/{task_id}", response_model=DailyTaskRead)
 def update_daily_task(
     task_id: int,
     payload: DailyTaskUpdate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DailyTask:
-    """Update a daily task."""
-    task = db.get(DailyTask, task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Daily task not found.")
-
+    task = _get_owned_task(task_id, current_user, db)
     was_done = task.is_done
-    update_data = payload.model_dump(exclude_unset=True)
 
-    for field_name, field_value in update_data.items():
+    data = payload.model_dump(exclude_unset=True)
+    for field_name, field_value in data.items():
         setattr(task, field_name, field_value)
 
     if not was_done and task.is_done:
@@ -127,41 +117,35 @@ def update_daily_task(
     return task
 
 
-@router.delete("/daily/tasks/{task_id}", status_code=204)
+@router.delete("/tasks/{task_id}", status_code=204)
 def delete_daily_task(
     task_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> None:
-    """Delete a daily task."""
-    task = db.get(DailyTask, task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Daily task not found.")
-
+    task = _get_owned_task(task_id, current_user, db)
     db.delete(task)
     db.commit()
 
 
-@router.put("/users/{user_id}/daily/log", response_model=DailyLogRead)
+@router.put("/log", response_model=DailyLogRead)
 def upsert_daily_log(
-    user_id: int,
     payload: DailyLogUpsert,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DailyLog:
-    """Create or update a daily log for a user."""
-    ensure_user_exists(user_id, db)
-
     day = resolve_target_date(payload.log_date)
 
     statement = (
         select(DailyLog)
-        .where(DailyLog.user_id == user_id)
+        .where(DailyLog.user_id == current_user.id)
         .where(DailyLog.log_date == day)
     )
     log = db.scalar(statement)
 
     if log is None:
         log = DailyLog(
-            user_id=user_id,
+            user_id=current_user.id,
             log_date=day,
             mood=payload.mood,
             reflection=payload.reflection,
@@ -171,7 +155,7 @@ def upsert_daily_log(
         log.mood = payload.mood
         log.reflection = payload.reflection
 
-    award_xp(user_id, XP_DAILY_LOG_SAVE, db)
+    award_xp(current_user.id, XP_DAILY_LOG_SAVE, db)
     db.commit()
     db.refresh(log)
     return log

@@ -12,15 +12,14 @@ export interface MoodEntryRead {
   created_at: string;
 }
 
-export async function listMoodEntries(userId: number, days = 30): Promise<MoodEntryRead[]> {
-  return apiFetch<MoodEntryRead[]>(`/users/${userId}/mood?days=${days}`);
+export async function listMoodEntries(days = 30): Promise<MoodEntryRead[]> {
+  return apiFetch<MoodEntryRead[]>(`/mood?days=${days}`);
 }
 
 export async function createMoodEntry(
-  userId: number,
   payload: { mood: string; reflection: string },
 ): Promise<MoodEntryRead> {
-  return apiFetch<MoodEntryRead>(`/users/${userId}/mood`, {
+  return apiFetch<MoodEntryRead>("/mood", {
     method: "POST",
     body: JSON.stringify(payload),
   });

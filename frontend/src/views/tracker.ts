@@ -7,7 +7,6 @@ import {
   saveDailyLog, updateDailyTask, type DailyStateRead,
 } from "../api/tracker";
 import { escapeHtml, setMessage } from "../utils";
-import type { UserRead } from "../api/users";
 
 const MOODS = [
   { emoji: "😩", label: "Exhausted" },
@@ -31,14 +30,7 @@ let trackerMessage: HTMLParagraphElement;
 let dailyState: DailyStateRead | null = null;
 let selectedMood = "";
 
-export function render(currentUser: UserRead | null): void {
-  if (!currentUser) {
-    taskList.innerHTML = `<div class="empty-state">Select or create a user before using the daily tracker.</div>`;
-    trackerPercent.textContent = "0%";
-    trackerProgressFill.style.width = "0%";
-    trackerCount.textContent = "0 / 0 tasks done";
-    return;
-  }
+export function render(): void {
   if (!dailyState) {
     taskList.innerHTML = `<div class="empty-state">Daily tracker not loaded yet.</div>`;
     return;
@@ -66,11 +58,10 @@ export function render(currentUser: UserRead | null): void {
     </button>`).join("");
 }
 
-export async function refresh(currentUser: UserRead | null): Promise<void> {
-  if (!currentUser) { dailyState = null; render(null); return; }
+export async function refresh(): Promise<void> {
   try {
-    dailyState = await getDailyState(currentUser.id);
-    render(currentUser);
+    dailyState = await getDailyState();
+    render();
   } catch (error) {
     console.error(error);
     setMessage(trackerMessage, "Could not load daily tracker.", "error");
@@ -91,13 +82,10 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
 
   taskForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const { getCurrentUser } = await import("../views/users");
-    const user = getCurrentUser();
-    if (!user) { setMessage(trackerMessage, "Select or create a user first.", "error"); return; }
     const text = taskInput.value.trim();
     if (!text) { setMessage(trackerMessage, "Task text is required.", "error"); return; }
     try {
-      await createDailyTask(user.id, { text });
+      await createDailyTask({ text });
       taskInput.value = "";
       setMessage(trackerMessage, "Task created.", "success");
       await onRefreshNeeded();
@@ -140,11 +128,8 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
   });
 
   saveLogButton.addEventListener("click", async () => {
-    const { getCurrentUser } = await import("../views/users");
-    const user = getCurrentUser();
-    if (!user) { setMessage(trackerMessage, "Select or create a user first.", "error"); return; }
     try {
-      await saveDailyLog(user.id, { mood: selectedMood, reflection: reflectionInput.value.trim() });
+      await saveDailyLog({ mood: selectedMood, reflection: reflectionInput.value.trim() });
       setMessage(trackerMessage, "Daily log saved. +5 XP", "success");
       await onRefreshNeeded();
     } catch (error) {

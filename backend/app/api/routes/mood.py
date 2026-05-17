@@ -1,12 +1,13 @@
-"""Mood entry routes."""
+"""Mood entry routes (scoped to current user)."""
 
 import datetime as dt
 from datetime import timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.core.xp import award_xp
 from app.models.mood_entry import MoodEntry
@@ -15,54 +16,47 @@ from app.schemas.mood_entry import MoodEntryCreate, MoodEntryRead
 
 XP_MOOD_LOG = 3
 
-router = APIRouter(tags=["mood"])
+router = APIRouter(prefix="/mood", tags=["mood"])
 
 
-@router.get("/users/{user_id}/mood", response_model=list[MoodEntryRead])
+@router.get("", response_model=list[MoodEntryRead])
 def list_mood_entries(
-    user_id: int,
     days: int = Query(default=30, ge=1, le=365),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[MoodEntry]:
-    """Return mood entries for a user, most recent first, within the last N days."""
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
-
     since = dt.datetime.now(timezone.utc) - dt.timedelta(days=days)
     stmt = (
         select(MoodEntry)
-        .where(MoodEntry.user_id == user_id)
+        .where(MoodEntry.user_id == current_user.id)
         .where(MoodEntry.created_at >= since)
         .order_by(MoodEntry.created_at.desc())
     )
     return list(db.scalars(stmt).all())
 
 
-@router.post("/users/{user_id}/mood", response_model=MoodEntryRead, status_code=201)
+@router.post("", response_model=MoodEntryRead, status_code=201)
 def create_mood_entry(
-    user_id: int,
     payload: MoodEntryCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MoodEntry:
-    """Record a mood entry for a user."""
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
-
-    entry = MoodEntry(user_id=user_id, mood=payload.mood, reflection=payload.reflection)
+    entry = MoodEntry(user_id=current_user.id, mood=payload.mood, reflection=payload.reflection)
     db.add(entry)
-    award_xp(user_id, XP_MOOD_LOG, db)
+    award_xp(current_user.id, XP_MOOD_LOG, db)
     db.commit()
     db.refresh(entry)
     return entry
 
 
-@router.delete("/mood/{entry_id}", status_code=204)
-def delete_mood_entry(entry_id: int, db: Session = Depends(get_db)) -> None:
-    """Delete a mood entry."""
+@router.delete("/{entry_id}", status_code=204)
+def delete_mood_entry(
+    entry_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
     entry = db.get(MoodEntry, entry_id)
-    if entry is None:
-        raise HTTPException(status_code=404, detail="Mood entry not found.")
+    if entry is None or entry.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mood entry not found.")
     db.delete(entry)
     db.commit()

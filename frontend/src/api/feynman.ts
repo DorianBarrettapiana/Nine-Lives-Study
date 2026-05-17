@@ -29,15 +29,14 @@ export interface FeynmanEntryUpdate {
   analogy?: string;
 }
 
-export async function listFeynmanEntries(userId: number): Promise<FeynmanEntryRead[]> {
-  return apiFetch<FeynmanEntryRead[]>(`/users/${userId}/feynman`);
+export async function listFeynmanEntries(): Promise<FeynmanEntryRead[]> {
+  return apiFetch<FeynmanEntryRead[]>("/feynman");
 }
 
 export async function createFeynmanEntry(
-  userId: number,
   payload: FeynmanEntryCreate,
 ): Promise<FeynmanEntryRead> {
-  return apiFetch<FeynmanEntryRead>(`/users/${userId}/feynman`, {
+  return apiFetch<FeynmanEntryRead>("/feynman", {
     method: "POST",
     body: JSON.stringify(payload),
   });

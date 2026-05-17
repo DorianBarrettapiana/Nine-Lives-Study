@@ -35,15 +35,12 @@ export interface PaperNoteUpdate {
   tags?: string;
 }
 
-export async function listNotes(userId: number): Promise<PaperNoteRead[]> {
-  return apiFetch<PaperNoteRead[]>(`/users/${userId}/notes`);
+export async function listNotes(): Promise<PaperNoteRead[]> {
+  return apiFetch<PaperNoteRead[]>("/notes");
 }
 
-export async function createNote(
-  userId: number,
-  payload: PaperNoteCreate,
-): Promise<PaperNoteRead> {
-  return apiFetch<PaperNoteRead>(`/users/${userId}/notes`, {
+export async function createNote(payload: PaperNoteCreate): Promise<PaperNoteRead> {
+  return apiFetch<PaperNoteRead>("/notes", {
     method: "POST",
     body: JSON.stringify(payload),
   });

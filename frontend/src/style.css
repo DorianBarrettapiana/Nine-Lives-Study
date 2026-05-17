@@ -828,3 +828,60 @@ h3 {
   margin-top: 0.2rem;
 }
 .link-btn:hover { text-decoration: underline; }
+/* --- Auth screen ---------------------------------------------------------- */
+
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.auth-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid var(--border);
+}
+.auth-topbar h1 {
+  font-size: 1.4rem;
+  margin: 0;
+}
+.auth-card-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+}
+.auth-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.25rem;
+}
+.auth-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  padding: 0.75rem;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+}
+.auth-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.auth-hint {
+  margin-top: 1rem;
+  font-size: 0.8rem;
+}
+#auth-submit {
+  width: 100%;
+  margin-top: 0.5rem;
+}

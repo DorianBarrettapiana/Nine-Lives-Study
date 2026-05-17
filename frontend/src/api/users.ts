@@ -1,5 +1,5 @@
 /**
- * User API functions.
+ * User & auth API functions.
  */
 
 import { apiFetch } from "./client";
@@ -12,40 +12,53 @@ export interface UserRead {
   is_active: boolean;
 }
 
-export interface UserCreate {
+export interface RegisterPayload {
   username: string;
-  language: string;
-  theme: string;
+  password: string;
+  invite_code: string;
+  language?: string;
+  theme?: string;
+}
+
+export interface LoginPayload {
+  username: string;
+  password: string;
 }
 
 export interface UserUpdate {
   language?: string;
   theme?: string;
-  is_active?: boolean;
 }
 
-export async function listUsers(): Promise<UserRead[]> {
-  return apiFetch<UserRead[]>("/users");
-}
-
-export async function getUser(userId: number): Promise<UserRead> {
-  return apiFetch<UserRead>(`/users/${userId}`);
-}
-
-export async function createUser(payload: UserCreate): Promise<UserRead> {
-  return apiFetch<UserRead>("/users", {
+export async function register(payload: RegisterPayload): Promise<UserRead> {
+  return apiFetch<UserRead>("/auth/register", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export async function updateUser(userId: number, payload: UserUpdate): Promise<UserRead> {
-  return apiFetch<UserRead>(`/users/${userId}`, {
+export async function login(payload: LoginPayload): Promise<UserRead> {
+  return apiFetch<UserRead>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function logout(): Promise<void> {
+  await apiFetch<void>("/auth/logout", { method: "POST" });
+}
+
+export async function getMe(): Promise<UserRead> {
+  return apiFetch<UserRead>("/auth/me");
+}
+
+export async function updateMe(payload: UserUpdate): Promise<UserRead> {
+  return apiFetch<UserRead>("/users/me", {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
 }
 
-export async function deleteUser(userId: number): Promise<void> {
-  await apiFetch<void>(`/users/${userId}`, { method: "DELETE" });
+export async function deleteMe(): Promise<void> {
+  await apiFetch<void>("/users/me", { method: "DELETE" });
 }

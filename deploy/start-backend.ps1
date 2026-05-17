@@ -7,6 +7,15 @@ $BackendDir = "D:\Documents\Dev\srv\PhD-Study-Lab\backend"
 $PythonExe  = "C:\Users\barre\miniforge3\envs\dev\python.exe"
 $LogFile    = "C:\srv\backend\backend.log"
 
+# INVITE_CODE: required to allow account registration. Read from Machine env var
+# (set by install-services.ps1) or from C:\srv\backend\.invite-code as fallback.
+if (-not $env:INVITE_CODE) {
+    $tokenFile = "C:\srv\backend\.invite-code"
+    if (Test-Path $tokenFile) {
+        $env:INVITE_CODE = (Get-Content $tokenFile -Raw).Trim()
+    }
+}
+
 $logDir = Split-Path $LogFile -Parent
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
 

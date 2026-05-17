@@ -14,16 +14,15 @@ export interface PomodoroSessionRead {
   ended_at: string | null;
 }
 
-export async function listSessions(userId: number): Promise<PomodoroSessionRead[]> {
-  return apiFetch<PomodoroSessionRead[]>(`/users/${userId}/pomodoro`);
+export async function listSessions(): Promise<PomodoroSessionRead[]> {
+  return apiFetch<PomodoroSessionRead[]>("/pomodoro");
 }
 
 export async function startSession(
-  userId: number,
   sessionType: "work" | "break",
   durationMinutes: number,
 ): Promise<PomodoroSessionRead> {
-  return apiFetch<PomodoroSessionRead>(`/users/${userId}/pomodoro`, {
+  return apiFetch<PomodoroSessionRead>("/pomodoro", {
     method: "POST",
     body: JSON.stringify({ session_type: sessionType, duration_minutes: durationMinutes }),
   });
