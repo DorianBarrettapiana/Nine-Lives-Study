@@ -23,9 +23,11 @@ app.innerHTML = `
     <header class="topbar">
       <div>
         <h1>PhDStudyLab</h1>
-        <p class="subtitle">Clean rebuild — HTML/CSS/TypeScript + Python backend</p>
       </div>
-      <div class="current-user" id="current-user-label">No user selected</div>
+      <div class="topbar-right">
+        <button id="theme-toggle-button" class="theme-toggle" title="Toggle theme">☀️</button>
+        <div class="current-user" id="current-user-label">No user selected</div>
+      </div>
     </header>
 
     <main class="layout">
@@ -33,21 +35,18 @@ app.innerHTML = `
         <section class="card">
           <h2>Local user</h2>
           <label>Existing user<select id="user-select"></select></label>
-          <button id="select-user-button">Use this user</button>
-          <div class="divider"></div>
-          <form id="user-form" class="form">
+          <div class="button-row">
+            <button id="select-user-button">Use this user</button>
+            <button type="button" id="new-user-toggle" class="secondary">+ New user</button>
+          </div>
+          <form id="user-form" class="form hidden">
+            <div class="divider"></div>
             <label>New username<input id="username" type="text" placeholder="e.g. dorian" /></label>
             <label>Language
               <select id="language">
                 <option value="fr">Français</option>
                 <option value="en">English</option>
                 <option value="zh">中文</option>
-              </select>
-            </label>
-            <label>Theme
-              <select id="theme">
-                <option value="dark">dark</option>
-                <option value="light">light</option>
               </select>
             </label>
             <button type="submit">Create and use user</button>

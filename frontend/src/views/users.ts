@@ -10,12 +10,13 @@ const CURRENT_USER_ID_KEY = "phdstudylab_current_user_id";
 
 let userSelect: HTMLSelectElement;
 let selectUserButton: HTMLButtonElement;
+let newUserToggle: HTMLButtonElement;
 let userForm: HTMLFormElement;
 let usernameInput: HTMLInputElement;
 let languageSelect: HTMLSelectElement;
-let themeSelect: HTMLSelectElement;
 let userMessage: HTMLParagraphElement;
 let currentUserLabel: HTMLDivElement;
+let themeToggleButton: HTMLButtonElement;
 
 let users: UserRead[] = [];
 let currentUser: UserRead | null = null;
@@ -41,16 +42,24 @@ function renderUserSelect(): void {
   if (currentUser) userSelect.value = String(currentUser.id);
 }
 
+function updateThemeButton(theme: string): void {
+  if (!themeToggleButton) return;
+  themeToggleButton.textContent = theme === "dark" ? "☀️" : "🌙";
+  themeToggleButton.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+}
+
 export function renderCurrentUser(): void {
   if (!currentUser) {
     currentUserLabel.textContent = "No user selected";
     currentUserLabel.className = "current-user warning";
     applyTheme("dark");
+    updateThemeButton("dark");
     return;
   }
-  currentUserLabel.textContent = `Current user: ${currentUser.username}`;
+  currentUserLabel.textContent = currentUser.username;
   currentUserLabel.className = "current-user";
   applyTheme(currentUser.theme);
+  updateThemeButton(currentUser.theme);
 }
 
 export async function refresh(): Promise<void> {
@@ -74,22 +83,42 @@ export function init(onUserChanged: () => Promise<void>): void {
   currentUserLabel = document.querySelector<HTMLDivElement>("#current-user-label")!;
   userSelect = document.querySelector<HTMLSelectElement>("#user-select")!;
   selectUserButton = document.querySelector<HTMLButtonElement>("#select-user-button")!;
+  newUserToggle = document.querySelector<HTMLButtonElement>("#new-user-toggle")!;
   userForm = document.querySelector<HTMLFormElement>("#user-form")!;
   usernameInput = document.querySelector<HTMLInputElement>("#username")!;
   languageSelect = document.querySelector<HTMLSelectElement>("#language")!;
-  themeSelect = document.querySelector<HTMLSelectElement>("#theme")!;
   userMessage = document.querySelector<HTMLParagraphElement>("#user-message")!;
+  themeToggleButton = document.querySelector<HTMLButtonElement>("#theme-toggle-button")!;
+
+  // Theme toggle — independent of user
+  themeToggleButton.addEventListener("click", () => {
+    const isDark = document.body.classList.contains("theme-dark") || !document.body.classList.contains("theme-light");
+    const next = isDark ? "light" : "dark";
+    applyTheme(next);
+    updateThemeButton(next);
+  });
+
+  // New user form collapse toggle
+  newUserToggle.addEventListener("click", () => {
+    const isHidden = userForm.classList.contains("hidden");
+    userForm.classList.toggle("hidden", !isHidden);
+    newUserToggle.textContent = isHidden ? "− Cancel" : "+ New user";
+    if (isHidden) usernameInput.focus();
+  });
 
   userForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const username = usernameInput.value.trim();
     if (!username) { setMessage(userMessage, "Username is required.", "error"); return; }
+    const activeTheme = document.body.classList.contains("theme-light") ? "light" : "dark";
     try {
-      const user = await createUser({ username, language: languageSelect.value, theme: themeSelect.value });
+      const user = await createUser({ username, language: languageSelect.value, theme: activeTheme });
       currentUser = user;
       storeCurrentUserId(user.id);
-      setMessage(userMessage, `User created and selected: ${user.username}`, "success");
+      setMessage(userMessage, `User created: ${user.username}`, "success");
       userForm.reset();
+      userForm.classList.add("hidden");
+      newUserToggle.textContent = "+ New user";
       await refresh();
       await onUserChanged();
     } catch (error) {
