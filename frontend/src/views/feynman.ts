@@ -126,7 +126,7 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
     try {
       if (editedFeynmanId === null) {
         await createFeynmanEntry(user.id, payload);
-        setMessage(feynmanMessage, "Feynman record created.", "success");
+        setMessage(feynmanMessage, "Feynman record created. +15 XP", "success");
       } else {
         await updateFeynmanEntry(editedFeynmanId, payload);
         setMessage(feynmanMessage, "Feynman record updated.", "success");

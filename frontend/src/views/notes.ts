@@ -110,7 +110,7 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
         const user = (await import("../views/users")).getCurrentUser();
         if (!user) { setMessage(noteMessage, "Select or create a user first.", "error"); return; }
         await createNote(user.id, payload);
-        setMessage(noteMessage, "Note created.", "success");
+        setMessage(noteMessage, "Note created. +10 XP", "success");
       } else {
         await updateNote(editedNoteId, payload);
         setMessage(noteMessage, "Note updated.", "success");

@@ -120,7 +120,11 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
     const task = dailyState.tasks.find((t) => t.id === taskId);
     if (!task) return;
     try {
-      if (action === "toggle") { await updateDailyTask(task.id, { is_done: !task.is_done }); await onRefreshNeeded(); }
+      if (action === "toggle") {
+        await updateDailyTask(task.id, { is_done: !task.is_done });
+        if (!task.is_done) setMessage(trackerMessage, "Task done! +10 XP", "success");
+        await onRefreshNeeded();
+      }
       else if (action === "delete") { await deleteDailyTask(task.id); setMessage(trackerMessage, "Task deleted.", "success"); await onRefreshNeeded(); }
     } catch (error) {
       console.error(error);
@@ -145,7 +149,7 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
     if (!user) { setMessage(trackerMessage, "Select or create a user first.", "error"); return; }
     try {
       await saveDailyLog(user.id, { mood: selectedMood, reflection: reflectionInput.value.trim() });
-      setMessage(trackerMessage, "Daily log saved.", "success");
+      setMessage(trackerMessage, "Daily log saved. +5 XP", "success");
       await onRefreshNeeded();
     } catch (error) {
       console.error(error);

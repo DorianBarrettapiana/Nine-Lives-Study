@@ -253,8 +253,14 @@ async function onUserChanged(): Promise<void> {
 
 // Init all view modules
 UsersView.init(onUserChanged);
-NotesView.init(() => NotesView.refresh(UsersView.getCurrentUser()), (v) => switchView(v as AppView));
-FeynmanView.init(() => FeynmanView.refresh(UsersView.getCurrentUser()), (v) => switchView(v as AppView));
+NotesView.init(
+  async () => { await NotesView.refresh(UsersView.getCurrentUser()); await StatsView.refresh(UsersView.getCurrentUser()); },
+  (v) => switchView(v as AppView),
+);
+FeynmanView.init(
+  async () => { await FeynmanView.refresh(UsersView.getCurrentUser()); await StatsView.refresh(UsersView.getCurrentUser()); },
+  (v) => switchView(v as AppView),
+);
 TrackerView.init(() => Promise.all([TrackerView.refresh(UsersView.getCurrentUser()), StatsView.refresh(UsersView.getCurrentUser())]).then());
 PomodoroView.init(() => Promise.all([PomodoroView.refresh(UsersView.getCurrentUser()), StatsView.refresh(UsersView.getCurrentUser())]).then());
 StatsView.init(() => StatsView.refresh(UsersView.getCurrentUser()));
