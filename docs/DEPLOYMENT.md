@@ -375,6 +375,12 @@ and write to `C:\srv\…`. Easiest: run it as **SYSTEM** via the official instal
 
 5. Verify in GitHub → **Settings → Actions → Runners**: the runner should appear with the green dot.
 
+6. **Allow PowerShell scripts to run** (one-time, in admin PowerShell). The runner uses `powershell.exe` and dot-sources GitHub-generated `.ps1` files, which fails with `UnauthorizedAccess` under the default `Restricted` policy:
+
+   ```powershell
+   Set-ExecutionPolicy -Scope LocalMachine -ExecutionPolicy RemoteSigned -Force
+   ```
+
 > ⚠️ **Why SYSTEM?** The deploy job calls `Stop-ScheduledTask` / `Start-ScheduledTask`, which require privileges over tasks owned by `SYSTEM`. Running the runner under a regular user account fails at deploy time. If you don't want the runner to have system access, an alternative is to run it as a regular account that's in the local Administrators group.
 
 ### 7.2 First run
