@@ -13,7 +13,7 @@
 
 import { completeSession, deleteSession, listSessions, startSession, type PomodoroSessionRead } from "../api/pomodoro";
 import { updateMe, type UserRead } from "../api/users";
-import { formatTime, setMessage } from "../utils";
+import { formatTime, parseApiDate, setMessage } from "../utils";
 
 type Mode = "work" | "short_break" | "long_break";
 
@@ -63,7 +63,7 @@ function todayCompletedWorkCount(): number {
   const today = new Date().toDateString();
   return sessions.filter(
     (s) => s.is_completed && s.session_type === "work" &&
-      new Date(s.started_at).toDateString() === today,
+      parseApiDate(s.started_at).toDateString() === today,
   ).length;
 }
 
@@ -165,7 +165,7 @@ export function render(): void {
   pomodoroList.innerHTML = [
     `<p class="hint">Today: <strong>${todayCompletedWorkCount()}</strong> work session(s) completed</p>`,
     ...sessions.slice(0, 20).map((s) => {
-      const when = new Date(s.started_at).toLocaleString(undefined,
+      const when = parseApiDate(s.started_at).toLocaleString(undefined,
         { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
       return `
       <div class="task-item">
