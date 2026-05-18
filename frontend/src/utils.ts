@@ -12,6 +12,14 @@ export function formatDate(value: string): string {
   return new Date(value).toLocaleString();
 }
 
+// SQLite returns naive datetime strings (no "Z"/"+00:00" suffix) even though
+// the values are always UTC. Without a suffix, JS treats the string as LOCAL
+// time, so UTC 10:30 would display as 10:30 instead of 12:30 in France (CEST).
+// This helper appends "Z" when no timezone info is present.
+export function parseApiDate(value: string): Date {
+  return new Date(/[Z+]/.test(value) ? value : value + "Z");
+}
+
 export function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60).toString().padStart(2, "0");
   const s = (seconds % 60).toString().padStart(2, "0");

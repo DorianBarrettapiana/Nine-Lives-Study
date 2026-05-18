@@ -8,7 +8,7 @@
 import { getUserStats, getUserXp, type UserProgressRead, type UserStatsRead } from "../api/stats";
 import { getDailyState, type DailyStateRead } from "../api/tracker";
 import { listSessions, type PomodoroSessionRead } from "../api/pomodoro";
-import { escapeHtml, makeDateLabel } from "../utils";
+import { escapeHtml, makeDateLabel, parseApiDate } from "../utils";
 
 let statsTotals: HTMLDivElement;
 let statsTasksChart: HTMLDivElement;
@@ -177,14 +177,14 @@ function renderPomodoroSection(): void {
   cutoff.setHours(0, 0, 0, 0);
 
   const completedWork = allSessions.filter(s =>
-    s.is_completed && s.session_type === "work" && new Date(s.started_at) >= cutoff
+    s.is_completed && s.session_type === "work" && parseApiDate(s.started_at) >= cutoff
   );
 
   const minutesByDay = new Map<string, number>();
   const periodMins: Record<string, number> = { morning: 0, afternoon: 0, evening: 0, night: 0 };
 
   for (const s of completedWork) {
-    const d = new Date(s.started_at);
+    const d = parseApiDate(s.started_at);
     const dateStr = localDateStr(d);
     minutesByDay.set(dateStr, (minutesByDay.get(dateStr) ?? 0) + s.duration_minutes);
     periodMins[timePeriodKey(d.getHours())] += s.duration_minutes;
