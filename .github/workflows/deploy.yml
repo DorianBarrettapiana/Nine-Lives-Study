@@ -22,8 +22,14 @@ jobs:
         # The prod working tree lives at the canonical path; the runner
         # workspace is somewhere else. We fetch + reset --hard so the prod
         # tree mirrors origin/main exactly (no stash, no merge surprises).
+        #
+        # The runner runs as SYSTEM but the prod tree is owned by a regular
+        # user, which trips git's "dubious ownership" guard. We mark the
+        # path as safe in SYSTEM's global git config; this is idempotent so
+        # repeating it every run is fine.
         run: |
           $RepoDir = "D:\Documents\Dev\srv\PhD-Study-Lab"
+          git config --global --add safe.directory "D:/Documents/Dev/srv/PhD-Study-Lab"
           Set-Location $RepoDir
           git fetch origin main
           git reset --hard origin/main
