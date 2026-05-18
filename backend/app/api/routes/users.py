@@ -1,14 +1,14 @@
 """User routes (self-only)."""
 
 from fastapi import APIRouter, Depends, Response, status
+from sqlalchemy import delete
+from sqlalchemy.orm import Session as DbSession
 
 from app.core.auth import clear_session_cookie, get_current_user
 from app.core.database import get_db
 from app.models.session import Session as SessionModel
 from app.models.user import User
 from app.schemas.user import UserRead, UserUpdate
-from sqlalchemy import delete
-from sqlalchemy.orm import Session as DbSession
 
 router = APIRouter(prefix="/users", tags=["users"])
 

@@ -8,7 +8,6 @@ it checks current schema first and only ALTERs if needed.
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
-
 # Map of (table, column) -> SQL fragment used to add it.
 # Each fragment must include a DEFAULT so existing rows get a valid value
 # without violating NOT NULL.

@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Run on the self-hosted runner installed on the prod PC. It has Python
+# (miniforge 'dev' env) and Node.js available system-wide, so the only thing
+# the workflow needs to do per-run is sync the latest deps and run the suite.
+jobs:
+  backend:
+    runs-on: [self-hosted, Windows]
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install backend deps
+        working-directory: backend
+        run: |
+          & "C:\Users\barre\miniforge3\envs\dev\python.exe" -m pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        working-directory: backend
+        run: |
+          & "C:\Users\barre\miniforge3\envs\dev\python.exe" -m ruff check app tests
+
+      - name: Run pytest
+        working-directory: backend
+        # Use an isolated env so we don't read Machine-level INVITE_CODE that
+        # could shadow the test fixture value.
+        env:
+          INVITE_CODE: test-invite-code
+          COOKIE_SECURE: "0"
+        run: |
+          & "C:\Users\barre\miniforge3\envs\dev\python.exe" -m pytest tests -v
+
+  frontend:
+    runs-on: [self-hosted, Windows]
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: |
+          & "C:\Program Files\nodejs\npm.cmd" ci
+
+      - name: Type check
+        working-directory: frontend
+        run: |
+          & "C:\Program Files\nodejs\npm.cmd" run typecheck
+
+      - name: Vitest
+        working-directory: frontend
+        run: |
+          & "C:\Program Files\nodejs\npm.cmd" test
+
+      - name: Build (production bundle)
+        working-directory: frontend
+        run: |
+          & "C:\Program Files\nodejs\npm.cmd" run build
