@@ -151,6 +151,10 @@ const TIME_PERIODS = [
   { key: "night",     label: "Night",     start: 22, end: 30 },
 ];
 
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function timePeriodKey(hour: number): string {
   if (hour >= 6 && hour < 12) return "morning";
   if (hour >= 12 && hour < 18) return "afternoon";
@@ -181,7 +185,7 @@ function renderPomodoroSection(): void {
 
   for (const s of completedWork) {
     const d = new Date(s.started_at);
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = localDateStr(d);
     minutesByDay.set(dateStr, (minutesByDay.get(dateStr) ?? 0) + s.duration_minutes);
     periodMins[timePeriodKey(d.getHours())] += s.duration_minutes;
   }
@@ -191,7 +195,7 @@ function renderPomodoroSection(): void {
   for (let i = statsDays - 1; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    days.push(d.toISOString().slice(0, 10));
+    days.push(localDateStr(d));
   }
 
   const values = days.map(d => minutesByDay.get(d) ?? 0);
