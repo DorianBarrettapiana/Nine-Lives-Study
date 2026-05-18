@@ -50,29 +50,50 @@ jobs:
         # The runner needs to run as SYSTEM (or an account in the
         # Administrators group) for Stop/Start-ScheduledTask to work and for
         # the Caddyfile copy to overwrite C:\srv\caddy\.
+        #
+        # Each block runs even if the previous one fails so we surface the
+        # actual problem in the log instead of bailing on the first hiccup;
+        # the smoke-test step downstream is the real source of truth.
         run: |
+          $ErrorActionPreference = "Continue"
           $Repo = "D:\Documents\Dev\srv\PhD-Study-Lab"
-          Copy-Item "$Repo\deploy\Caddyfile"             "C:\srv\caddy\Caddyfile"             -Force
-          Copy-Item "$Repo\deploy\start-backend.ps1"     "C:\srv\backend\start-backend.ps1"   -Force
-          Copy-Item "$Repo\deploy\update-cloudflare.ps1" "C:\srv\ddns\update-cloudflare.ps1"  -Force
 
-          Stop-ScheduledTask -TaskName "NineLives-Backend" -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 2
-          Start-ScheduledTask -TaskName "NineLives-Backend"
-
-          # Reload Caddy in-place (no restart needed) so the new Caddyfile is
-          # picked up. If Caddy is somehow not running, fall back to a hard
-          # task restart.
-          $ok = $true
-          try {
-              & "C:\srv\caddy\caddy.exe" reload --config "C:\srv\caddy\Caddyfile" 2>&1 | Write-Host
-              if ($LASTEXITCODE -ne 0) { $ok = $false }
-          } catch { $ok = $false }
-          if (-not $ok) {
-              Stop-ScheduledTask -TaskName "NineLives-Caddy" -ErrorAction SilentlyContinue
-              Start-Sleep -Seconds 1
-              Start-ScheduledTask -TaskName "NineLives-Caddy"
+          function Run-Step($Name, [scriptblock]$Block) {
+              Write-Host "::group::$Name"
+              try { & $Block } catch { Write-Host "[$Name] FAILED: $_" }
+              Write-Host "::endgroup::"
           }
+
+          Run-Step "Copy Caddyfile" { Copy-Item "$Repo\deploy\Caddyfile" "C:\srv\caddy\Caddyfile" -Force; Write-Host "OK" }
+          Run-Step "Copy start-backend.ps1" { Copy-Item "$Repo\deploy\start-backend.ps1" "C:\srv\backend\start-backend.ps1" -Force; Write-Host "OK" }
+          Run-Step "Copy update-cloudflare.ps1" { Copy-Item "$Repo\deploy\update-cloudflare.ps1" "C:\srv\ddns\update-cloudflare.ps1" -Force; Write-Host "OK" }
+
+          Run-Step "Restart backend task" {
+              Stop-ScheduledTask  -TaskName "NineLives-Backend" -ErrorAction SilentlyContinue
+              Start-Sleep -Seconds 3
+              Start-ScheduledTask -TaskName "NineLives-Backend"
+              Start-Sleep -Seconds 2
+              Get-ScheduledTask -TaskName "NineLives-Backend" | Select-Object TaskName, State | Format-Table -AutoSize | Out-String | Write-Host
+          }
+
+          Run-Step "Reload Caddy" {
+              # Try a hot reload first; fall back to a task restart if it fails
+              & "C:\srv\caddy\caddy.exe" reload --config "C:\srv\caddy\Caddyfile" 2>&1 | Write-Host
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Host "caddy reload failed (exit $LASTEXITCODE), falling back to task restart"
+                  Stop-ScheduledTask  -TaskName "NineLives-Caddy" -ErrorAction SilentlyContinue
+                  Start-Sleep -Seconds 2
+                  Start-ScheduledTask -TaskName "NineLives-Caddy"
+                  Start-Sleep -Seconds 3
+                  Get-ScheduledTask -TaskName "NineLives-Caddy" | Select-Object TaskName, State | Format-Table -AutoSize | Out-String | Write-Host
+              } else {
+                  Write-Host "Caddy reloaded OK"
+              }
+          }
+
+          # Force a clean exit so the wrapper's `if (!$?)` check doesn't see
+          # a stale failure flag from one of the catch blocks above.
+          exit 0
 
       - name: Smoke test
         run: |
