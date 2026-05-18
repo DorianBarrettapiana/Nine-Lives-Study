@@ -9,12 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
-from app.core.xp import award_xp
+from app.core.xp import ENTITY_MOOD, EVENT_MOOD, XP_MOOD_LOG, award_xp_event
 from app.models.mood_entry import MoodEntry
 from app.models.user import User
 from app.schemas.mood_entry import MoodEntryCreate, MoodEntryRead
-
-XP_MOOD_LOG = 3
 
 router = APIRouter(prefix="/mood", tags=["mood"])
 
@@ -43,7 +41,15 @@ def create_mood_entry(
 ) -> MoodEntry:
     entry = MoodEntry(user_id=current_user.id, mood=payload.mood, reflection=payload.reflection)
     db.add(entry)
-    award_xp(current_user.id, XP_MOOD_LOG, db)
+    db.flush()
+    award_xp_event(
+        user_id=current_user.id,
+        event_type=EVENT_MOOD,
+        entity_type=ENTITY_MOOD,
+        entity_id=entry.id,
+        amount=XP_MOOD_LOG,
+        db=db,
+    )
     db.commit()
     db.refresh(entry)
     return entry

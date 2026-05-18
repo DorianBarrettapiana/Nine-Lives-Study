@@ -16,7 +16,6 @@ from app.core.database import get_db
 from app.models.session import Session as SessionModel
 from app.models.user import User
 
-
 # --- Password hashing -------------------------------------------------------
 
 

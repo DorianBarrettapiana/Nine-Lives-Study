@@ -10,6 +10,11 @@ export interface UserRead {
   language: string;
   theme: string;
   is_active: boolean;
+
+  pomodoro_work_minutes: number;
+  pomodoro_short_break_minutes: number;
+  pomodoro_long_break_minutes: number;
+  pomodoro_sessions_before_long_break: number;
 }
 
 export interface RegisterPayload {
@@ -28,6 +33,11 @@ export interface LoginPayload {
 export interface UserUpdate {
   language?: string;
   theme?: string;
+
+  pomodoro_work_minutes?: number;
+  pomodoro_short_break_minutes?: number;
+  pomodoro_long_break_minutes?: number;
+  pomodoro_sessions_before_long_break?: number;
 }
 
 export async function register(payload: RegisterPayload): Promise<UserRead> {

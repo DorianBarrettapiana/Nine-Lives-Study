@@ -4,8 +4,6 @@ Nine Lives Study is a lightweight web application designed to **gamify focused w
 
 It is live at **<https://ninelives.foussistan.fr>**.
 
-![Nine Lives Study Home Page](docs/home_page.png "Home Page")
-
 ## ✨ Features
 
 - **Multi-user with authentication** — bcrypt-hashed passwords, HTTP-only session cookies, invite-code-gated signup
@@ -78,9 +76,9 @@ The dev server runs on <http://127.0.0.1:5173> and proxies API calls to `127.0.0
 
 ## 🔮 Roadmap
 
-- Configurable Pomodoro durations (per-user settings)
-- Password reset / "forgot password" flow
 - CI/CD pipeline (GitHub Actions → auto-deploy on merge)
+- Add admin page to manage website + user data
+- Password reset / "forgot password" flow
 - Real-time updates
 - Mobile-first UI improvements
 

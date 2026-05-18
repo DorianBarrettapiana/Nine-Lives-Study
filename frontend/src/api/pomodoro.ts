@@ -34,3 +34,7 @@ export async function completeSession(sessionId: number): Promise<PomodoroSessio
     body: JSON.stringify({}),
   });
 }
+
+export async function deleteSession(sessionId: number): Promise<void> {
+  await apiFetch<void>(`/pomodoro/${sessionId}`, { method: "DELETE" });
+}

@@ -1,0 +1,76 @@
+name: Deploy
+
+# Triggered after CI succeeds on the main branch.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Windows]
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
+
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - name: Sync prod working tree
+        # The prod working tree lives at the canonical path; the runner
+        # workspace is somewhere else. We fetch + reset --hard so the prod
+        # tree mirrors origin/main exactly (no stash, no merge surprises).
+        run: |
+          $RepoDir = "D:\Documents\Dev\srv\PhD-Study-Lab"
+          Set-Location $RepoDir
+          git fetch origin main
+          git reset --hard origin/main
+          git rev-parse --short HEAD
+
+      - name: Install backend deps (if changed)
+        run: |
+          Set-Location D:\Documents\Dev\srv\PhD-Study-Lab\backend
+          & "C:\Users\barre\miniforge3\envs\dev\python.exe" -m pip install -r requirements.txt
+
+      - name: Build frontend
+        run: |
+          Set-Location D:\Documents\Dev\srv\PhD-Study-Lab\frontend
+          & "C:\Program Files\nodejs\npm.cmd" ci
+          & "C:\Program Files\nodejs\npm.cmd" run build
+
+      - name: Sync ops scripts and restart services
+        # The runner needs to run as SYSTEM (or an account in the
+        # Administrators group) for Stop/Start-ScheduledTask to work and for
+        # the Caddyfile copy to overwrite C:\srv\caddy\.
+        run: |
+          $Repo = "D:\Documents\Dev\srv\PhD-Study-Lab"
+          Copy-Item "$Repo\deploy\Caddyfile"             "C:\srv\caddy\Caddyfile"             -Force
+          Copy-Item "$Repo\deploy\start-backend.ps1"     "C:\srv\backend\start-backend.ps1"   -Force
+          Copy-Item "$Repo\deploy\update-cloudflare.ps1" "C:\srv\ddns\update-cloudflare.ps1"  -Force
+
+          Stop-ScheduledTask -TaskName "NineLives-Backend" -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 2
+          Start-ScheduledTask -TaskName "NineLives-Backend"
+
+          # Reload Caddy in-place (no restart needed) so the new Caddyfile is
+          # picked up. If Caddy is somehow not running, fall back to a hard
+          # task restart.
+          $ok = $true
+          try {
+              & "C:\srv\caddy\caddy.exe" reload --config "C:\srv\caddy\Caddyfile" 2>&1 | Write-Host
+              if ($LASTEXITCODE -ne 0) { $ok = $false }
+          } catch { $ok = $false }
+          if (-not $ok) {
+              Stop-ScheduledTask -TaskName "NineLives-Caddy" -ErrorAction SilentlyContinue
+              Start-Sleep -Seconds 1
+              Start-ScheduledTask -TaskName "NineLives-Caddy"
+          }
+
+      - name: Smoke test
+        run: |
+          Start-Sleep -Seconds 5
+          $r = Invoke-RestMethod https://ninelives.foussistan.fr/api/health -TimeoutSec 15
+          if ($r.status -ne "ok") { throw "Health check failed: $($r | ConvertTo-Json -Compress)" }
+          Write-Host "Deploy OK: $($r | ConvertTo-Json -Compress)"

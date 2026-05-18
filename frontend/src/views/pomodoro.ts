@@ -1,12 +1,21 @@
 /**
  * Pomodoro timer view.
+ *
+ * Features beyond a basic timer:
+ *  - Cycle work → short break → work → ... → long break (every Nth) → work
+ *  - Audible beep + browser Notification when a phase ends
+ *  - Auto-start the next phase so the user doesn't have to click between
+ *    sessions (the whole point of pomodoro is uninterrupted flow)
+ *  - Per-user configurable durations (work/short/long/sessions-before-long)
+ *    persisted via PATCH /users/me
+ *  - Delete past sessions from the history list
  */
 
-import { completeSession, listSessions, startSession, type PomodoroSessionRead } from "../api/pomodoro";
+import { completeSession, deleteSession, listSessions, startSession, type PomodoroSessionRead } from "../api/pomodoro";
+import { updateMe, type UserRead } from "../api/users";
 import { formatTime, setMessage } from "../utils";
 
-const WORK_DURATION = 25 * 60;
-const BREAK_DURATION = 5 * 60;
+type Mode = "work" | "short_break" | "long_break";
 
 let pomodoroDisplay: HTMLDivElement;
 let pomodoroStartButton: HTMLButtonElement;
@@ -14,38 +23,176 @@ let pomodoroResetButton: HTMLButtonElement;
 let pomodoroModeBadge: HTMLSpanElement;
 let pomodoroMessage: HTMLParagraphElement;
 let pomodoroList: HTMLDivElement;
+let settingsToggle: HTMLButtonElement;
+let settingsPanel: HTMLDivElement;
+let settingsForm: HTMLFormElement;
+let settingsWorkInput: HTMLInputElement;
+let settingsShortInput: HTMLInputElement;
+let settingsLongInput: HTMLInputElement;
+let settingsBeforeLongInput: HTMLInputElement;
+let settingsAutoStartInput: HTMLInputElement | null;
+let settingsMessage: HTMLParagraphElement;
+let modeHintEl: HTMLParagraphElement;
 
+let user: UserRead | null = null;
 let sessions: PomodoroSessionRead[] = [];
-let pomodoroMode: "work" | "break" = "work";
-let pomodoroTimeLeft = WORK_DURATION;   // seconds remaining (updated on pause/reset)
-let pomodoroEndTime: number | null = null; // Date.now() ms when timer should reach 0
+let pomodoroMode: Mode = "work";
+let pomodoroTimeLeft = 25 * 60;
+let pomodoroEndTime: number | null = null;
 let pomodoroRunning = false;
 let pomodoroIntervalId: ReturnType<typeof setInterval> | null = null;
 let activeSessionId: number | null = null;
+
+// User preference, persisted in localStorage. Default ON so the cycle is
+// usable without configuration. Toggle in the settings panel.
+const AUTO_START_KEY = "nl_pomodoro_auto_start";
+function getAutoStart(): boolean {
+  const raw = localStorage.getItem(AUTO_START_KEY);
+  return raw === null ? true : raw === "1";
+}
+function setAutoStart(value: boolean): void {
+  localStorage.setItem(AUTO_START_KEY, value ? "1" : "0");
+}
+
+function workSeconds():        number { return (user?.pomodoro_work_minutes        ?? 25) * 60; }
+function shortBreakSeconds():  number { return (user?.pomodoro_short_break_minutes ??  5) * 60; }
+function longBreakSeconds():   number { return (user?.pomodoro_long_break_minutes  ?? 15) * 60; }
+function sessionsBeforeLong(): number { return user?.pomodoro_sessions_before_long_break ?? 4; }
+
+function todayCompletedWorkCount(): number {
+  const today = new Date().toDateString();
+  return sessions.filter(
+    (s) => s.is_completed && s.session_type === "work" &&
+      new Date(s.started_at).toDateString() === today,
+  ).length;
+}
+
+function nextBreakMode(): Mode {
+  const completedToday = todayCompletedWorkCount();
+  return completedToday > 0 && completedToday % sessionsBeforeLong() === 0
+    ? "long_break"
+    : "short_break";
+}
+
+function modeDurationSeconds(m: Mode): number {
+  if (m === "work")       return workSeconds();
+  if (m === "long_break") return longBreakSeconds();
+  return shortBreakSeconds();
+}
+
+function modeLabel(m: Mode): string {
+  if (m === "work")       return "Work";
+  if (m === "long_break") return "Long break";
+  return "Short break";
+}
+
+function modeApiType(m: Mode): "work" | "break" {
+  return m === "work" ? "work" : "break";
+}
+
+// --- Notifications & sounds -------------------------------------------------
+
+let audioCtx: AudioContext | null = null;
+
+function beep(durationMs: number = 350, frequency: number = 880): void {
+  try {
+    if (!audioCtx) {
+      const Ctx = (window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
+      audioCtx = new Ctx();
+    }
+    const ctx = audioCtx;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = frequency;
+    gain.gain.value = 0.001;
+    gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + durationMs / 1000);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + durationMs / 1000 + 0.05);
+  } catch (e) {
+    console.warn("Audio cue failed", e);
+  }
+}
+
+function notify(title: string, body: string): void {
+  if (typeof Notification === "undefined") return;
+  if (Notification.permission === "granted") {
+    try { new Notification(title, { body }); } catch (e) { console.warn(e); }
+  } else if (Notification.permission !== "denied") {
+    Notification.requestPermission().then((perm) => {
+      if (perm === "granted") {
+        try { new Notification(title, { body }); } catch (e) { console.warn(e); }
+      }
+    });
+  }
+}
+
+function celebrate(modeFinished: Mode, nextMode: Mode): void {
+  // 2 short beeps so it's clearly different from a single timer tick
+  beep(300, modeFinished === "work" ? 660 : 880);
+  setTimeout(() => beep(300, modeFinished === "work" ? 880 : 660), 380);
+  const title = modeFinished === "work" ? "Work session done!" : `${modeLabel(modeFinished)} over!`;
+  const body  = `Time for a ${modeLabel(nextMode).toLowerCase()}.`;
+  notify(title, body);
+}
+
+// --- Render -----------------------------------------------------------------
 
 export function render(): void {
   pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
   pomodoroStartButton.textContent = pomodoroRunning ? "⏸ Pause" : "▶ Start";
   pomodoroStartButton.classList.toggle("pomo-running", pomodoroRunning);
-  pomodoroModeBadge.textContent = pomodoroMode === "work" ? "Work" : "Break";
+  pomodoroModeBadge.textContent = modeLabel(pomodoroMode);
   pomodoroModeBadge.className = `tag ${pomodoroMode === "work" ? "" : "tag-break"}`;
+
+  if (modeHintEl) {
+    const completedToday = todayCompletedWorkCount();
+    const remainderInCycle = completedToday % sessionsBeforeLong();
+    const untilLong = remainderInCycle === 0 && completedToday > 0 ? sessionsBeforeLong()
+                    : sessionsBeforeLong() - remainderInCycle;
+    modeHintEl.textContent =
+      `${workSeconds() / 60} min work · ${shortBreakSeconds() / 60} min short break · ` +
+      `${longBreakSeconds() / 60} min long break every ${sessionsBeforeLong()} ` +
+      `(next long break in ${untilLong} work session${untilLong === 1 ? "" : "s"})`;
+  }
 
   if (sessions.length === 0) {
     pomodoroList.innerHTML = `<div class="empty-state">No sessions yet.</div>`;
     return;
   }
-  const todayCount = sessions.filter(
-    (s) => s.is_completed && s.session_type === "work" &&
-      new Date(s.started_at).toDateString() === new Date().toDateString(),
-  ).length;
   pomodoroList.innerHTML = [
-    `<p class="hint">Today: <strong>${todayCount}</strong> work session(s) completed</p>`,
-    ...sessions.slice(0, 10).map((s) => `
+    `<p class="hint">Today: <strong>${todayCompletedWorkCount()}</strong> work session(s) completed</p>`,
+    ...sessions.slice(0, 20).map((s) => {
+      const when = new Date(s.started_at).toLocaleString(undefined,
+        { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+      return `
       <div class="task-item">
         <span class="tag">${s.session_type === "work" ? "Work" : "Break"}</span>
-        <span class="task-text ${s.is_completed ? "done" : ""}">${s.duration_minutes} min — ${s.is_completed ? "completed" : "in progress"}</span>
-      </div>`),
+        <span class="task-text ${s.is_completed ? "done" : ""}">${s.duration_minutes} min · ${when} · ${s.is_completed ? "completed" : "in progress"}</span>
+        <button class="task-delete" data-pomo-action="delete" data-id="${s.id}" title="Delete session">×</button>
+      </div>`;
+    }),
   ].join("");
+}
+
+function renderSettings(): void {
+  if (!user) return;
+  settingsWorkInput.value       = String(user.pomodoro_work_minutes);
+  settingsShortInput.value      = String(user.pomodoro_short_break_minutes);
+  settingsLongInput.value       = String(user.pomodoro_long_break_minutes);
+  settingsBeforeLongInput.value = String(user.pomodoro_sessions_before_long_break);
+  if (settingsAutoStartInput) settingsAutoStartInput.checked = getAutoStart();
+}
+
+export function setUser(currentUser: UserRead): void {
+  user = currentUser;
+  if (!pomodoroRunning && activeSessionId === null) {
+    pomodoroTimeLeft = modeDurationSeconds(pomodoroMode);
+  }
+  renderSettings();
+  render();
 }
 
 export async function refresh(): Promise<void> {
@@ -60,63 +207,100 @@ export async function refresh(): Promise<void> {
 
 function stopTimer(): void {
   if (pomodoroIntervalId !== null) { clearInterval(pomodoroIntervalId); pomodoroIntervalId = null; }
-  // Snapshot remaining time from wall clock so resume/reset uses accurate value
   if (pomodoroEndTime !== null) {
     pomodoroTimeLeft = Math.max(0, Math.ceil((pomodoroEndTime - Date.now()) / 1000));
   }
   pomodoroRunning = false;
 }
 
-export function init(onDataChanged: () => Promise<void>): void {
-  pomodoroDisplay = document.querySelector<HTMLDivElement>("#pomodoro-display")!;
-  pomodoroStartButton = document.querySelector<HTMLButtonElement>("#pomodoro-start-button")!;
-  pomodoroResetButton = document.querySelector<HTMLButtonElement>("#pomodoro-reset-button")!;
-  pomodoroModeBadge = document.querySelector<HTMLSpanElement>("#pomodoro-mode-badge")!;
-  pomodoroMessage = document.querySelector<HTMLParagraphElement>("#pomodoro-message")!;
-  pomodoroList = document.querySelector<HTMLDivElement>("#pomodoro-list")!;
-
-  async function onComplete(): Promise<void> {
-    stopTimer();
-    if (activeSessionId !== null) {
-      try {
-        await completeSession(activeSessionId);
-        activeSessionId = null;
-        const msg = pomodoroMode === "work" ? "Work session done! +25 XP" : "Break over!";
-        setMessage(pomodoroMessage, msg, "success");
-        await onDataChanged();
-      } catch (error) { console.error(error); }
+async function startCurrentMode(): Promise<void> {
+  if (activeSessionId === null) {
+    try {
+      const s = await startSession(modeApiType(pomodoroMode), modeDurationSeconds(pomodoroMode) / 60);
+      activeSessionId = s.id;
+    } catch (error) {
+      console.error(error);
+      setMessage(pomodoroMessage, "Could not start session.", "error");
+      return;
     }
-    pomodoroMode = pomodoroMode === "work" ? "break" : "work";
-    pomodoroTimeLeft = pomodoroMode === "work" ? WORK_DURATION : BREAK_DURATION;
-    render();
   }
+  pomodoroEndTime = Date.now() + pomodoroTimeLeft * 1000;
+  pomodoroRunning = true;
+  pomodoroIntervalId = setInterval(async () => {
+    pomodoroTimeLeft = Math.max(0, Math.ceil((pomodoroEndTime! - Date.now()) / 1000));
+    pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
+    if (pomodoroTimeLeft <= 0) await onComplete();
+  }, 500);
+  render();
+}
+
+async function onComplete(): Promise<void> {
+  stopTimer();
+  const finished = pomodoroMode;
+  const next = finished === "work" ? nextBreakMode() : "work";
+
+  if (activeSessionId !== null) {
+    try {
+      await completeSession(activeSessionId);
+      activeSessionId = null;
+      const msg = finished === "work" ? "Work session done! +25 XP" : `${modeLabel(finished)} over!`;
+      setMessage(pomodoroMessage, msg, "success");
+      await refresh();  // refresh the session list (used for stats counting too)
+    } catch (error) { console.error(error); }
+  }
+
+  celebrate(finished, next);
+
+  // Advance to next phase
+  pomodoroMode = next;
+  pomodoroTimeLeft = modeDurationSeconds(pomodoroMode);
+  pomodoroEndTime = null;
+  render();
+
+  // Auto-start next phase so cycles flow without manual clicking
+  if (getAutoStart()) {
+    await startCurrentMode();
+  }
+}
+
+// --- Init -------------------------------------------------------------------
+
+export function init(onDataChanged: () => Promise<void>): void {
+  pomodoroDisplay          = document.querySelector<HTMLDivElement>("#pomodoro-display")!;
+  pomodoroStartButton      = document.querySelector<HTMLButtonElement>("#pomodoro-start-button")!;
+  pomodoroResetButton      = document.querySelector<HTMLButtonElement>("#pomodoro-reset-button")!;
+  pomodoroModeBadge        = document.querySelector<HTMLSpanElement>("#pomodoro-mode-badge")!;
+  pomodoroMessage          = document.querySelector<HTMLParagraphElement>("#pomodoro-message")!;
+  pomodoroList             = document.querySelector<HTMLDivElement>("#pomodoro-list")!;
+  settingsToggle           = document.querySelector<HTMLButtonElement>("#pomodoro-settings-toggle")!;
+  settingsPanel            = document.querySelector<HTMLDivElement>("#pomodoro-settings-panel")!;
+  settingsForm             = document.querySelector<HTMLFormElement>("#pomodoro-settings-form")!;
+  settingsWorkInput        = document.querySelector<HTMLInputElement>("#pomodoro-setting-work")!;
+  settingsShortInput       = document.querySelector<HTMLInputElement>("#pomodoro-setting-short")!;
+  settingsLongInput        = document.querySelector<HTMLInputElement>("#pomodoro-setting-long")!;
+  settingsBeforeLongInput  = document.querySelector<HTMLInputElement>("#pomodoro-setting-before-long")!;
+  settingsAutoStartInput   = document.querySelector<HTMLInputElement>("#pomodoro-setting-auto-start");
+  settingsMessage          = document.querySelector<HTMLParagraphElement>("#pomodoro-settings-message")!;
+  modeHintEl               = document.querySelector<HTMLParagraphElement>("#pomodoro-mode-hint")!;
 
   pomodoroStartButton.addEventListener("click", async () => {
     if (pomodoroRunning) { stopTimer(); render(); return; }
-    if (activeSessionId === null) {
-      try {
-        const s = await startSession(pomodoroMode, pomodoroMode === "work" ? 25 : 5);
-        activeSessionId = s.id;
-      } catch (error) { console.error(error); setMessage(pomodoroMessage, "Could not start session.", "error"); return; }
+    // Asking once on first user gesture keeps Notification.requestPermission
+    // happy (it requires a user activation context).
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
     }
-    // Set absolute end time from current remaining seconds
-    pomodoroEndTime = Date.now() + pomodoroTimeLeft * 1000;
-    pomodoroRunning = true;
-    pomodoroIntervalId = setInterval(async () => {
-      pomodoroTimeLeft = Math.max(0, Math.ceil((pomodoroEndTime! - Date.now()) / 1000));
-      pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
-      if (pomodoroTimeLeft <= 0) await onComplete();
-    }, 500); // poll at 500ms so display stays crisp even after background throttling
-    render();
+    await startCurrentMode();
+    // Refresh from server so the session list reflects the new in-progress row
+    await onDataChanged();
   });
 
   pomodoroResetButton.addEventListener("click", () => {
     stopTimer(); activeSessionId = null; pomodoroMode = "work";
-    pomodoroTimeLeft = WORK_DURATION; pomodoroEndTime = null;
+    pomodoroTimeLeft = modeDurationSeconds("work"); pomodoroEndTime = null;
     setMessage(pomodoroMessage, "", "neutral"); render();
   });
 
-  // When user returns to this tab, immediately sync display to wall clock
   document.addEventListener("visibilitychange", async () => {
     if (document.visibilityState === "visible" && pomodoroRunning && pomodoroEndTime !== null) {
       pomodoroTimeLeft = Math.max(0, Math.ceil((pomodoroEndTime - Date.now()) / 1000));
@@ -125,4 +309,59 @@ export function init(onDataChanged: () => Promise<void>): void {
     }
   });
 
+  settingsToggle.addEventListener("click", () => {
+    settingsPanel.classList.toggle("hidden");
+  });
+
+  settingsForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const work       = Number(settingsWorkInput.value);
+    const shortBrk   = Number(settingsShortInput.value);
+    const longBrk    = Number(settingsLongInput.value);
+    const beforeLong = Number(settingsBeforeLongInput.value);
+
+    const errors: string[] = [];
+    if (!(work >= 1 && work <= 240))            errors.push("Work: 1-240 min");
+    if (!(shortBrk >= 1 && shortBrk <= 60))     errors.push("Short break: 1-60 min");
+    if (!(longBrk >= 1 && longBrk <= 60))       errors.push("Long break: 1-60 min");
+    if (!(beforeLong >= 1 && beforeLong <= 10)) errors.push("Sessions before long break: 1-10");
+    if (errors.length) {
+      setMessage(settingsMessage, errors.join(" · "), "error");
+      return;
+    }
+
+    try {
+      const updated = await updateMe({
+        pomodoro_work_minutes: work,
+        pomodoro_short_break_minutes: shortBrk,
+        pomodoro_long_break_minutes: longBrk,
+        pomodoro_sessions_before_long_break: beforeLong,
+      });
+      if (settingsAutoStartInput) setAutoStart(settingsAutoStartInput.checked);
+      setUser(updated);
+      setMessage(settingsMessage, "Settings saved.", "success");
+    } catch (error) {
+      console.error(error);
+      setMessage(settingsMessage, "Could not save settings.", "error");
+    }
+  });
+
+  // Delete from session list (event-delegated)
+  pomodoroList.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.pomoAction !== "delete") return;
+    const sid = Number(target.dataset.id);
+    if (!Number.isFinite(sid)) return;
+    if (!window.confirm("Delete this session?")) return;
+    try {
+      await deleteSession(sid);
+      setMessage(pomodoroMessage, "Session deleted.", "success");
+      // Refresh local list AND stats (deletion doesn't affect xp_events history)
+      await onDataChanged();
+    } catch (error) {
+      console.error(error);
+      setMessage(pomodoroMessage, "Could not delete session.", "error");
+    }
+  });
 }

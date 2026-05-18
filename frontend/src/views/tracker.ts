@@ -129,8 +129,12 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
 
   saveLogButton.addEventListener("click", async () => {
     try {
-      await saveDailyLog({ mood: selectedMood, reflection: reflectionInput.value.trim() });
-      setMessage(trackerMessage, "Daily log saved. +5 XP", "success");
+      const log = await saveDailyLog({ mood: selectedMood, reflection: reflectionInput.value.trim() });
+      // Update the in-memory state immediately so the UI shows the saved
+      // mood / reflection without waiting for the refresh round-trip.
+      if (dailyState) dailyState.log = log;
+      const when = new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+      setMessage(trackerMessage, `Daily log saved at ${when}.`, "success");
       await onRefreshNeeded();
     } catch (error) {
       console.error(error);

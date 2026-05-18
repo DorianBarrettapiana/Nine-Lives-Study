@@ -111,9 +111,11 @@ cd ..
 
 ### 3.4 Run the install script (in admin PowerShell)
 
+> ⚠️ **Remplace `<...>` par tes vraies valeurs avant d'exécuter.** Le script refuse les placeholders qui commencent par `<` et finissent par `>`, mais une chaîne courte ou tronquée passerait silencieusement et casserait Caddy.
+
 ```powershell
-$env:CF_API_TOKEN = "your_cloudflare_token"
-$env:INVITE_CODE  = "the_shared_invite_code_for_signups"
+$env:CF_API_TOKEN = "<colle ici ton vrai token Cloudflare (~48 chars, commence par cfut_)>"
+$env:INVITE_CODE  = "<colle ici l'invite code que tu veux partager>"
 powershell -ExecutionPolicy Bypass -File .\deploy\install-services.ps1
 ```
 
@@ -272,6 +274,22 @@ Caddy renews automatically. If `caddy.log` shows ACME errors:
 - Verify the token's permissions (Zone:DNS:Edit on `foussistan.fr`).
 - Caddy stores certs at `C:\Windows\System32\config\systemprofile\AppData\Roaming\Caddy\` (because it runs as SYSTEM).
 
+### Caddy refuses to start with "API token '<...>' appears invalid"
+
+The Cloudflare API token got overwritten with a placeholder (typically by re-running `install-services.ps1` with the doc command pasted verbatim — `$env:CF_API_TOKEN = "<...>"` literally). Manually validate `caddy.exe validate --config C:\srv\caddy\Caddyfile` will show the corrupt value.
+
+Fix in **admin PowerShell**:
+
+```powershell
+$Token = "your_real_cloudflare_token"   # ~48 chars, starts with cfut_
+Set-Content -Path "C:\srv\ddns\.cf-token" -Value $Token -NoNewline
+[Environment]::SetEnvironmentVariable("CF_API_TOKEN", $Token, "Machine")
+Stop-ScheduledTask  -TaskName "NineLives-Caddy" -ErrorAction SilentlyContinue
+Stop-ScheduledTask  -TaskName "NineLives-DDNS"  -ErrorAction SilentlyContinue
+Start-ScheduledTask -TaskName "NineLives-DDNS"
+Start-ScheduledTask -TaskName "NineLives-Caddy"
+```
+
 ### "Could not load users" in the browser
 
 Already-known scenario. Cause is almost always the backend not running. See §4.2.
@@ -316,15 +334,71 @@ sqlite> .quit
 
 ---
 
-## 7. Future: CI/CD
+## 7. CI/CD
 
-Planned: a GitHub Actions workflow that on push to `main`:
+A GitHub Actions self-hosted runner installed on this PC handles **both** testing and deployment:
 
-1. Runs lints / tests
-2. Builds the frontend
-3. SSH into the server (or uses a self-hosted runner) and:
-   - `git pull`
-   - rsync `dist/` into place
-   - restart `NineLives-Backend`
+- `.github/workflows/ci.yml` runs on every push / PR: ruff lint + pytest + tsc + Vitest + frontend build.
+- `.github/workflows/deploy.yml` runs after a successful CI on `main`: it fast-forwards the prod working tree (`D:\Documents\Dev\srv\PhD-Study-Lab`), installs deps, rebuilds the frontend, syncs the ops scripts to `C:\srv\…`, hot-reloads Caddy, restarts the backend task, and runs a public-URL health check.
 
-Once the runner is set up, the *Routine operations* section above becomes "merge a PR, wait 60 s".
+Workflow merging into `main` (whether direct push or PR merge) automatically deploys. Both `git pull` and the `Stop/Start-ScheduledTask` calls happen from the runner, so manual ops are no longer needed.
+
+### 7.1 Installing the self-hosted runner
+
+The runner must run as a service with privileges to manage scheduled tasks
+and write to `C:\srv\…`. Easiest: run it as **SYSTEM** via the official installer.
+
+1. On GitHub, go to the repo → **Settings → Actions → Runners → New self-hosted runner → Windows**.
+2. Follow the on-screen instructions to download the runner into `C:\actions-runner`. Roughly:
+
+   ```powershell
+   mkdir C:\actions-runner; cd C:\actions-runner
+   Invoke-WebRequest -Uri https://github.com/actions/runner/releases/download/v2.319.1/actions-runner-win-x64-2.319.1.zip -OutFile runner.zip
+   Add-Type -AssemblyName System.IO.Compression.FileSystem
+   [System.IO.Compression.ZipFile]::ExtractToDirectory("$PWD/runner.zip", "$PWD")
+   ```
+
+3. Configure (paste the token GitHub gave you). Use **labels** `self-hosted,Windows` (default) and let it pick the default work folder.
+
+   ```powershell
+   .\config.cmd --url https://github.com/<owner>/PhD-Study-Lab --token <runner-token>
+   ```
+
+4. Install as a Windows service running as **SYSTEM** (admin PowerShell):
+
+   ```powershell
+   .\svc.cmd install
+   .\svc.cmd start
+   # or directly:
+   .\config.cmd --runasservice --windowslogonaccount "NT AUTHORITY\SYSTEM"
+   ```
+
+5. Verify in GitHub → **Settings → Actions → Runners**: the runner should appear with the green dot.
+
+6. **Allow PowerShell scripts to run** (one-time, in admin PowerShell). The runner uses `powershell.exe` and dot-sources GitHub-generated `.ps1` files, which fails with `UnauthorizedAccess` under the default `Restricted` policy:
+
+   ```powershell
+   Set-ExecutionPolicy -Scope LocalMachine -ExecutionPolicy RemoteSigned -Force
+   ```
+
+> ⚠️ **Why SYSTEM?** The deploy job calls `Stop-ScheduledTask` / `Start-ScheduledTask`, which require privileges over tasks owned by `SYSTEM`. Running the runner under a regular user account fails at deploy time. If you don't want the runner to have system access, an alternative is to run it as a regular account that's in the local Administrators group.
+
+### 7.2 First run
+
+Push any commit to `main` (or click *Run workflow* on the `CI` workflow). The
+runner picks up the job, runs tests, then triggers `Deploy`. Watch the run in
+the GitHub Actions tab; on success the health check confirms prod is healthy.
+
+### 7.3 Manual deploy (bypass CI)
+
+If you need to deploy without waiting for CI (or after fixing something
+manually), trigger the `Deploy` workflow directly via *workflow_dispatch* on
+GitHub, or do it manually as before:
+
+```powershell
+cd D:\Documents\Dev\srv\PhD-Study-Lab
+git pull
+cd frontend; npm ci; npm run build; cd ..
+Stop-ScheduledTask  -TaskName NineLives-Backend
+Start-ScheduledTask -TaskName NineLives-Backend
+```
