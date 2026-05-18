@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
-from app.core.xp import XP_POMODORO_COMPLETE, award_xp
+from app.core.xp import (
+    ENTITY_POMODORO,
+    EVENT_POMODORO,
+    XP_POMODORO_COMPLETE,
+    award_xp_event,
+)
 from app.models.pomodoro_session import PomodoroSession
 from app.models.user import User
 from app.schemas.pomodoro_session import (
@@ -68,8 +73,17 @@ def complete_session(
     session.is_completed = True
     session.ended_at = payload.ended_at or datetime.now(timezone.utc)
 
+    # Idempotent on (event_type, entity_id): re-PATCHing /complete on an
+    # already-finished session does not re-award XP.
     if session.session_type == "work":
-        award_xp(session.user_id, XP_POMODORO_COMPLETE, db)
+        award_xp_event(
+            user_id=session.user_id,
+            event_type=EVENT_POMODORO,
+            entity_type=ENTITY_POMODORO,
+            entity_id=session.id,
+            amount=XP_POMODORO_COMPLETE,
+            db=db,
+        )
 
     db.commit()
     db.refresh(session)

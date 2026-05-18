@@ -1,12 +1,10 @@
 """Regression tests for bugs reported by the user on 2026-05-18.
 
-These tests are EXPECTED TO FAIL on the current implementation. They drive
-the upcoming bug fixes; when the fixes land, all of them must turn green.
-Mark them as expected-to-fail (xfail) for now so the CI stays green while
-we work on the fixes.
+All tests below MUST stay green; they pin the fixes against future
+regressions (XP farming via toggle / repeated save, deleted entities
+disappearing from stats, etc.).
 """
 
-import pytest
 from fastapi.testclient import TestClient
 
 # ---------------------------------------------------------------------------
@@ -16,7 +14,7 @@ from fastapi.testclient import TestClient
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="Bug: toggling a task done/undone/done re-awards XP each time.")
+
 def test_xp_not_farmable_via_task_toggle(auth_client: TestClient):
     task_id = auth_client.post("/daily/tasks", json={"text": "X"}).json()["id"]
     xp_baseline = auth_client.get("/xp").json()["xp"]
@@ -41,7 +39,7 @@ def test_xp_not_farmable_via_task_toggle(auth_client: TestClient):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="Bug: each PUT /daily/log re-awards XP without dedup.")
+
 def test_xp_not_farmable_via_daily_log_save(auth_client: TestClient):
     xp_baseline = auth_client.get("/xp").json()["xp"]
 
@@ -62,7 +60,7 @@ def test_xp_not_farmable_via_daily_log_save(auth_client: TestClient):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="Bug: stats query counts current rows, not historical events.")
+
 def test_deleted_completed_task_still_counted_in_stats(auth_client: TestClient):
     # Create + complete two tasks
     t1 = auth_client.post("/daily/tasks", json={"text": "t1"}).json()["id"]
@@ -86,7 +84,7 @@ def test_deleted_completed_task_still_counted_in_stats(auth_client: TestClient):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="Bug: re-completing a pomodoro session re-awards XP.")
+
 def test_xp_not_farmable_via_pomodoro_recomplete(auth_client: TestClient):
     r = auth_client.post("/pomodoro", json={"session_type": "work", "duration_minutes": 25})
     session_id = r.json()["id"]
@@ -108,7 +106,7 @@ def test_xp_not_farmable_via_pomodoro_recomplete(auth_client: TestClient):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(reason="Bug: pomodoro stats query counts current rows.")
+
 def test_deleted_pomodoro_still_in_stats(auth_client: TestClient):
     r = auth_client.post("/pomodoro", json={"session_type": "work", "duration_minutes": 25})
     sid = r.json()["id"]

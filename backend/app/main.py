@@ -29,6 +29,7 @@ from app.models.pomodoro_session import PomodoroSession  # noqa: F401
 from app.models.session import Session  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.user_progress import UserProgress  # noqa: F401
+from app.models.xp_event import XpEvent  # noqa: F401
 
 # Create missing database tables on startup, then apply ad-hoc migrations
 # (e.g. ALTER TABLE for newly-added columns on pre-existing tables).

@@ -41,6 +41,7 @@ from app.models.pomodoro_session import PomodoroSession  # noqa: E402, F401
 from app.models.session import Session as SessionModel  # noqa: E402, F401
 from app.models.user import User  # noqa: E402, F401
 from app.models.user_progress import UserProgress  # noqa: E402, F401
+from app.models.xp_event import XpEvent  # noqa: E402, F401
 
 
 @pytest.fixture

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
-from app.core.xp import XP_NOTE_CREATE, award_xp
+from app.core.xp import ENTITY_NOTE, EVENT_NOTE, XP_NOTE_CREATE, award_xp_event
 from app.models.paper_note import PaperNote
 from app.models.user import User
 from app.schemas.paper_note import PaperNoteCreate, PaperNoteRead, PaperNoteUpdate
@@ -53,7 +53,15 @@ def create_note(
         tags=payload.tags,
     )
     db.add(note)
-    award_xp(current_user.id, XP_NOTE_CREATE, db)
+    db.flush()  # populate note.id so we can pin the XP event to it
+    award_xp_event(
+        user_id=current_user.id,
+        event_type=EVENT_NOTE,
+        entity_type=ENTITY_NOTE,
+        entity_id=note.id,
+        amount=XP_NOTE_CREATE,
+        db=db,
+    )
     db.commit()
     db.refresh(note)
     return note

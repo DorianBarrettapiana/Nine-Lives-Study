@@ -8,7 +8,15 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
-from app.core.xp import XP_DAILY_LOG_SAVE, XP_TASK_COMPLETE, award_xp
+from app.core.xp import (
+    ENTITY_DAILY_LOG,
+    ENTITY_DAILY_TASK,
+    EVENT_DAILY_LOG,
+    EVENT_TASK_DONE,
+    XP_DAILY_LOG_SAVE,
+    XP_TASK_COMPLETE,
+    award_xp_event,
+)
 from app.models.daily_tracker import DailyLog, DailyTask
 from app.models.user import User
 from app.schemas.daily_tracker import (
@@ -109,8 +117,19 @@ def update_daily_task(
     for field_name, field_value in data.items():
         setattr(task, field_name, field_value)
 
+    # Award XP only on the not-done → done transition. award_xp_event is
+    # idempotent on (event_type, entity_id), so even if this transition
+    # happens multiple times (toggle / untoggle / re-toggle) we only credit
+    # XP once for this task's lifetime.
     if not was_done and task.is_done:
-        award_xp(task.user_id, XP_TASK_COMPLETE, db)
+        award_xp_event(
+            user_id=task.user_id,
+            event_type=EVENT_TASK_DONE,
+            entity_type=ENTITY_DAILY_TASK,
+            entity_id=task.id,
+            amount=XP_TASK_COMPLETE,
+            db=db,
+        )
 
     db.commit()
     db.refresh(task)
@@ -155,7 +174,19 @@ def upsert_daily_log(
         log.mood = payload.mood
         log.reflection = payload.reflection
 
-    award_xp(current_user.id, XP_DAILY_LOG_SAVE, db)
+    db.flush()  # populate log.id
+
+    # Idempotent on (event_type, entity_id=log.id), so the user can re-save
+    # their daily log to update mood/reflection without farming XP.
+    award_xp_event(
+        user_id=current_user.id,
+        event_type=EVENT_DAILY_LOG,
+        entity_type=ENTITY_DAILY_LOG,
+        entity_id=log.id,
+        amount=XP_DAILY_LOG_SAVE,
+        db=db,
+    )
+
     db.commit()
     db.refresh(log)
     return log

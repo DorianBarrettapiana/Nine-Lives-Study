@@ -151,6 +151,10 @@ const APP_HTML = `
                     <input id="pomodoro-setting-before-long" type="number" min="1" max="10" required />
                   </label>
                 </div>
+                <label class="checkbox-row">
+                  <input id="pomodoro-setting-auto-start" type="checkbox" />
+                  <span>Auto-start next session (skip clicking Start between phases)</span>
+                </label>
                 <div class="button-row"><button type="submit">Save settings</button></div>
                 <p id="pomodoro-settings-message" class="message"></p>
               </form>

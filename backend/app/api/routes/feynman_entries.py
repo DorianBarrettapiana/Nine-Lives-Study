@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
-from app.core.xp import XP_FEYNMAN_CREATE, award_xp
+from app.core.xp import ENTITY_FEYNMAN, EVENT_FEYNMAN, XP_FEYNMAN_CREATE, award_xp_event
 from app.models.feynman_entry import FeynmanEntry
 from app.models.user import User
 from app.schemas.feynman_entry import (
@@ -52,7 +52,15 @@ def create_feynman_entry(
         analogy=payload.analogy,
     )
     db.add(entry)
-    award_xp(current_user.id, XP_FEYNMAN_CREATE, db)
+    db.flush()
+    award_xp_event(
+        user_id=current_user.id,
+        event_type=EVENT_FEYNMAN,
+        entity_type=ENTITY_FEYNMAN,
+        entity_id=entry.id,
+        amount=XP_FEYNMAN_CREATE,
+        db=db,
+    )
     db.commit()
     db.refresh(entry)
     return entry
