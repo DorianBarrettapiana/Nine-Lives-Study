@@ -367,8 +367,8 @@ and write to `C:\srv\…`. Easiest: run it as **SYSTEM** via the official instal
 4. Install as a Windows service running as **SYSTEM** (admin PowerShell):
 
    ```powershell
-   .\svc.sh install
-   .\svc.sh start
+   .\svc.cmd install
+   .\svc.cmd start
    # or directly:
    .\config.cmd --runasservice --windowslogonaccount "NT AUTHORITY\SYSTEM"
    ```
