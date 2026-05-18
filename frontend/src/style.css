@@ -928,3 +928,144 @@ h3 {
   width: auto;
   margin: 0;
 }
+
+/* --- Stats: expandable day rows --- */
+.day-row {
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-item);
+}
+
+.day-row-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.9rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.day-row-header:hover {
+  background: var(--bg-muted);
+}
+
+.day-row-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  flex: 1;
+}
+
+.day-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.day-task-count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.mood-emoji-sm {
+  font-size: 1.1rem;
+}
+
+.day-row-arrow {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.day-row-detail {
+  padding: 0.5rem 0.9rem 0.75rem;
+  border-top: 1px solid var(--border-soft);
+}
+
+.day-task-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.5rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.day-task-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+}
+
+.day-task-list li.done {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.task-check {
+  font-size: 0.8rem;
+  color: var(--text-accent);
+  flex-shrink: 0;
+}
+
+.day-log-detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border-soft);
+}
+
+.day-reflection {
+  font-size: 0.85rem;
+  color: var(--text-soft);
+  margin: 0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* --- Stats: Pomodoro line chart --- */
+.pomo-total-label {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.pomo-total-label strong {
+  color: var(--text-accent);
+  font-size: 1rem;
+}
+
+.pomo-line-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-bottom: 1.25rem;
+  overflow: visible;
+}
+
+.pomo-dist-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 0.5rem;
+}
+
+.pomo-period-grid {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.pomo-period-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 56px;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.pomo-period-label {
+  color: var(--text-muted);
+}
