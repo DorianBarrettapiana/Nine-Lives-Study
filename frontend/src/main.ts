@@ -222,6 +222,7 @@ const APP_HTML = `
             </div>
             <div id="mood-list" class="mood-history-list"></div>
           </section>
+        </div>
 
         <div id="friends-view" class="hidden">
           <section class="card">
