@@ -9,8 +9,10 @@ import {
   acceptFriendRequest,
   getFeed,
   getFriendStudyStats,
+  getNotifications,
   listFriendRequests,
   listFriends,
+  markNotificationsRead,
   removeFriend,
   searchUsers,
   sendFriendRequest,
@@ -63,13 +65,28 @@ function timeAgo(isoStr: string): string {
   return `${days}d ago`;
 }
 
-function renderFeed(items: FeedItem[]): void {
-  if (items.length === 0) {
+function renderFeed(items: FeedItem[], notifs: { liker_username: string; event_type: string; created_at: string }[] = []): void {
+  let notifHtml = "";
+  if (notifs.length > 0) {
+    notifHtml = `
+      <div class="feed-notifs">
+        ${notifs.map(n => {
+          const label = EVENT_LABELS[n.event_type] ?? n.event_type;
+          return `<div class="feed-notif-item">
+            🌸 <strong>${escapeHtml(n.liker_username)}</strong> liked your activity: ${label}
+            <span class="feed-time">${timeAgo(n.created_at)}</span>
+          </div>`;
+        }).join("")}
+      </div>`;
+    void markNotificationsRead();
+  }
+
+  if (items.length === 0 && notifs.length === 0) {
     friendFeed.innerHTML = `<div class="empty-state">No activity yet.</div>`;
     return;
   }
 
-  friendFeed.innerHTML = items.map(item => {
+  friendFeed.innerHTML = notifHtml + items.map(item => {
     const label = EVENT_LABELS[item.event_type] ?? item.event_type;
     const likedClass = item.liked_by_me ? " liked" : "";
     return `
@@ -355,14 +372,33 @@ async function handleSearch(): Promise<void> {
 
 export async function refresh(): Promise<void> {
   try {
-    const [f, r, feed] = await Promise.all([listFriends(), listFriendRequests(), getFeed()]);
+    const [f, r, feed, notifs] = await Promise.all([
+      listFriends(), listFriendRequests(), getFeed(), getNotifications(),
+    ]);
     friends = f;
     requests = r;
     renderRequests();
     renderFriends();
-    renderFeed(feed);
+    renderFeed(feed, notifs.items);
+    updateNotifBadge(notifs.unread_count);
   } catch (e) {
     console.error(e);
+  }
+}
+
+function updateNotifBadge(count: number): void {
+  const tab = document.querySelector<HTMLButtonElement>('.feature-tab[data-view="friends"]');
+  if (!tab) return;
+  let badge = tab.querySelector<HTMLSpanElement>(".tab-badge");
+  if (count > 0) {
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "tab-badge";
+      tab.appendChild(badge);
+    }
+    badge.textContent = String(count);
+  } else {
+    badge?.remove();
   }
 }
 

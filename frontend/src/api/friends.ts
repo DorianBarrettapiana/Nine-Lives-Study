@@ -82,3 +82,22 @@ export async function getFeed(limit = 30): Promise<FeedItem[]> {
 export async function toggleLike(eventId: number): Promise<{ liked: boolean }> {
   return apiFetch<{ liked: boolean }>(`/friends/feed/${eventId}/like`, { method: "POST" });
 }
+
+export interface NotificationItem {
+  liker_username: string;
+  event_type: string;
+  created_at: string;
+}
+
+export interface NotificationsResponse {
+  unread_count: number;
+  items: NotificationItem[];
+}
+
+export async function getNotifications(): Promise<NotificationsResponse> {
+  return apiFetch<NotificationsResponse>("/friends/notifications");
+}
+
+export async function markNotificationsRead(): Promise<void> {
+  await apiFetch<void>("/friends/notifications/read", { method: "POST" });
+}
