@@ -29,7 +29,6 @@ export interface FriendStudyStats {
   username: string;
   days: number;
   daily_minutes: DailyMinutes[];
-  period_minutes: Record<string, number>;
   total_minutes: number;
 }
 
@@ -61,5 +60,6 @@ export async function removeFriend(userId: number): Promise<void> {
 }
 
 export async function getFriendStudyStats(userId: number, days = 7): Promise<FriendStudyStats> {
-  return apiFetch<FriendStudyStats>(`/friends/${userId}/study-stats?days=${days}`);
+  const tz = new Date().getTimezoneOffset() * -1;
+  return apiFetch<FriendStudyStats>(`/friends/${userId}/study-stats?days=${days}&tz_offset=${tz}`);
 }

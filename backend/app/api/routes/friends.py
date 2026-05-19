@@ -164,6 +164,7 @@ def remove_friend(
 def get_friend_study_stats(
     user_id: int,
     days: int = Query(default=7, ge=1, le=90),
+    tz_offset: int = Query(default=0, ge=-720, le=840),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FriendStudyStats:
@@ -183,22 +184,12 @@ def get_friend_study_stats(
         .where(func.date(PomodoroSession.started_at) >= since.isoformat())
     ).scalars().all()
 
-    # Group by day (UTC date, consistent with SQLite storage)
+    tz_delta = timedelta(minutes=tz_offset)
     minutes_by_day: dict[str, int] = {}
-    period_minutes: dict[str, int] = {"morning": 0, "afternoon": 0, "evening": 0, "night": 0}
-
     for s in sessions:
-        day_str = s.started_at.strftime("%Y-%m-%d") if s.started_at else since.isoformat()
+        local_dt = (s.started_at + tz_delta) if s.started_at else None
+        day_str = local_dt.strftime("%Y-%m-%d") if local_dt else since.isoformat()
         minutes_by_day[day_str] = minutes_by_day.get(day_str, 0) + s.duration_minutes
-        hour = s.started_at.hour if s.started_at else 12
-        if 6 <= hour < 12:
-            period_minutes["morning"] += s.duration_minutes
-        elif 12 <= hour < 18:
-            period_minutes["afternoon"] += s.duration_minutes
-        elif 18 <= hour < 22:
-            period_minutes["evening"] += s.duration_minutes
-        else:
-            period_minutes["night"] += s.duration_minutes
 
     daily_minutes = [
         DailyMinutes(
@@ -214,6 +205,5 @@ def get_friend_study_stats(
         username=friend.username,
         days=days,
         daily_minutes=daily_minutes,
-        period_minutes=period_minutes,
         total_minutes=total_minutes,
     )
