@@ -7,6 +7,7 @@
 
 import {
   acceptFriendRequest,
+  cheerEvent,
   getFeed,
   getFriendStudyStats,
   getNotifications,
@@ -98,16 +99,26 @@ function renderFeed(items: FeedItem[], notifs: NotificationItem[] = []): void {
   friendFeed.innerHTML = notifHtml + items.map(item => {
     const label = EVENT_LABELS[item.event_type] ?? item.event_type;
     const likedClass = item.liked_by_me ? " liked" : "";
+    const cheeredClass = item.cheered_by_me ? " cheered" : "";
     return `
       <div class="feed-item">
         <div class="feed-item-content">
           ${avatarRowHtml(item.cat_skin)}<strong>${escapeHtml(item.username)}</strong> ${label}
           <span class="feed-time">${timeAgo(item.created_at)}</span>
         </div>
-        <button class="feed-like-btn${likedClass}" data-eid="${item.id}">
-          <span class="flower-icon">✿</span>
-          <span class="like-count">${item.like_count || ""}</span>
-        </button>
+        <div class="feed-actions">
+          <button class="feed-like-btn${likedClass}" data-eid="${item.id}" title="Like">
+            <span class="flower-icon">✿</span>
+            <span class="like-count">${item.like_count || ""}</span>
+          </button>
+          <button class="feed-cheer-btn${cheeredClass}"
+                  data-cheer-eid="${item.id}"
+                  title="${item.cheered_by_me ? "Already cheered" : "Cheer (+1 XP to them)"}"
+                  ${item.cheered_by_me ? "disabled" : ""}>
+            <span class="cheer-icon">🎉</span>
+            <span class="cheer-count">${item.cheer_count || ""}</span>
+          </button>
+        </div>
       </div>`;
   }).join("");
 
@@ -120,6 +131,27 @@ function renderFeed(items: FeedItem[], notifs: NotificationItem[] = []): void {
       const cur = parseInt(countEl.textContent || "0") || 0;
       const next = res.liked ? cur + 1 : Math.max(0, cur - 1);
       countEl.textContent = next ? String(next) : "";
+    });
+  });
+
+  friendFeed.querySelectorAll<HTMLButtonElement>(".feed-cheer-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      const eid = Number(btn.dataset.cheerEid);
+      try {
+        const res = await cheerEvent(eid);
+        btn.classList.add("cheered");
+        btn.title = "Already cheered";
+        if (!res.already) {
+          const countEl = btn.querySelector<HTMLSpanElement>(".cheer-count")!;
+          const cur = parseInt(countEl.textContent || "0") || 0;
+          countEl.textContent = String(cur + 1);
+        }
+      } catch (e) {
+        btn.disabled = false;
+        setMessage(friendSearchMessage, parseApiDetail(e), "error");
+      }
     });
   });
 }

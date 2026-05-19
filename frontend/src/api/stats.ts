@@ -20,6 +20,19 @@ export interface DailyPomodoroStat {
   count: number;
 }
 
+export interface WeeklySummaryCounts {
+  pomodoros: number;
+  tasks_done: number;
+  notes: number;
+  feynman: number;
+  moods: number;
+}
+
+export interface WeeklySummary {
+  this_week: WeeklySummaryCounts;
+  prev_week: WeeklySummaryCounts;
+}
+
 export interface UserStatsRead {
   days: number;
   daily_tasks: DailyTaskStat[];
@@ -30,6 +43,7 @@ export interface UserStatsRead {
   total_notes: number;
   total_feynman: number;
   total_moods?: number;
+  weekly_summary?: WeeklySummary | null;
 }
 
 export interface UserProgressRead {
@@ -38,6 +52,8 @@ export interface UserProgressRead {
   level: number;
   xp_in_level: number;
   xp_to_next_level: number;
+  streak_days: number;
+  streak_active_today: boolean;
 }
 
 export async function getUserStats(days = 7): Promise<UserStatsRead> {
@@ -48,5 +64,6 @@ export async function getUserStats(days = 7): Promise<UserStatsRead> {
 }
 
 export async function getUserXp(): Promise<UserProgressRead> {
-  return apiFetch<UserProgressRead>("/xp");
+  const tz = new Date().getTimezoneOffset() * -1;
+  return apiFetch<UserProgressRead>(`/xp?tz_offset=${tz}`);
 }

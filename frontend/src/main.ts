@@ -48,6 +48,7 @@ const APP_HTML = `
           <h2>Level <span id="xp-level">1</span></h2>
           <div class="xp-bar-wrap"><div class="xp-bar-fill" id="xp-bar-fill"></div></div>
           <p class="hint" id="xp-label">0 / 100 XP</p>
+          <p class="hint streak-line" id="streak-line" title="Consecutive days with at least one completed work pomodoro"></p>
         </section>
       </aside>
 
@@ -190,6 +191,11 @@ const APP_HTML = `
         </div>
 
         <div id="stats-view" class="hidden">
+          <section class="card hidden" id="weekly-summary-card">
+            <h2>Weekly summary</h2>
+            <p class="hint">Last 7 days vs the 7 days before that.</p>
+            <div id="weekly-summary-grid" class="stats-grid"></div>
+          </section>
           <section class="card">
             <div class="section-header">
               <h2>Overview</h2>
@@ -370,6 +376,19 @@ function mountApp(user: UserRead): void {
   renderUserChrome(user);
   renderPicker(user);
   updateThemeButton(themeToggle, user.theme);
+
+  // Cat reaction on pomodoro work completion. Pomodoro view dispatches
+  // 'cat:cheer'; we add a CSS class to the profile avatar for ~1.4s, then
+  // strip it so the next event can re-trigger the animation. Re-entrant
+  // safe: removing the class then forcing reflow via offsetWidth makes
+  // re-add a fresh start, not a no-op.
+  window.addEventListener("cat:cheer", () => {
+    profileAvatar.classList.remove("cat-cheer");
+    void profileAvatar.offsetWidth;
+    profileAvatar.classList.add("cat-cheer");
+    // Refresh XP/streak so the user immediately sees the +25 and streak update.
+    void StatsView.refresh();
+  });
 
   pickerToggle.addEventListener("click", () => {
     pickerEl.classList.toggle("hidden");

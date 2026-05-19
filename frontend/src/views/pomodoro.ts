@@ -329,6 +329,12 @@ async function onComplete(): Promise<void> {
 
   celebrate(finished, next);
 
+  // Tell the sidebar cat to react. Only animate on real work completions —
+  // breaks are not an achievement worth celebrating with a wiggle.
+  if (finished === "work") {
+    window.dispatchEvent(new CustomEvent("cat:cheer"));
+  }
+
   // Advance to next phase
   pomodoroMode = next;
   pomodoroTimeLeft = modeDurationSeconds(pomodoroMode);

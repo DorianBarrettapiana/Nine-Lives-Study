@@ -23,6 +23,7 @@ from app.core.migrations import run_migrations
 # Import ORM models before creating tables.
 # This ensures that SQLAlchemy knows every table definition.
 from app.models.daily_tracker import DailyLog, DailyTask  # noqa: F401
+from app.models.feed_cheer import FeedCheer  # noqa: F401
 from app.models.feed_like import FeedLike  # noqa: F401
 from app.models.feynman_entry import FeynmanEntry  # noqa: F401
 from app.models.friendship import Friendship  # noqa: F401

@@ -11,6 +11,8 @@ import { listSessions, type PomodoroSessionRead } from "../api/pomodoro";
 import { escapeHtml, fmtMinutes, makeDateLabel, parseApiDate } from "../utils";
 
 let statsTotals: HTMLDivElement;
+let weeklyCard: HTMLElement | null;
+let weeklyGrid: HTMLDivElement | null;
 let statsTasksChart: HTMLDivElement;
 let statsPomodoroChart: HTMLDivElement;
 let statsMoodChart: HTMLDivElement;
@@ -20,6 +22,7 @@ let statsMoodTitle: HTMLHeadingElement;
 let xpLevel: HTMLSpanElement;
 let xpBarFill: HTMLDivElement;
 let xpLabel: HTMLParagraphElement;
+let streakLine: HTMLParagraphElement | null;
 
 let userStats: UserStatsRead | null = null;
 let userProgress: UserProgressRead | null = null;
@@ -35,6 +38,64 @@ export function renderXp(): void {
   xpLevel.textContent = String(userProgress.level);
   xpBarFill.style.width = `${Math.round((userProgress.xp_in_level / 100) * 100)}%`;
   xpLabel.textContent = `${userProgress.xp_in_level} / 100 XP`;
+
+  if (streakLine) {
+    const n = userProgress.streak_days;
+    if (n <= 0) {
+      streakLine.textContent = "Complete a pomodoro today to start a streak.";
+      streakLine.classList.remove("streak-active", "streak-grace");
+    } else if (userProgress.streak_active_today) {
+      streakLine.textContent = `🔥 ${n}-day streak`;
+      streakLine.classList.add("streak-active");
+      streakLine.classList.remove("streak-grace");
+    } else {
+      // Streak alive thanks to yesterday — grace day until midnight.
+      streakLine.textContent = `🔥 ${n}-day streak — keep it alive today`;
+      streakLine.classList.add("streak-grace");
+      streakLine.classList.remove("streak-active");
+    }
+  }
+}
+
+// --- Weekly summary ---
+function renderWeeklySummary(): void {
+  if (!weeklyCard || !weeklyGrid) return;
+  const ws = userStats?.weekly_summary;
+  if (!ws) {
+    weeklyCard.classList.add("hidden");
+    return;
+  }
+  const items = [
+    { label: "Pomodoros",    a: ws.this_week.pomodoros,  b: ws.prev_week.pomodoros },
+    { label: "Tasks done",   a: ws.this_week.tasks_done, b: ws.prev_week.tasks_done },
+    { label: "Paper notes",  a: ws.this_week.notes,      b: ws.prev_week.notes },
+    { label: "Feynman",      a: ws.this_week.feynman,    b: ws.prev_week.feynman },
+    { label: "Mood entries", a: ws.this_week.moods,      b: ws.prev_week.moods },
+  ];
+  const anyData = items.some((i) => i.a > 0 || i.b > 0);
+  if (!anyData) {
+    weeklyCard.classList.add("hidden");
+    return;
+  }
+  weeklyCard.classList.remove("hidden");
+  weeklyGrid.innerHTML = items.map(({ label, a, b }) => {
+    let deltaHtml = `<span class="weekly-delta neutral">—</span>`;
+    if (b === 0 && a > 0) {
+      deltaHtml = `<span class="weekly-delta up">new ↑</span>`;
+    } else if (b > 0) {
+      const pct = Math.round(((a - b) / b) * 100);
+      if (pct > 0) deltaHtml = `<span class="weekly-delta up">+${pct}% ↑</span>`;
+      else if (pct < 0) deltaHtml = `<span class="weekly-delta down">${pct}% ↓</span>`;
+      else deltaHtml = `<span class="weekly-delta neutral">=</span>`;
+    }
+    return `
+      <div class="stat-card weekly-stat">
+        <strong>${a}</strong>
+        <span>${label}</span>
+        <span class="weekly-prev">prev: ${b}</span>
+        ${deltaHtml}
+      </div>`;
+  }).join("");
 }
 
 // --- Totals ---
@@ -308,6 +369,7 @@ export function render(): void {
   statsPomodoroTitle.textContent = `${label} — Pomodoro`;
   statsMoodTitle.textContent = `${label} — mood`;
 
+  renderWeeklySummary();
   renderTotals();
   renderTaskDayList();
   renderPomodoroSection();
@@ -331,6 +393,8 @@ export async function refresh(): Promise<void> {
 
 export function init(onRefreshNeeded: () => Promise<void>): void {
   statsTotals = document.querySelector<HTMLDivElement>("#stats-totals")!;
+  weeklyCard = document.querySelector<HTMLElement>("#weekly-summary-card");
+  weeklyGrid = document.querySelector<HTMLDivElement>("#weekly-summary-grid");
   statsTasksChart = document.querySelector<HTMLDivElement>("#stats-tasks-chart")!;
   statsPomodoroChart = document.querySelector<HTMLDivElement>("#stats-pomodoro-chart")!;
   statsMoodChart = document.querySelector<HTMLDivElement>("#stats-mood-chart")!;
@@ -340,6 +404,7 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
   xpLevel = document.querySelector<HTMLSpanElement>("#xp-level")!;
   xpBarFill = document.querySelector<HTMLDivElement>("#xp-bar-fill")!;
   xpLabel = document.querySelector<HTMLParagraphElement>("#xp-label")!;
+  streakLine = document.querySelector<HTMLParagraphElement>("#streak-line");
 
   // Scope to #stats-view so we don't accidentally pick up mood-view days
   // buttons (same class) and trigger cross-view side effects.
