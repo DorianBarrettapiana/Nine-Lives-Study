@@ -52,6 +52,12 @@ describe("view modules import cleanly", () => {
     expect(typeof mod.refresh).toBe("function");
   });
 
+  it("stopwatch", async () => {
+    const mod = await import("./stopwatch");
+    expect(typeof mod.init).toBe("function");
+    expect(typeof mod.refresh).toBe("function");
+  });
+
   it("avatar", async () => {
     const mod = await import("./avatar");
     expect(typeof mod.renderAvatarSvg).toBe("function");

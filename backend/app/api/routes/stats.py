@@ -1,7 +1,9 @@
 """Stats aggregation routes (scoped to current user).
 
-Counts come from the ``xp_events`` ledger, not from live rows, so deleting
-a task / pomodoro / mood entry does NOT retroactively rewrite history.
+Counts for activity events (tasks, moods, etc.) come from the xp_events
+ledger so deletions don't rewrite history. *Work minutes* (pomodoro +
+stopwatch) come from the live session tables so the actual elapsed time
+is accurate regardless of XP-rule changes over time.
 """
 
 from datetime import date, datetime, timedelta, timezone
@@ -17,6 +19,7 @@ from app.core.xp import (
     EVENT_MOOD,
     EVENT_NOTE,
     EVENT_POMODORO,
+    EVENT_STOPWATCH,
     EVENT_TASK_DONE,
 )
 from app.models.feynman_entry import FeynmanEntry
@@ -26,8 +29,8 @@ from app.models.user import User
 from app.models.xp_event import XpEvent
 from app.schemas.stats import (
     DailyMoodStat,
-    DailyPomodoroStat,
     DailyTaskStat,
+    DailyWorkStat,
     UserStatsRead,
     WeeklySummary,
     WeeklySummaryCounts,
@@ -46,14 +49,12 @@ def get_stats(
     """Return aggregated stats for the current user over the last N days.
 
     Daily buckets are computed in the caller's local timezone via tz_offset
-    (minutes east of UTC, same convention as friend stats). Without this,
-    events near midnight bucket against UTC and look "off by a day" to users
-    several hours away from UTC.
+    (minutes east of UTC). Without this, events near midnight bucket against
+    UTC and look "off by a day" to users several hours away from UTC.
     """
     user_id = current_user.id
 
     tz_delta = timedelta(minutes=tz_offset)
-    # "today" in the caller's local timezone — used to bound the N-day window.
     today_local = (datetime.now(timezone.utc) + tz_delta).date()
     since = today_local - timedelta(days=days - 1)
     since_str = since.isoformat()
@@ -61,7 +62,6 @@ def get_stats(
     def _local_day(ts) -> str | None:
         if ts is None:
             return None
-        # ts may be naive (SQLite) or tz-aware — coerce both to UTC then shift.
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=timezone.utc)
         return (ts.astimezone(timezone.utc) + tz_delta).strftime("%Y-%m-%d")
@@ -94,7 +94,6 @@ def get_stats(
         day = _local_day(entry.created_at)
         if day is None or day < since_str:
             continue
-        # rows are desc by created_at → first one wins per day
         if day not in latest_mood:
             latest_mood[day] = entry.mood
     daily_moods = [
@@ -102,36 +101,34 @@ def get_stats(
         for d, m in sorted(latest_mood.items())
     ]
 
-    # --- Pomodoros per day (XP_POMODORO events) -----------------------------
-    pomo_events = db.scalars(
+    # --- Work minutes per day -----------------------------------------------
+    # Computed from the xp_events ledger so that deleting a session does not
+    # rewrite history — same invariant as task counts. For pomodoro_done and
+    # stopwatch_done events, `amount` IS the work minutes (1 min = 1 XP).
+    work_events = db.scalars(
         select(XpEvent)
         .where(XpEvent.user_id == user_id)
-        .where(XpEvent.event_type == EVENT_POMODORO)
+        .where(XpEvent.event_type.in_([EVENT_POMODORO, EVENT_STOPWATCH]))
     ).all()
-    pomo_counts: dict[str, int] = {}
-    for ev in pomo_events:
+    minutes_by_day: dict[str, int] = {}
+    for ev in work_events:
         day = _local_day(ev.created_at)
-        if day is None or day < since_str:
+        if day is None:
             continue
-        pomo_counts[day] = pomo_counts.get(day, 0) + 1
-    daily_pomodoros = [
-        DailyPomodoroStat(date=date.fromisoformat(d), count=c)
-        for d, c in sorted(pomo_counts.items())
-    ]
+        minutes_by_day[day] = minutes_by_day.get(day, 0) + ev.amount
 
-    # --- Totals (all-time, from xp_events for activity-based counters; the
-    #     "current rows" counts for notes / feynman / mood reflect what the
-    #     user can still see in their UI, which is more useful than history) -
+    daily_work_minutes = [
+        DailyWorkStat(date=date.fromisoformat(d), minutes=m)
+        for d, m in sorted(minutes_by_day.items())
+        if d >= since_str
+    ]
+    total_work_minutes = sum(minutes_by_day.values())
+
+    # --- Other totals -------------------------------------------------------
     total_tasks_done = db.scalar(
         select(func.count(XpEvent.id))
         .where(XpEvent.user_id == user_id)
         .where(XpEvent.event_type == EVENT_TASK_DONE)
-    ) or 0
-
-    total_pomodoros = db.scalar(
-        select(func.count(XpEvent.id))
-        .where(XpEvent.user_id == user_id)
-        .where(XpEvent.event_type == EVENT_POMODORO)
     ) or 0
 
     total_notes = db.scalar(
@@ -146,19 +143,16 @@ def get_stats(
         select(func.count(MoodEntry.id)).where(MoodEntry.user_id == user_id)
     ) or 0
 
-    # Silence unused-import linter without breaking type hint inference
     _ = (EVENT_NOTE, EVENT_FEYNMAN, EVENT_MOOD)
 
     # --- Weekly summary: last 7 days vs prior 7 days (caller's local tz) ----
-    # Uses the same _local_day bucketing as the daily series above so deltas
-    # and the daily charts always agree.
-    this_week_start = today_local - timedelta(days=6)   # inclusive
-    prev_week_start = today_local - timedelta(days=13)  # inclusive
-    prev_week_end   = today_local - timedelta(days=7)   # inclusive
+    this_week_start = today_local - timedelta(days=6)
+    prev_week_start = today_local - timedelta(days=13)
+    prev_week_end   = today_local - timedelta(days=7)
 
-    def _bucket(events_or_entries, get_ts) -> tuple[int, int]:
+    def _bucket_count(items, get_ts) -> tuple[int, int]:
         this_n = prev_n = 0
-        for item in events_or_entries:
+        for item in items:
             day = _local_day(get_ts(item))
             if day is None:
                 continue
@@ -168,11 +162,21 @@ def get_stats(
                 prev_n += 1
         return this_n, prev_n
 
-    pomo_this, pomo_prev = _bucket(pomo_events, lambda e: e.created_at)
-    task_this, task_prev = _bucket(task_events, lambda e: e.created_at)
+    def _bucket_minutes() -> tuple[int, int]:
+        this_m = prev_m = 0
+        for ev in work_events:
+            day = _local_day(ev.created_at)
+            if day is None:
+                continue
+            if this_week_start.isoformat() <= day <= today_local.isoformat():
+                this_m += ev.amount
+            elif prev_week_start.isoformat() <= day <= prev_week_end.isoformat():
+                prev_m += ev.amount
+        return this_m, prev_m
 
-    # Notes / Feynman / Moods are live rows (not xp_events) — fetch their
-    # created_at timestamps once and bucket the same way.
+    work_this, work_prev = _bucket_minutes()
+    task_this, task_prev = _bucket_count(task_events, lambda e: e.created_at)
+
     note_rows = db.scalars(
         select(PaperNote.created_at).where(PaperNote.user_id == user_id)
     ).all()
@@ -182,18 +186,17 @@ def get_stats(
     mood_rows_ts = db.scalars(
         select(MoodEntry.created_at).where(MoodEntry.user_id == user_id)
     ).all()
-
-    notes_this, notes_prev = _bucket(note_rows, lambda ts: ts)
-    feyn_this, feyn_prev = _bucket(feynman_rows, lambda ts: ts)
-    mood_this, mood_prev = _bucket(mood_rows_ts, lambda ts: ts)
+    notes_this, notes_prev = _bucket_count(note_rows, lambda ts: ts)
+    feyn_this, feyn_prev = _bucket_count(feynman_rows, lambda ts: ts)
+    mood_this, mood_prev = _bucket_count(mood_rows_ts, lambda ts: ts)
 
     weekly_summary = WeeklySummary(
         this_week=WeeklySummaryCounts(
-            pomodoros=pomo_this, tasks_done=task_this,
+            work_minutes=work_this, tasks_done=task_this,
             notes=notes_this, feynman=feyn_this, moods=mood_this,
         ),
         prev_week=WeeklySummaryCounts(
-            pomodoros=pomo_prev, tasks_done=task_prev,
+            work_minutes=work_prev, tasks_done=task_prev,
             notes=notes_prev, feynman=feyn_prev, moods=mood_prev,
         ),
     )
@@ -202,9 +205,9 @@ def get_stats(
         days=days,
         daily_tasks=daily_tasks,
         daily_moods=daily_moods,
-        daily_pomodoros=daily_pomodoros,
+        daily_work_minutes=daily_work_minutes,
         total_tasks_done=total_tasks_done,
-        total_pomodoros=total_pomodoros,
+        total_work_minutes=total_work_minutes,
         total_notes=total_notes,
         total_feynman=total_feynman,
         total_moods=total_moods,

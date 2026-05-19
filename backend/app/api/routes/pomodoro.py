@@ -11,10 +11,10 @@ from app.core.database import get_db
 from app.core.xp import (
     ENTITY_POMODORO,
     EVENT_POMODORO,
-    XP_POMODORO_COMPLETE,
     award_xp_event,
 )
 from app.models.pomodoro_session import PomodoroSession
+from app.models.stopwatch_session import StopwatchSession
 from app.models.user import User
 from app.schemas.pomodoro_session import (
     PomodoroSessionComplete,
@@ -51,6 +51,20 @@ def start_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> PomodoroSession:
+    # Mutex with stopwatch: a work pomodoro and an active stopwatch can't
+    # run at the same time (a break may, since the user isn't "working").
+    if payload.session_type == "work":
+        active_stopwatch = db.scalar(
+            select(StopwatchSession.id)
+            .where(StopwatchSession.user_id == current_user.id)
+            .where(StopwatchSession.ended_at.is_(None))
+        )
+        if active_stopwatch is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A stopwatch session is already active. End it first.",
+            )
+
     session = PomodoroSession(
         user_id=current_user.id,
         session_type=payload.session_type,
@@ -74,14 +88,15 @@ def complete_session(
     session.ended_at = payload.ended_at or datetime.now(timezone.utc)
 
     # Idempotent on (event_type, entity_id): re-PATCHing /complete on an
-    # already-finished session does not re-award XP.
+    # already-finished session does not re-award XP. XP equals the work
+    # duration in minutes (current rule: 1 min work = 1 XP).
     if session.session_type == "work":
         award_xp_event(
             user_id=session.user_id,
             event_type=EVENT_POMODORO,
             entity_type=ENTITY_POMODORO,
             entity_id=session.id,
-            amount=XP_POMODORO_COMPLETE,
+            amount=session.duration_minutes,
             db=db,
         )
 

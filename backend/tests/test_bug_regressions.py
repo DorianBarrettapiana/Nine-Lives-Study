@@ -16,19 +16,19 @@ from fastapi.testclient import TestClient
 
 
 def test_xp_not_farmable_via_task_toggle(auth_client: TestClient):
+    """Under the current rule (May 2026), tasks grant 0 XP. The test still
+    pins idempotency: re-toggling must never produce *any* XP delta."""
     task_id = auth_client.post("/daily/tasks", json={"text": "X"}).json()["id"]
     xp_baseline = auth_client.get("/xp").json()["xp"]
 
-    # Toggle done → expected: +10 XP
     auth_client.patch(f"/daily/tasks/{task_id}", json={"is_done": True})
     xp_after_first = auth_client.get("/xp").json()["xp"]
-    assert xp_after_first == xp_baseline + 10
+    assert xp_after_first == xp_baseline  # tasks no longer grant XP
 
-    # Untoggle, then re-toggle: should NOT grant XP again
     auth_client.patch(f"/daily/tasks/{task_id}", json={"is_done": False})
     auth_client.patch(f"/daily/tasks/{task_id}", json={"is_done": True})
     xp_after_retoggle = auth_client.get("/xp").json()["xp"]
-    assert xp_after_retoggle == xp_after_first, (
+    assert xp_after_retoggle == xp_baseline, (
         f"XP was farmed by toggling: {xp_baseline} → {xp_after_first} → {xp_after_retoggle}"
     )
 
@@ -41,16 +41,17 @@ def test_xp_not_farmable_via_task_toggle(auth_client: TestClient):
 
 
 def test_xp_not_farmable_via_daily_log_save(auth_client: TestClient):
+    """Daily logs grant 0 XP under the current rule. Saving twice still
+    must not double-record in the xp_events ledger."""
     xp_baseline = auth_client.get("/xp").json()["xp"]
 
     auth_client.put("/daily/log", json={"mood": "🙂", "reflection": "first"})
     xp_after_first = auth_client.get("/xp").json()["xp"]
-    assert xp_after_first == xp_baseline + 5  # XP_DAILY_LOG_SAVE
+    assert xp_after_first == xp_baseline  # daily log no longer grants XP
 
-    # Save again with different content: should NOT grant additional XP
     auth_client.put("/daily/log", json={"mood": "🔥", "reflection": "updated"})
     xp_after_second = auth_client.get("/xp").json()["xp"]
-    assert xp_after_second == xp_after_first
+    assert xp_after_second == xp_baseline
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +93,8 @@ def test_xp_not_farmable_via_pomodoro_recomplete(auth_client: TestClient):
     xp_baseline = auth_client.get("/xp").json()["xp"]
     auth_client.patch(f"/pomodoro/{session_id}/complete", json={})
     xp_first = auth_client.get("/xp").json()["xp"]
-    assert xp_first == xp_baseline + 25  # XP_POMODORO_COMPLETE
+    # New rule: 1 min work = 1 XP, so a 25-min pomodoro grants 25 XP.
+    assert xp_first == xp_baseline + 25
 
     # PATCH /complete again on the already-completed session
     auth_client.patch(f"/pomodoro/{session_id}/complete", json={})
@@ -108,16 +110,20 @@ def test_xp_not_farmable_via_pomodoro_recomplete(auth_client: TestClient):
 
 
 def test_deleted_pomodoro_still_in_stats(auth_client: TestClient):
+    """Stats count work minutes from the xp_events ledger, so once a
+    pomodoro completion is recorded, deleting the session row does NOT
+    retroactively remove the minutes from history.
+    """
     r = auth_client.post("/pomodoro", json={"session_type": "work", "duration_minutes": 25})
     sid = r.json()["id"]
     auth_client.patch(f"/pomodoro/{sid}/complete", json={})
 
-    before = auth_client.get("/stats?days=7").json()["total_pomodoros"]
-    assert before == 1
+    before = auth_client.get("/stats?days=7").json()["total_work_minutes"]
+    assert before == 25
 
     auth_client.delete(f"/pomodoro/{sid}")
-    after = auth_client.get("/stats?days=7").json()["total_pomodoros"]
-    assert after == 1
+    after = auth_client.get("/stats?days=7").json()["total_work_minutes"]
+    assert after == 25, f"Deleting a completed pomodoro wiped a stats point: {before} → {after}"
 
 
 # ---------------------------------------------------------------------------

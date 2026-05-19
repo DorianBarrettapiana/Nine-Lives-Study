@@ -18,7 +18,6 @@ from app.core.xp import (
 from app.models.feed_like import FeedLike
 from app.models.friend_cheer import FriendCheer
 from app.models.friendship import Friendship
-from app.models.pomodoro_session import PomodoroSession
 from app.models.user import User
 from app.models.xp_event import XpEvent
 from app.schemas.friendship import (
@@ -214,35 +213,29 @@ def get_friend_study_stats(
 
     since = date.today() - timedelta(days=days - 1)
 
-    events = db.scalars(
+    # Use the xp_events ledger so deleted sessions still count, and one path
+    # handles both pomodoro_done and stopwatch_done uniformly (amount = mins).
+    work_events = db.scalars(
         select(XpEvent)
         .where(XpEvent.user_id == user_id)
-        .where(XpEvent.event_type == "pomodoro_done")
+        .where(XpEvent.event_type.in_(["pomodoro_done", "stopwatch_done"]))
     ).all()
-
-    entity_ids = [e.entity_id for e in events if e.entity_type == "pomodoro_session"]
-    duration_map: dict[int, int] = {}
-    if entity_ids:
-        pomo_rows = db.execute(
-            select(PomodoroSession.id, PomodoroSession.duration_minutes)
-            .where(PomodoroSession.id.in_(entity_ids))
-        ).all()
-        duration_map = {pid: dur for pid, dur in pomo_rows}
-
-    default_dur = friend.pomodoro_work_minutes
 
     tz_delta = timedelta(minutes=tz_offset)
     since_str = since.isoformat()
     minutes_by_day: dict[str, int] = {}
-    for ev in events:
+
+    for ev in work_events:
         if ev.created_at is None:
             continue
-        local_dt = ev.created_at + tz_delta
+        ts = ev.created_at
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        local_dt = ts.astimezone(timezone.utc) + tz_delta
         day_str = local_dt.strftime("%Y-%m-%d")
         if day_str < since_str:
             continue
-        dur = duration_map.get(ev.entity_id, default_dur)
-        minutes_by_day[day_str] = minutes_by_day.get(day_str, 0) + dur
+        minutes_by_day[day_str] = minutes_by_day.get(day_str, 0) + ev.amount
 
     daily_minutes = [
         DailyMinutes(

@@ -14,6 +14,7 @@ from app.api.routes.mood import router as mood_router
 from app.api.routes.paper_notes import router as paper_notes_router
 from app.api.routes.pomodoro import router as pomodoro_router
 from app.api.routes.stats import router as stats_router
+from app.api.routes.stopwatch import router as stopwatch_router
 from app.api.routes.users import router as users_router
 from app.api.routes.xp import router as xp_router
 from app.core.config import APP_NAME, APP_VERSION
@@ -31,6 +32,7 @@ from app.models.mood_entry import MoodEntry  # noqa: F401
 from app.models.paper_note import PaperNote  # noqa: F401
 from app.models.pomodoro_session import PomodoroSession  # noqa: F401
 from app.models.session import Session  # noqa: F401
+from app.models.stopwatch_session import StopwatchSession  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.user_progress import UserProgress  # noqa: F401
 from app.models.xp_event import XpEvent  # noqa: F401
@@ -66,6 +68,7 @@ app.include_router(paper_notes_router)
 app.include_router(feynman_entries_router)
 app.include_router(daily_tracker_router)
 app.include_router(pomodoro_router)
+app.include_router(stopwatch_router)
 app.include_router(xp_router)
 app.include_router(mood_router)
 app.include_router(stats_router)

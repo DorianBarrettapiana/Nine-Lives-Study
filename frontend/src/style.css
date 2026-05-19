@@ -1513,3 +1513,29 @@ h3 {
   margin-right: 0.3rem;
   line-height: 1;
 }
+
+/* --- Stopwatch card in the sidebar ------------------------------------- */
+
+.stopwatch-card {
+  text-align: center;
+  padding: 1.25rem;
+}
+.stopwatch-display {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin: 0.4rem 0 0.8rem;
+  color: var(--text-soft);
+  transition: color 0.2s;
+}
+.stopwatch-display.running {
+  color: var(--text-accent);
+}
+.stopwatch-buttons {
+  justify-content: center;
+}
+.stopwatch-buttons button {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.85rem;
+}

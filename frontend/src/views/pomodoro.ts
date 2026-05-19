@@ -40,6 +40,35 @@ let pomodoroMode: Mode = "work";
 let pomodoroTimeLeft = 25 * 60;
 let pomodoroEndTime: number | null = null;
 let pomodoroRunning = false;
+// True while the user has an active (in-progress) work pomodoro on the
+// server — used to mutex with the stopwatch (frontend hint; backend also
+// enforces). "Active" = either running locally OR the server has an
+// open session that resume-on-refresh will pick up.
+let pomodoroActive = false;
+
+function broadcastPomodoroState(): void {
+  pomodoroActive = activeSessionId !== null || pomodoroRunning;
+  window.dispatchEvent(new CustomEvent("pomodoro:state", {
+    detail: { active: pomodoroActive, running: pomodoroRunning },
+  }));
+}
+
+// True if the stopwatch view has told us a session is running on the server.
+let stopwatchBlocking = false;
+window.addEventListener("stopwatch:state", (e: Event) => {
+  const ce = e as CustomEvent<{ active: boolean; running: boolean }>;
+  stopwatchBlocking = !!(ce.detail?.active);
+  // Disable the Start button if stopwatch is locking us out and we're idle.
+  if (typeof pomodoroStartButton !== "undefined" && pomodoroStartButton) {
+    if (stopwatchBlocking && !pomodoroRunning && activeSessionId === null) {
+      pomodoroStartButton.disabled = true;
+      pomodoroStartButton.title = "Stop the work timer first to start a pomodoro";
+    } else {
+      pomodoroStartButton.disabled = false;
+      pomodoroStartButton.title = "";
+    }
+  }
+});
 let pomodoroIntervalId: ReturnType<typeof setInterval> | null = null;
 let activeSessionId: number | null = null;
 
@@ -236,6 +265,7 @@ async function resumeIfInProgress(): Promise<void> {
   }
 
   activeSessionId = active.id;
+  broadcastPomodoroState();
   if (active.session_type === "work") {
     pomodoroMode = "work";
   } else {
@@ -258,6 +288,7 @@ async function resumeIfInProgress(): Promise<void> {
   pomodoroTimeLeft = Math.ceil((durationMs - elapsedMs) / 1000);
   pomodoroEndTime = Date.now() + pomodoroTimeLeft * 1000;
   pomodoroRunning = true;
+  broadcastPomodoroState();
   pomodoroIntervalId = setInterval(async () => {
     pomodoroTimeLeft = Math.max(0, Math.ceil((pomodoroEndTime! - Date.now()) / 1000));
     pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
@@ -283,6 +314,7 @@ function stopTimer(): void {
     pomodoroTimeLeft = Math.max(0, Math.ceil((pomodoroEndTime - Date.now()) / 1000));
   }
   pomodoroRunning = false;
+  broadcastPomodoroState();
 }
 
 async function startCurrentMode(): Promise<void> {
@@ -298,6 +330,7 @@ async function startCurrentMode(): Promise<void> {
   }
   pomodoroEndTime = Date.now() + pomodoroTimeLeft * 1000;
   pomodoroRunning = true;
+  broadcastPomodoroState();
   pomodoroIntervalId = setInterval(async () => {
     pomodoroTimeLeft = Math.max(0, Math.ceil((pomodoroEndTime! - Date.now()) / 1000));
     pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
@@ -314,7 +347,10 @@ async function onComplete(): Promise<void> {
   if (activeSessionId !== null) {
     try {
       await completeSession(activeSessionId);
-      const msg = finished === "work" ? "Work session done! +25 XP" : `${modeLabel(finished)} over!`;
+      const earnedXp = modeDurationSeconds(finished) / 60;
+      const msg = finished === "work"
+        ? `Work session done! +${earnedXp} XP`
+        : `${modeLabel(finished)} over!`;
       setMessage(pomodoroMessage, msg, "success");
       await refresh();  // refresh the session list (used for stats counting too)
     } catch (error) {
@@ -324,6 +360,7 @@ async function onComplete(): Promise<void> {
       // Always clear so the next phase opens a fresh server-side session;
       // otherwise a failed complete would attach the next phase to a stale id.
       activeSessionId = null;
+      broadcastPomodoroState();
     }
   }
 
@@ -385,6 +422,7 @@ export function init(onDataChanged: () => Promise<void>): void {
     // "in progress" sessions in the history list.
     const orphanId = activeSessionId;
     activeSessionId = null;
+    broadcastPomodoroState();
     pomodoroMode = "work";
     pomodoroTimeLeft = modeDurationSeconds("work");
     pomodoroEndTime = null;

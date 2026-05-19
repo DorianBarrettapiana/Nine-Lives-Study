@@ -15,30 +15,44 @@ from app.models.user_progress import XP_PER_LEVEL, UserProgress
 from app.models.xp_event import XpEvent
 
 # --- XP amounts (single source of truth) ------------------------------------
+#
+# Current rule (May 2026):
+#   1 minute of work time (pomodoro OR stopwatch) = 1 XP
+#   1 paper note  = 10 XP
+#   1 Feynman     = 10 XP
+#   Everything else (tasks / mood / daily log / cheers received) = 0 XP
+#
+# Pomodoro XP is awarded as `duration_minutes`, not a flat number.
+# Stopwatch XP is awarded as `total minutes worked`.
 
-XP_TASK_COMPLETE = 10
-XP_POMODORO_COMPLETE = 25
-XP_DAILY_LOG_SAVE = 5
-XP_FEYNMAN_CREATE = 15
+XP_TASK_COMPLETE = 0     # was 10 — now "其他行为不计入"
+XP_DAILY_LOG_SAVE = 0    # was 5
+XP_FEYNMAN_CREATE = 10   # was 15
 XP_NOTE_CREATE = 10
-XP_MOOD_LOG = 3
-XP_CHEER_RECEIVED = 1
+XP_MOOD_LOG = 0          # was 3
+XP_CHEER_RECEIVED = 0    # was 1
+
+# Legacy constant — kept so existing imports don't break. Pomodoro routes
+# now award `session.duration_minutes` directly.
+XP_POMODORO_COMPLETE = 25
 
 # --- Event type / entity type constants -------------------------------------
 
 EVENT_TASK_DONE   = "task_done"
 EVENT_POMODORO    = "pomodoro_done"
+EVENT_STOPWATCH   = "stopwatch_done"
 EVENT_DAILY_LOG   = "daily_log_saved"
 EVENT_FEYNMAN     = "feynman_created"
 EVENT_NOTE        = "note_created"
 EVENT_MOOD        = "mood_logged"
 EVENT_CHEER       = "cheer_received"
 
-ENTITY_DAILY_TASK = "daily_task"
-ENTITY_POMODORO   = "pomodoro_session"
-ENTITY_DAILY_LOG  = "daily_log"
-ENTITY_FEYNMAN    = "feynman_entry"
-ENTITY_NOTE       = "paper_note"
+ENTITY_DAILY_TASK   = "daily_task"
+ENTITY_POMODORO     = "pomodoro_session"
+ENTITY_STOPWATCH    = "stopwatch_session"
+ENTITY_DAILY_LOG    = "daily_log"
+ENTITY_FEYNMAN      = "feynman_entry"
+ENTITY_NOTE         = "paper_note"
 ENTITY_MOOD         = "mood_entry"
 ENTITY_FRIEND_CHEER = "friend_cheer"
 
