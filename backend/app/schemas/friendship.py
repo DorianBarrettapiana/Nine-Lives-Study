@@ -34,5 +34,4 @@ class FriendStudyStats(BaseModel):
     username: str
     days: int
     daily_minutes: list[DailyMinutes]
-    period_minutes: dict[str, int]
     total_minutes: int

@@ -1152,3 +1152,34 @@ h3 {
   font-size: 1rem;
   color: var(--text-accent);
 }
+
+.friend-total-label {
+  font-size: 0.92rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.friend-daily-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.friend-day-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 0.88rem;
+}
+
+.friend-day-row:last-child {
+  border-bottom: none;
+}
+
+.friend-day-date {
+  color: var(--text-muted);
+}
+
+.friend-day-mins {
+  font-weight: 600;
+}
