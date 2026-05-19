@@ -303,10 +303,26 @@ export function init(onDataChanged: () => Promise<void>): void {
     await onDataChanged();
   });
 
-  pomodoroResetButton.addEventListener("click", () => {
-    stopTimer(); activeSessionId = null; pomodoroMode = "work";
-    pomodoroTimeLeft = modeDurationSeconds("work"); pomodoroEndTime = null;
-    setMessage(pomodoroMessage, "", "neutral"); render();
+  pomodoroResetButton.addEventListener("click", async () => {
+    stopTimer();
+    // Discard the server-side in-progress row so Reset doesn't leave orphan
+    // "in progress" sessions in the history list.
+    const orphanId = activeSessionId;
+    activeSessionId = null;
+    pomodoroMode = "work";
+    pomodoroTimeLeft = modeDurationSeconds("work");
+    pomodoroEndTime = null;
+    setMessage(pomodoroMessage, "", "neutral");
+    render();
+    if (orphanId !== null) {
+      try {
+        await deleteSession(orphanId);
+        await onDataChanged();
+      } catch (error) {
+        console.error(error);
+        setMessage(pomodoroMessage, "Reset locally, but could not discard server session.", "error");
+      }
+    }
   });
 
   document.addEventListener("visibilitychange", async () => {
