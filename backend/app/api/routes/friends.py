@@ -181,30 +181,35 @@ def get_friend_study_stats(
 
     since = date.today() - timedelta(days=days - 1)
 
-    rows = db.execute(
-        select(XpEvent.created_at, func.coalesce(PomodoroSession.duration_minutes, 25))
-        .outerjoin(
-            PomodoroSession,
-            and_(
-                XpEvent.entity_type == "pomodoro_session",
-                XpEvent.entity_id == PomodoroSession.id,
-            ),
-        )
+    events = db.scalars(
+        select(XpEvent)
         .where(XpEvent.user_id == user_id)
         .where(XpEvent.event_type == "pomodoro_done")
     ).all()
 
+    entity_ids = [e.entity_id for e in events if e.entity_type == "pomodoro_session"]
+    duration_map: dict[int, int] = {}
+    if entity_ids:
+        pomo_rows = db.execute(
+            select(PomodoroSession.id, PomodoroSession.duration_minutes)
+            .where(PomodoroSession.id.in_(entity_ids))
+        ).all()
+        duration_map = {pid: dur for pid, dur in pomo_rows}
+
+    default_dur = friend.pomodoro_work_minutes
+
     tz_delta = timedelta(minutes=tz_offset)
     since_str = since.isoformat()
     minutes_by_day: dict[str, int] = {}
-    for created_at, duration in rows:
-        if created_at is None:
+    for ev in events:
+        if ev.created_at is None:
             continue
-        local_dt = created_at + tz_delta
+        local_dt = ev.created_at + tz_delta
         day_str = local_dt.strftime("%Y-%m-%d")
         if day_str < since_str:
             continue
-        minutes_by_day[day_str] = minutes_by_day.get(day_str, 0) + duration
+        dur = duration_map.get(ev.entity_id, default_dur)
+        minutes_by_day[day_str] = minutes_by_day.get(day_str, 0) + dur
 
     daily_minutes = [
         DailyMinutes(
