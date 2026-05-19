@@ -63,3 +63,22 @@ export async function getFriendStudyStats(userId: number, days = 7): Promise<Fri
   const tz = new Date().getTimezoneOffset() * -1;
   return apiFetch<FriendStudyStats>(`/friends/${userId}/study-stats?days=${days}&tz_offset=${tz}`);
 }
+
+export interface FeedItem {
+  id: number;
+  user_id: number;
+  username: string;
+  event_type: string;
+  amount: number;
+  created_at: string;
+  like_count: number;
+  liked_by_me: boolean;
+}
+
+export async function getFeed(limit = 30): Promise<FeedItem[]> {
+  return apiFetch<FeedItem[]>(`/friends/feed?limit=${limit}`);
+}
+
+export async function toggleLike(eventId: number): Promise<{ liked: boolean }> {
+  return apiFetch<{ liked: boolean }>(`/friends/feed/${eventId}/like`, { method: "POST" });
+}
