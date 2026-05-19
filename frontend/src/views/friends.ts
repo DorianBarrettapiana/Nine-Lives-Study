@@ -196,7 +196,7 @@ function renderFriends(): void {
       <span class="friend-name">${escapeHtml(f.username)}</span>
       <div class="friend-actions">
         <button class="secondary btn-view-stats" data-uid="${f.user_id}">View stats</button>
-        <button class="secondary btn-remove" data-uid="${f.user_id}">Remove</button>
+        <button class="btn-remove-small" data-uid="${f.user_id}" title="Remove friend">&times;</button>
       </div>
     </div>`).join("");
 
@@ -207,7 +207,7 @@ function renderFriends(): void {
       if (friend) await showFriendStats(friend);
     });
   });
-  friendsList.querySelectorAll<HTMLButtonElement>(".btn-remove").forEach(btn => {
+  friendsList.querySelectorAll<HTMLButtonElement>(".btn-remove-small").forEach(btn => {
     btn.addEventListener("click", async () => {
       await removeFriend(Number(btn.dataset.uid));
       friendStatsPanel.classList.add("hidden");
@@ -220,21 +220,52 @@ function renderFriends(): void {
 // Search
 // ---------------------------------------------------------------------------
 
+function friendStatus(username: string): "friend" | "pending" | null {
+  if (friends.some(f => f.username === username)) return "friend";
+  if (requests.some(r => r.username === username)) return "pending";
+  return null;
+}
+
+function parseApiDetail(e: unknown): string {
+  if (e instanceof Error && "body" in e) {
+    try {
+      const parsed = JSON.parse((e as { body: string }).body);
+      if (parsed.detail) return parsed.detail;
+    } catch { /* use fallback */ }
+  }
+  return e instanceof Error ? e.message : "Error";
+}
+
 async function handleSearch(): Promise<void> {
   const q = friendSearchInput.value.trim();
   if (!q) return;
   friendSearchResults.innerHTML = `<div class="hint">Searching…</div>`;
+  setMessage(friendSearchMessage, "", "neutral");
   try {
     const results = await searchUsers(q);
     if (results.length === 0) {
       friendSearchResults.innerHTML = `<div class="empty-state">No users found.</div>`;
       return;
     }
-    friendSearchResults.innerHTML = results.map(u => `
-      <div class="friend-row">
+    friendSearchResults.innerHTML = results.map(u => {
+      const status = friendStatus(u.username);
+      if (status === "friend") {
+        return `<div class="friend-row">
+          <span class="friend-name">${escapeHtml(u.username)}</span>
+          <span class="friend-status-label">Already friends</span>
+        </div>`;
+      }
+      if (status === "pending") {
+        return `<div class="friend-row">
+          <span class="friend-name">${escapeHtml(u.username)}</span>
+          <span class="friend-status-label">Request pending</span>
+        </div>`;
+      }
+      return `<div class="friend-row">
         <span class="friend-name">${escapeHtml(u.username)}</span>
         <button class="secondary btn-add" data-username="${escapeHtml(u.username)}">Add friend</button>
-      </div>`).join("");
+      </div>`;
+    }).join("");
 
     friendSearchResults.querySelectorAll<HTMLButtonElement>(".btn-add").forEach(btn => {
       btn.addEventListener("click", async () => {
@@ -244,8 +275,7 @@ async function handleSearch(): Promise<void> {
           btn.textContent = res.status === "accepted" ? "Friends!" : "Request sent";
           await refresh();
         } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : "Error";
-          setMessage(friendSearchMessage, msg, "error");
+          setMessage(friendSearchMessage, parseApiDetail(e), "error");
           btn.disabled = false;
         }
       });

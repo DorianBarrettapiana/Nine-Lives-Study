@@ -1139,6 +1139,30 @@ h3 {
   padding: 0.3rem 0.65rem;
 }
 
+.friend-status-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.btn-remove-small {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  line-height: 1;
+  opacity: 0.5;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.btn-remove-small:hover {
+  opacity: 1;
+  color: #ef4444;
+}
+
 .friend-stats-header {
   display: flex;
   align-items: center;
