@@ -307,6 +307,17 @@ def toggle_like(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
+    # Only allow liking events that belong to the caller or one of their
+    # accepted friends — otherwise any logged-in user could like arbitrary
+    # event ids by guessing/enumerating and spam the author's notifications.
+    event = db.get(XpEvent, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found.")
+    if event.user_id != current_user.id:
+        f = _get_friendship(current_user.id, event.user_id, db)
+        if f is None or f.status != "accepted":
+            raise HTTPException(status_code=403, detail="Not allowed.")
+
     existing = db.scalar(
         select(FeedLike)
         .where(FeedLike.user_id == current_user.id)

@@ -341,13 +341,15 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
   xpBarFill = document.querySelector<HTMLDivElement>("#xp-bar-fill")!;
   xpLabel = document.querySelector<HTMLParagraphElement>("#xp-label")!;
 
-  document.querySelectorAll<HTMLButtonElement>(".days-btn").forEach(btn => {
+  // Scope to #stats-view so we don't accidentally pick up mood-view days
+  // buttons (same class) and trigger cross-view side effects.
+  document.querySelectorAll<HTMLButtonElement>("#stats-view .days-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
       const days = Number(btn.dataset.days);
       if (!days) return;
       statsDays = days;
       expandedDay = null;
-      document.querySelectorAll<HTMLButtonElement>(".days-btn").forEach(b =>
+      document.querySelectorAll<HTMLButtonElement>("#stats-view .days-btn").forEach(b =>
         b.classList.toggle("active", b === btn)
       );
       await onRefreshNeeded();
