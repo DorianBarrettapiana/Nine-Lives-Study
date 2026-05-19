@@ -24,8 +24,8 @@ from app.core.migrations import run_migrations
 # This ensures that SQLAlchemy knows every table definition.
 from app.models.daily_tracker import DailyLog, DailyTask  # noqa: F401
 from app.models.feed_like import FeedLike  # noqa: F401
-from app.models.friend_cheer import FriendCheer  # noqa: F401
 from app.models.feynman_entry import FeynmanEntry  # noqa: F401
+from app.models.friend_cheer import FriendCheer  # noqa: F401
 from app.models.friendship import Friendship  # noqa: F401
 from app.models.mood_entry import MoodEntry  # noqa: F401
 from app.models.paper_note import PaperNote  # noqa: F401
