@@ -24,9 +24,6 @@ XP_NOTE_CREATE = 10
 XP_MOOD_LOG = 3
 XP_CHEER_RECEIVED = 1
 
-# Daily cap on cheers a single user can send out.
-CHEERS_PER_DAY = 10
-
 # --- Event type / entity type constants -------------------------------------
 
 EVENT_TASK_DONE   = "task_done"
@@ -42,8 +39,8 @@ ENTITY_POMODORO   = "pomodoro_session"
 ENTITY_DAILY_LOG  = "daily_log"
 ENTITY_FEYNMAN    = "feynman_entry"
 ENTITY_NOTE       = "paper_note"
-ENTITY_MOOD       = "mood_entry"
-ENTITY_FEED_CHEER = "feed_cheer"
+ENTITY_MOOD         = "mood_entry"
+ENTITY_FRIEND_CHEER = "friend_cheer"
 
 
 def _get_or_create_progress(user_id: int, db: Session) -> UserProgress:

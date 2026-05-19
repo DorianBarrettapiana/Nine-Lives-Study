@@ -15,6 +15,9 @@ class FriendEntry(BaseModel):
     user_id: int
     username: str
     cat_skin: str = "tabby"
+    # True if the current user has NOT cheered this friend in the last 24h
+    # — i.e. the Cheer button is currently available.
+    can_cheer: bool = True
 
     model_config = {"from_attributes": True}
 
@@ -50,8 +53,6 @@ class FeedItem(BaseModel):
     created_at: str
     like_count: int
     liked_by_me: bool
-    cheer_count: int = 0
-    cheered_by_me: bool = False
 
 
 class NotificationItem(BaseModel):

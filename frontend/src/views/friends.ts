@@ -7,7 +7,7 @@
 
 import {
   acceptFriendRequest,
-  cheerEvent,
+  cheerFriend,
   getFeed,
   getFriendStudyStats,
   getNotifications,
@@ -61,6 +61,12 @@ const EVENT_LABELS: Record<string, string> = {
   mood_logged: "recorded their mood",
 };
 
+// Notifications use this when the event_type is a marker for non-event
+// actions (today: only "someone cheered you").
+const NOTIFICATION_OVERRIDES: Record<string, string> = {
+  cheered_you: "sent you a cheer 🎉 (+1 XP)",
+};
+
 function timeAgo(isoStr: string): string {
   const dt = parseApiDate(isoStr);
   const diff = Math.max(0, Date.now() - dt.getTime());
@@ -79,9 +85,13 @@ function renderFeed(items: FeedItem[], notifs: NotificationItem[] = []): void {
     notifHtml = `
       <div class="feed-notifs">
         ${notifs.map(n => {
-          const label = EVENT_LABELS[n.event_type] ?? n.event_type;
+          const override = NOTIFICATION_OVERRIDES[n.event_type];
+          const body = override
+            ? `${override}`
+            : `liked your activity: ${EVENT_LABELS[n.event_type] ?? n.event_type}`;
+          const icon = override ? "" : "🌸 ";
           return `<div class="feed-notif-item">
-            ${avatarRowHtml(n.liker_cat_skin)}<strong>${escapeHtml(n.liker_username)}</strong> liked your activity: ${label}
+            ${icon}${avatarRowHtml(n.liker_cat_skin)}<strong>${escapeHtml(n.liker_username)}</strong> ${body}
             <span class="feed-time">${timeAgo(n.created_at)}</span>
           </div>`;
         }).join("")}
@@ -99,26 +109,16 @@ function renderFeed(items: FeedItem[], notifs: NotificationItem[] = []): void {
   friendFeed.innerHTML = notifHtml + items.map(item => {
     const label = EVENT_LABELS[item.event_type] ?? item.event_type;
     const likedClass = item.liked_by_me ? " liked" : "";
-    const cheeredClass = item.cheered_by_me ? " cheered" : "";
     return `
       <div class="feed-item">
         <div class="feed-item-content">
           ${avatarRowHtml(item.cat_skin)}<strong>${escapeHtml(item.username)}</strong> ${label}
           <span class="feed-time">${timeAgo(item.created_at)}</span>
         </div>
-        <div class="feed-actions">
-          <button class="feed-like-btn${likedClass}" data-eid="${item.id}" title="Like">
-            <span class="flower-icon">✿</span>
-            <span class="like-count">${item.like_count || ""}</span>
-          </button>
-          <button class="feed-cheer-btn${cheeredClass}"
-                  data-cheer-eid="${item.id}"
-                  title="${item.cheered_by_me ? "Already cheered" : "Cheer (+1 XP to them)"}"
-                  ${item.cheered_by_me ? "disabled" : ""}>
-            <span class="cheer-icon">🎉</span>
-            <span class="cheer-count">${item.cheer_count || ""}</span>
-          </button>
-        </div>
+        <button class="feed-like-btn${likedClass}" data-eid="${item.id}" title="Like">
+          <span class="flower-icon">✿</span>
+          <span class="like-count">${item.like_count || ""}</span>
+        </button>
       </div>`;
   }).join("");
 
@@ -134,26 +134,6 @@ function renderFeed(items: FeedItem[], notifs: NotificationItem[] = []): void {
     });
   });
 
-  friendFeed.querySelectorAll<HTMLButtonElement>(".feed-cheer-btn").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      if (btn.disabled) return;
-      btn.disabled = true;
-      const eid = Number(btn.dataset.cheerEid);
-      try {
-        const res = await cheerEvent(eid);
-        btn.classList.add("cheered");
-        btn.title = "Already cheered";
-        if (!res.already) {
-          const countEl = btn.querySelector<HTMLSpanElement>(".cheer-count")!;
-          const cur = parseInt(countEl.textContent || "0") || 0;
-          countEl.textContent = String(cur + 1);
-        }
-      } catch (e) {
-        btn.disabled = false;
-        setMessage(friendSearchMessage, parseApiDetail(e), "error");
-      }
-    });
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -317,6 +297,12 @@ function renderFriends(): void {
     <div class="friend-row" data-uid="${f.user_id}">
       <span class="friend-name">${avatarRowHtml(f.cat_skin)}${escapeHtml(f.username)}</span>
       <div class="friend-actions">
+        <button class="btn-cheer${f.can_cheer ? "" : " disabled"}"
+                data-cheer-uid="${f.user_id}"
+                title="${f.can_cheer ? "Send a cheer (+1 XP to them, once a day)" : "Already cheered today"}"
+                ${f.can_cheer ? "" : "disabled"}>
+          🎉 Cheer
+        </button>
         <button class="secondary btn-view-stats" data-uid="${f.user_id}">View stats</button>
         <button class="btn-remove-small" data-uid="${f.user_id}" title="Remove friend">&times;</button>
       </div>
@@ -334,6 +320,24 @@ function renderFriends(): void {
       await removeFriend(Number(btn.dataset.uid));
       friendStatsPanel.classList.add("hidden");
       await refresh();
+    });
+  });
+  friendsList.querySelectorAll<HTMLButtonElement>(".btn-cheer").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      const uid = Number(btn.dataset.cheerUid);
+      try {
+        await cheerFriend(uid);
+        btn.classList.add("disabled");
+        btn.title = "Already cheered today";
+        // Optimistic refresh: the local state lags the server's can_cheer
+        // bit until the next listFriends. Re-fetch so the row is consistent.
+        await refresh();
+      } catch (e) {
+        btn.disabled = false;
+        setMessage(friendSearchMessage, parseApiDetail(e), "error");
+      }
     });
   });
 }

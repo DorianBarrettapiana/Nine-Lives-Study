@@ -1457,45 +1457,32 @@ h3 {
 .weekly-delta.down { color: #ef4444; }
 .weekly-delta.neutral { color: var(--text-muted); }
 
-/* --- Cheer button (friend feed) ---------------------------------------- */
+/* --- Cheer button (next to each friend in the friends list) ----------- */
 
-.feed-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex-shrink: 0;
-}
-.feed-cheer-btn {
+.btn-cheer {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.3rem 0.55rem;
+  padding: 0.3rem 0.7rem;
   background: transparent;
-  color: var(--text-muted);
-  border: 1px solid var(--border-soft);
-  border-radius: 999px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.08s ease, border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
-}
-.feed-cheer-btn:hover:not(:disabled) {
-  border-color: #f59e0b;
-  background: rgba(245, 158, 11, 0.12);
   color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.08s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.btn-cheer:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: #f59e0b;
   transform: translateY(-1px);
 }
-.feed-cheer-btn:active:not(:disabled) {
+.btn-cheer:active:not(:disabled) {
   transform: scale(0.96);
 }
-.feed-cheer-btn.cheered {
-  border-color: #f59e0b;
-  background: rgba(245, 158, 11, 0.18);
-  color: #f59e0b;
-  cursor: default;
-}
-.feed-cheer-btn:disabled {
+.btn-cheer:disabled,
+.btn-cheer.disabled {
   cursor: not-allowed;
+  opacity: 0.45;
 }
-.feed-cheer-btn .cheer-icon { font-size: 0.95rem; line-height: 1; }
-.feed-cheer-btn .cheer-count:empty { display: none; }

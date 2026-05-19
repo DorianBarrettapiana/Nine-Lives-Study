@@ -10,14 +10,13 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.core.xp import (
-    CHEERS_PER_DAY,
-    ENTITY_FEED_CHEER,
+    ENTITY_FRIEND_CHEER,
     EVENT_CHEER,
     XP_CHEER_RECEIVED,
     award_xp_event,
 )
-from app.models.feed_cheer import FeedCheer
 from app.models.feed_like import FeedLike
+from app.models.friend_cheer import FriendCheer
 from app.models.friendship import Friendship
 from app.models.pomodoro_session import PomodoroSession
 from app.models.user import User
@@ -84,9 +83,29 @@ def list_friends(
             )
         )
     ).all()
+    friends = [user for _, user in rows]
+
+    # Bulk-fetch cheers I sent in the last 24h so each FriendEntry knows
+    # whether the Cheer button should be enabled.
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    recipient_ids = {f.id for f in friends}
+    cheered_recently: set[int] = set()
+    if recipient_ids:
+        cheered_recently = set(db.scalars(
+            select(FriendCheer.recipient_id)
+            .where(FriendCheer.sender_id == current_user.id)
+            .where(FriendCheer.recipient_id.in_(recipient_ids))
+            .where(FriendCheer.created_at >= since)
+        ).all())
+
     return [
-        FriendEntry(user_id=user.id, username=user.username, cat_skin=user.cat_skin)
-        for _, user in rows
+        FriendEntry(
+            user_id=user.id,
+            username=user.username,
+            cat_skin=user.cat_skin,
+            can_cheer=user.id not in cheered_recently,
+        )
+        for user in friends
     ]
 
 
@@ -285,8 +304,6 @@ def get_feed(
     event_ids = [e.id for e, _, _ in events]
     like_counts: dict[int, int] = {}
     my_likes: set[int] = set()
-    cheer_counts: dict[int, int] = {}
-    my_cheers: set[int] = set()
     if event_ids:
         count_rows = db.execute(
             select(FeedLike.xp_event_id, func.count(FeedLike.id))
@@ -302,20 +319,6 @@ def get_feed(
         ).scalars().all()
         my_likes = set(my_rows)
 
-        cheer_rows = db.execute(
-            select(FeedCheer.xp_event_id, func.count(FeedCheer.id))
-            .where(FeedCheer.xp_event_id.in_(event_ids))
-            .group_by(FeedCheer.xp_event_id)
-        ).all()
-        cheer_counts = {eid: cnt for eid, cnt in cheer_rows}
-
-        my_cheer_rows = db.execute(
-            select(FeedCheer.xp_event_id)
-            .where(FeedCheer.xp_event_id.in_(event_ids))
-            .where(FeedCheer.user_id == current_user.id)
-        ).scalars().all()
-        my_cheers = set(my_cheer_rows)
-
     return [
         FeedItem(
             id=ev.id,
@@ -327,8 +330,6 @@ def get_feed(
             created_at=ev.created_at.isoformat() if ev.created_at else "",
             like_count=like_counts.get(ev.id, 0),
             liked_by_me=ev.id in my_likes,
-            cheer_count=cheer_counts.get(ev.id, 0),
-            cheered_by_me=ev.id in my_cheers,
         )
         for ev, uname, skin in events
     ]
@@ -365,65 +366,53 @@ def toggle_like(
     return {"liked": True}
 
 
-@router.post("/feed/{event_id}/cheer", response_model=dict)
-def cheer_event(
-    event_id: int,
+@router.post("/{user_id}/cheer", response_model=dict)
+def cheer_friend(
+    user_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Send a one-way cheer to a friend's activity.
+    """Send a one-shot cheer to a friend.
 
-    Awards the recipient +XP_CHEER_RECEIVED XP via the standard XP ledger.
-    One cheer per (user, event) and a daily cap per sender.
+    Sends +XP_CHEER_RECEIVED XP to the recipient via the standard XP ledger
+    and seeds a notification (the recipient sees it in the Friends tab).
+    Each sender→recipient pair is limited to one cheer per rolling 24h.
     """
-    event = db.get(XpEvent, event_id)
-    if event is None:
-        raise HTTPException(status_code=404, detail="Event not found.")
-    if event.user_id == current_user.id:
-        raise HTTPException(status_code=400, detail="Cannot cheer your own activity.")
-    f = _get_friendship(current_user.id, event.user_id, db)
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot cheer yourself.")
+    f = _get_friendship(current_user.id, user_id, db)
     if f is None or f.status != "accepted":
-        raise HTTPException(status_code=403, detail="Not allowed.")
+        raise HTTPException(status_code=403, detail="Not friends.")
 
-    # Already cheered? Idempotent no-op.
-    existing = db.scalar(
-        select(FeedCheer)
-        .where(FeedCheer.user_id == current_user.id)
-        .where(FeedCheer.xp_event_id == event_id)
-    )
-    if existing is not None:
-        return {"cheered": True, "already": True}
-
-    # Daily cap. Count cheers sent in the last 24h (rolling window — simpler
-    # than calendar-day in user's tz and harder to game by hopping timezones).
+    # Per-pair daily cap (rolling 24h).
     since = datetime.now(timezone.utc) - timedelta(hours=24)
-    sent_today = db.scalar(
-        select(func.count(FeedCheer.id))
-        .where(FeedCheer.user_id == current_user.id)
-        .where(FeedCheer.created_at >= since)
-    ) or 0
-    if sent_today >= CHEERS_PER_DAY:
+    already = db.scalar(
+        select(FriendCheer)
+        .where(FriendCheer.sender_id == current_user.id)
+        .where(FriendCheer.recipient_id == user_id)
+        .where(FriendCheer.created_at >= since)
+    )
+    if already is not None:
         raise HTTPException(
             status_code=429,
-            detail=f"Daily cheer limit reached ({CHEERS_PER_DAY}/day). Try again later.",
+            detail="You already cheered this friend today. Try again tomorrow.",
         )
 
-    cheer = FeedCheer(user_id=current_user.id, xp_event_id=event_id)
+    cheer = FriendCheer(sender_id=current_user.id, recipient_id=user_id)
     db.add(cheer)
-    db.flush()  # populate cheer.id for the XP entity_id below
+    db.flush()  # need cheer.id for the XP entity_id
 
-    # Award XP to the recipient. Idempotent via (event_type, entity_id).
     award_xp_event(
-        user_id=event.user_id,
+        user_id=user_id,
         event_type=EVENT_CHEER,
-        entity_type=ENTITY_FEED_CHEER,
+        entity_type=ENTITY_FRIEND_CHEER,
         entity_id=cheer.id,
         amount=XP_CHEER_RECEIVED,
         db=db,
     )
 
     db.commit()
-    return {"cheered": True, "already": False}
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------
@@ -435,9 +424,14 @@ def get_notifications(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> NotificationsResponse:
+    """Latest notifications: friend likes on the user's activity + cheers
+    received from friends. Both types are returned in a single list, sorted
+    by recency.
+    """
     cutoff = current_user.notif_read_at
 
-    query = (
+    # --- Likes received -----------------------------------------------------
+    like_rows = db.execute(
         select(FeedLike, User.username, User.cat_skin, XpEvent.event_type)
         .join(XpEvent, XpEvent.id == FeedLike.xp_event_id)
         .join(User, User.id == FeedLike.user_id)
@@ -445,28 +439,57 @@ def get_notifications(
         .where(FeedLike.user_id != current_user.id)
         .order_by(FeedLike.created_at.desc())
         .limit(20)
-    )
-    rows = db.execute(query).all()
+    ).all()
 
-    items = [
-        NotificationItem(
+    # --- Cheers received ----------------------------------------------------
+    cheer_rows = db.execute(
+        select(FriendCheer, User.username, User.cat_skin)
+        .join(User, User.id == FriendCheer.sender_id)
+        .where(FriendCheer.recipient_id == current_user.id)
+        .order_by(FriendCheer.created_at.desc())
+        .limit(20)
+    ).all()
+
+    items: list[tuple[datetime, NotificationItem]] = []
+    for like, uname, skin, etype in like_rows:
+        if like.created_at is None:
+            continue
+        items.append((like.created_at, NotificationItem(
             liker_username=uname,
             liker_cat_skin=skin,
             event_type=etype,
-            created_at=like.created_at.isoformat() if like.created_at else "",
-        )
-        for like, uname, skin, etype in rows
-    ]
+            created_at=like.created_at.isoformat(),
+        )))
+    for cheer, uname, skin in cheer_rows:
+        if cheer.created_at is None:
+            continue
+        items.append((cheer.created_at, NotificationItem(
+            liker_username=uname,
+            liker_cat_skin=skin,
+            event_type="cheered_you",
+            created_at=cheer.created_at.isoformat(),
+        )))
 
-    unread = 0
-    if cutoff is None:
+    # Sort by recency and keep the top 20 across both kinds.
+    items.sort(key=lambda pair: pair[0], reverse=True)
+    items = items[:20]
+
+    # Make `cutoff` timezone-aware for safe comparison with possibly-naive
+    # timestamps from SQLite.
+    cutoff_aware = None
+    if cutoff is not None:
+        cutoff_aware = cutoff if cutoff.tzinfo else cutoff.replace(tzinfo=timezone.utc)
+
+    if cutoff_aware is None:
         unread = len(items)
     else:
-        for like, _, _, _ in rows:
-            if like.created_at and like.created_at > cutoff:
+        unread = 0
+        for ts, _ in items:
+            ts_aware = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+            if ts_aware > cutoff_aware:
                 unread += 1
 
-    return NotificationsResponse(unread_count=unread, items=items)
+    return NotificationsResponse(unread_count=unread, items=[item for _, item in items])
 
 
 @router.post("/notifications/read", response_model=dict)
