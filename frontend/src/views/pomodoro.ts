@@ -204,9 +204,72 @@ export function setUser(currentUser: UserRead): void {
   render();
 }
 
+// If the server still holds an in-progress session (e.g. user refreshed the
+// page or closed the tab mid-pomodoro), pick it back up so the countdown
+// continues from `started_at + duration` instead of leaving an orphan
+// "in progress" row in the history.
+async function resumeIfInProgress(): Promise<void> {
+  // Only attempt on a cold local state; if a timer is already running we
+  // must not stomp on it.
+  if (pomodoroRunning || activeSessionId !== null) return;
+
+  const inProgress = sessions
+    .filter((s) => !s.is_completed)
+    .sort((a, b) => parseApiDate(b.started_at).getTime() - parseApiDate(a.started_at).getTime());
+  if (inProgress.length === 0) return;
+
+  const active = inProgress[0];
+  // Defensive: delete any older orphans so the list stays clean.
+  for (let i = 1; i < inProgress.length; i++) {
+    try { await deleteSession(inProgress[i].id); } catch (e) { console.warn(e); }
+  }
+
+  const startMs = parseApiDate(active.started_at).getTime();
+  const durationMs = active.duration_minutes * 60_000;
+  const elapsedMs = Date.now() - startMs;
+  const graceMs = 5 * 60_000;
+
+  // Abandoned long ago — discard without awarding XP.
+  if (elapsedMs >= durationMs + graceMs) {
+    try { await deleteSession(active.id); } catch (e) { console.warn(e); }
+    return;
+  }
+
+  activeSessionId = active.id;
+  if (active.session_type === "work") {
+    pomodoroMode = "work";
+  } else {
+    // session_type stored only as "work"|"break"; recover short vs long
+    // from the duration the user had configured at start time.
+    pomodoroMode = active.duration_minutes === longBreakSeconds() / 60
+      ? "long_break"
+      : "short_break";
+  }
+
+  // Within grace but past the duration → auto-complete as if it just ended.
+  if (elapsedMs >= durationMs) {
+    pomodoroTimeLeft = 0;
+    await onComplete();
+    return;
+  }
+
+  // Still ticking — resume the countdown silently. No new startSession call
+  // because the server row already exists.
+  pomodoroTimeLeft = Math.ceil((durationMs - elapsedMs) / 1000);
+  pomodoroEndTime = Date.now() + pomodoroTimeLeft * 1000;
+  pomodoroRunning = true;
+  pomodoroIntervalId = setInterval(async () => {
+    pomodoroTimeLeft = Math.max(0, Math.ceil((pomodoroEndTime! - Date.now()) / 1000));
+    pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
+    if (pomodoroTimeLeft <= 0) await onComplete();
+  }, 500);
+  setMessage(pomodoroMessage, "Resumed session in progress.", "neutral");
+}
+
 export async function refresh(): Promise<void> {
   try {
     sessions = await listSessions();
+    await resumeIfInProgress();
     render();
   } catch (error) {
     console.error(error);
