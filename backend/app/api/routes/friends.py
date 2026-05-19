@@ -182,8 +182,8 @@ def get_friend_study_stats(
     since = date.today() - timedelta(days=days - 1)
 
     rows = db.execute(
-        select(XpEvent.created_at, PomodoroSession.duration_minutes)
-        .join(
+        select(XpEvent.created_at, func.coalesce(PomodoroSession.duration_minutes, 25))
+        .outerjoin(
             PomodoroSession,
             and_(
                 XpEvent.entity_type == "pomodoro_session",
