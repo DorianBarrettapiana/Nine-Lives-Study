@@ -76,7 +76,10 @@ def list_friends(
             )
         )
     ).all()
-    return [FriendEntry(user_id=user.id, username=user.username) for _, user in rows]
+    return [
+        FriendEntry(user_id=user.id, username=user.username, cat_skin=user.cat_skin)
+        for _, user in rows
+    ]
 
 
 @router.get("/requests", response_model=list[FriendRequestEntry])
@@ -90,7 +93,10 @@ def list_incoming_requests(
         .where(Friendship.addressee_id == current_user.id)
         .where(Friendship.status == "pending")
     ).scalars().all()
-    return [FriendRequestEntry(user_id=u.id, username=u.username) for u in rows]
+    return [
+        FriendRequestEntry(user_id=u.id, username=u.username, cat_skin=u.cat_skin)
+        for u in rows
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -261,14 +267,14 @@ def get_feed(
         return []
 
     events = db.execute(
-        select(XpEvent, User.username)
+        select(XpEvent, User.username, User.cat_skin)
         .join(User, User.id == XpEvent.user_id)
         .where(XpEvent.user_id.in_(fids))
         .order_by(XpEvent.created_at.desc())
         .limit(limit)
     ).all()
 
-    event_ids = [e.id for e, _ in events]
+    event_ids = [e.id for e, _, _ in events]
     like_counts: dict[int, int] = {}
     my_likes: set[int] = set()
     if event_ids:
@@ -291,13 +297,14 @@ def get_feed(
             id=ev.id,
             user_id=ev.user_id,
             username=uname,
+            cat_skin=skin,
             event_type=ev.event_type,
             amount=ev.amount,
             created_at=ev.created_at.isoformat() if ev.created_at else "",
             like_count=like_counts.get(ev.id, 0),
             liked_by_me=ev.id in my_likes,
         )
-        for ev, uname in events
+        for ev, uname, skin in events
     ]
 
 
@@ -344,7 +351,7 @@ def get_notifications(
     cutoff = current_user.notif_read_at
 
     query = (
-        select(FeedLike, User.username, XpEvent.event_type)
+        select(FeedLike, User.username, User.cat_skin, XpEvent.event_type)
         .join(XpEvent, XpEvent.id == FeedLike.xp_event_id)
         .join(User, User.id == FeedLike.user_id)
         .where(XpEvent.user_id == current_user.id)
@@ -357,17 +364,18 @@ def get_notifications(
     items = [
         NotificationItem(
             liker_username=uname,
+            liker_cat_skin=skin,
             event_type=etype,
             created_at=like.created_at.isoformat() if like.created_at else "",
         )
-        for like, uname, etype in rows
+        for like, uname, skin, etype in rows
     ]
 
     unread = 0
     if cutoff is None:
         unread = len(items)
     else:
-        for like, _, _ in rows:
+        for like, _, _, _ in rows:
             if like.created_at and like.created_at > cutoff:
                 unread += 1
 

@@ -1312,3 +1312,75 @@ h3 {
 .friend-day-mins {
   font-weight: 600;
 }
+
+/* --- Avatars (pixel cat) ----------------------------------------------- */
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.avatar svg { display: block; }
+
+.avatar-sm { width: 26px; height: 26px; border-radius: 8px; }
+.avatar-md { width: 36px; height: 36px; border-radius: 10px; }
+.avatar-lg { width: 96px; height: 96px; border-radius: 18px; }
+
+.current-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+  padding: 1.25rem;
+}
+.profile-card .profile-name {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--text-strong, var(--text-accent));
+}
+
+.avatar-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  width: 100%;
+}
+.avatar-swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 2px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: transform 0.08s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.avatar-swatch:hover {
+  background: rgba(99, 102, 241, 0.12);
+  transform: translateY(-1px);
+}
+.avatar-swatch.selected {
+  border-color: var(--text-accent);
+  background: rgba(99, 102, 241, 0.18);
+}
+.avatar-swatch svg { display: block; }
+
+/* Inline avatar slot used inside friend rows, feed items, etc. */
+.row-avatar {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 0.5rem;
+}

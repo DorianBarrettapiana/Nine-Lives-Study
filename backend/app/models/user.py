@@ -27,3 +27,6 @@ class User(Base):
     pomodoro_sessions_before_long_break: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
 
     notif_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # User avatar — currently a fixed set of pixel-cat skins.
+    cat_skin: Mapped[str] = mapped_column(String(20), default="tabby", nullable=False)

@@ -17,6 +17,7 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     ("users", "pomodoro_long_break_minutes",        "INTEGER NOT NULL DEFAULT 15"),
     ("users", "pomodoro_sessions_before_long_break","INTEGER NOT NULL DEFAULT 4"),
     ("users", "notif_read_at",                     "TEXT"),
+    ("users", "cat_skin",                          "VARCHAR(20) NOT NULL DEFAULT 'tabby'"),
 ]
 
 # Backfill completed pomodoro work sessions into xp_events so that stats

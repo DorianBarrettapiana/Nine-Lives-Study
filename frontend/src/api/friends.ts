@@ -7,16 +7,19 @@ import { apiFetch } from "./client";
 export interface UserSearchResult {
   id: number;
   username: string;
+  cat_skin: string;
 }
 
 export interface FriendEntry {
   user_id: number;
   username: string;
+  cat_skin: string;
 }
 
 export interface FriendRequestEntry {
   user_id: number;
   username: string;
+  cat_skin: string;
 }
 
 export interface DailyMinutes {
@@ -68,6 +71,7 @@ export interface FeedItem {
   id: number;
   user_id: number;
   username: string;
+  cat_skin: string;
   event_type: string;
   amount: number;
   created_at: string;
@@ -85,6 +89,7 @@ export async function toggleLike(eventId: number): Promise<{ liked: boolean }> {
 
 export interface NotificationItem {
   liker_username: string;
+  liker_cat_skin: string;
   event_type: string;
   created_at: string;
 }

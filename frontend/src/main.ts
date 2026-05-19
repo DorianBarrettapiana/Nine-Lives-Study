@@ -4,8 +4,9 @@
 
 import "./style.css";
 import { ApiError, UnauthorizedError } from "./api/client";
-import { getMe, logout, type UserRead } from "./api/users";
+import { getMe, logout, updateMe, type UserRead } from "./api/users";
 import { applyTheme } from "./theme";
+import { CAT_SKINS, renderAvatarSvg } from "./views/avatar";
 import { showAuthScreen } from "./views/auth";
 import * as FeynmanView from "./views/feynman";
 import * as MoodView from "./views/mood";
@@ -25,13 +26,23 @@ const APP_HTML = `
       </div>
       <div class="topbar-right">
         <button id="theme-toggle-button" class="theme-toggle" title="Toggle theme">☀️</button>
-        <div class="current-user" id="current-user-label">—</div>
+        <div class="current-user" id="current-user-label">
+          <span class="avatar avatar-sm" id="topbar-avatar"></span>
+          <span id="topbar-username">—</span>
+        </div>
         <button id="logout-button" class="secondary" title="Log out">Log out</button>
       </div>
     </header>
 
     <main class="layout">
       <aside class="sidebar">
+        <section class="card profile-card" id="profile-card">
+          <div class="avatar avatar-lg" id="profile-avatar"></div>
+          <div class="profile-name" id="profile-username">—</div>
+          <button id="avatar-picker-toggle" class="link-btn" type="button">Change cat</button>
+          <div id="avatar-picker" class="avatar-picker hidden"></div>
+          <p id="avatar-picker-message" class="message"></p>
+        </section>
         <section class="card" id="xp-card">
           <h2>Level <span id="xp-level">1</span></h2>
           <div class="xp-bar-wrap"><div class="xp-bar-fill" id="xp-bar-fill"></div></div>
@@ -311,11 +322,62 @@ function mountApp(user: UserRead): void {
   applyTheme(user.theme);
 
   const themeToggle = app!.querySelector<HTMLButtonElement>("#theme-toggle-button")!;
-  const userLabel = app!.querySelector<HTMLDivElement>("#current-user-label")!;
+  const topbarAvatar = app!.querySelector<HTMLSpanElement>("#topbar-avatar")!;
+  const topbarUsername = app!.querySelector<HTMLSpanElement>("#topbar-username")!;
   const logoutBtn = app!.querySelector<HTMLButtonElement>("#logout-button")!;
+  const profileAvatar = app!.querySelector<HTMLDivElement>("#profile-avatar")!;
+  const profileUsername = app!.querySelector<HTMLDivElement>("#profile-username")!;
+  const pickerToggle = app!.querySelector<HTMLButtonElement>("#avatar-picker-toggle")!;
+  const pickerEl = app!.querySelector<HTMLDivElement>("#avatar-picker")!;
+  const pickerMsg = app!.querySelector<HTMLParagraphElement>("#avatar-picker-message")!;
 
-  userLabel.textContent = user.username;
+  function renderUserChrome(u: UserRead): void {
+    topbarAvatar.innerHTML = renderAvatarSvg(u.cat_skin, 22);
+    topbarUsername.textContent = u.username;
+    profileAvatar.innerHTML = renderAvatarSvg(u.cat_skin, 96);
+    profileUsername.textContent = u.username;
+  }
+
+  function renderPicker(currentSkin: string): void {
+    pickerEl.innerHTML = CAT_SKINS.map((s) => `
+      <button type="button" class="avatar-swatch${s.id === currentSkin ? " selected" : ""}"
+              data-skin="${s.id}" title="${s.name}">
+        ${renderAvatarSvg(s.id, 44)}
+      </button>`).join("");
+  }
+
+  renderUserChrome(user);
+  renderPicker(user.cat_skin);
   updateThemeButton(themeToggle, user.theme);
+
+  pickerToggle.addEventListener("click", () => {
+    pickerEl.classList.toggle("hidden");
+  });
+
+  pickerEl.addEventListener("click", async (event) => {
+    const target = event.target instanceof HTMLElement
+      ? event.target.closest<HTMLButtonElement>(".avatar-swatch")
+      : null;
+    if (!target) return;
+    const skin = target.dataset.skin;
+    if (!skin || skin === user.cat_skin) return;
+    try {
+      const updated = await updateMe({ cat_skin: skin });
+      user.cat_skin = updated.cat_skin;
+      renderUserChrome(updated);
+      renderPicker(updated.cat_skin);
+      // Push the new skin into views that show the current user (e.g.
+      // pomodoro settings panel currently doesn't, but FriendsView reloads
+      // on next refresh; trigger a friends refresh so feed shows updated skin).
+      void FriendsView.refresh();
+      pickerMsg.className = "message success";
+      pickerMsg.textContent = "Avatar updated.";
+    } catch (error) {
+      console.error(error);
+      pickerMsg.className = "message error";
+      pickerMsg.textContent = "Could not update avatar.";
+    }
+  });
 
   themeToggle.addEventListener("click", () => {
     const isDark = !document.body.classList.contains("theme-light");

@@ -21,8 +21,14 @@ import {
   type FriendEntry,
   type FriendRequestEntry,
   type FriendStudyStats,
+  type NotificationItem,
 } from "../api/friends";
 import { escapeHtml, fmtMinutes, parseApiDate, setMessage } from "../utils";
+import { renderAvatarSvg } from "./avatar";
+
+function avatarRowHtml(skin: string, sizePx = 26): string {
+  return `<span class="avatar avatar-sm row-avatar">${renderAvatarSvg(skin, sizePx)}</span>`;
+}
 
 let friendSearchInput: HTMLInputElement;
 let friendSearchButton: HTMLButtonElement;
@@ -66,7 +72,7 @@ function timeAgo(isoStr: string): string {
   return `${days}d ago`;
 }
 
-function renderFeed(items: FeedItem[], notifs: { liker_username: string; event_type: string; created_at: string }[] = []): void {
+function renderFeed(items: FeedItem[], notifs: NotificationItem[] = []): void {
   let notifHtml = "";
   if (notifs.length > 0) {
     notifHtml = `
@@ -74,7 +80,7 @@ function renderFeed(items: FeedItem[], notifs: { liker_username: string; event_t
         ${notifs.map(n => {
           const label = EVENT_LABELS[n.event_type] ?? n.event_type;
           return `<div class="feed-notif-item">
-            🌸 <strong>${escapeHtml(n.liker_username)}</strong> liked your activity: ${label}
+            ${avatarRowHtml(n.liker_cat_skin)}<strong>${escapeHtml(n.liker_username)}</strong> liked your activity: ${label}
             <span class="feed-time">${timeAgo(n.created_at)}</span>
           </div>`;
         }).join("")}
@@ -95,7 +101,7 @@ function renderFeed(items: FeedItem[], notifs: { liker_username: string; event_t
     return `
       <div class="feed-item">
         <div class="feed-item-content">
-          <strong>${escapeHtml(item.username)}</strong> ${label}
+          ${avatarRowHtml(item.cat_skin)}<strong>${escapeHtml(item.username)}</strong> ${label}
           <span class="feed-time">${timeAgo(item.created_at)}</span>
         </div>
         <button class="feed-like-btn${likedClass}" data-eid="${item.id}">
@@ -193,7 +199,7 @@ function renderLineChart(stats: FriendStudyStats): string {
 async function showFriendStats(friend: FriendEntry): Promise<void> {
   friendStatsPanel.innerHTML = `
     <div class="friend-stats-header">
-      <strong>${escapeHtml(friend.username)}</strong>
+      <strong>${avatarRowHtml(friend.cat_skin, 32)}${escapeHtml(friend.username)}</strong>
       <div class="days-selector">
         ${[7, 30, 90].map(d =>
           `<button class="days-btn friend-days-btn${d === selectedFriendDays ? " active" : ""}"
@@ -210,7 +216,7 @@ async function showFriendStats(friend: FriendEntry): Promise<void> {
     const stats = await getFriendStudyStats(friend.user_id, selectedFriendDays);
     friendStatsPanel.innerHTML = `
       <div class="friend-stats-header">
-        <strong>${escapeHtml(stats.username)}</strong>
+        <strong>${avatarRowHtml(friend.cat_skin, 32)}${escapeHtml(stats.username)}</strong>
         <div class="days-selector">
           ${[7, 30, 90].map(d =>
             `<button class="days-btn friend-days-btn${d === selectedFriendDays ? " active" : ""}"
@@ -249,7 +255,7 @@ function renderRequests(): void {
   friendRequestsBadge.textContent = String(requests.length);
   friendRequestsList.innerHTML = requests.map(r => `
     <div class="friend-row" data-uid="${r.user_id}">
-      <span class="friend-name">${escapeHtml(r.username)}</span>
+      <span class="friend-name">${avatarRowHtml(r.cat_skin)}${escapeHtml(r.username)}</span>
       <div class="friend-actions">
         <button class="btn-accept" data-uid="${r.user_id}">Accept</button>
         <button class="secondary btn-decline" data-uid="${r.user_id}">Decline</button>
@@ -277,7 +283,7 @@ function renderFriends(): void {
   }
   friendsList.innerHTML = friends.map(f => `
     <div class="friend-row" data-uid="${f.user_id}">
-      <span class="friend-name">${escapeHtml(f.username)}</span>
+      <span class="friend-name">${avatarRowHtml(f.cat_skin)}${escapeHtml(f.username)}</span>
       <div class="friend-actions">
         <button class="secondary btn-view-stats" data-uid="${f.user_id}">View stats</button>
         <button class="btn-remove-small" data-uid="${f.user_id}" title="Remove friend">&times;</button>
@@ -333,20 +339,21 @@ async function handleSearch(): Promise<void> {
     }
     friendSearchResults.innerHTML = results.map(u => {
       const status = friendStatus(u.username);
+      const nameHtml = `${avatarRowHtml(u.cat_skin)}${escapeHtml(u.username)}`;
       if (status === "friend") {
         return `<div class="friend-row">
-          <span class="friend-name">${escapeHtml(u.username)}</span>
+          <span class="friend-name">${nameHtml}</span>
           <span class="friend-status-label">Already friends</span>
         </div>`;
       }
       if (status === "pending") {
         return `<div class="friend-row">
-          <span class="friend-name">${escapeHtml(u.username)}</span>
+          <span class="friend-name">${nameHtml}</span>
           <span class="friend-status-label">Request pending</span>
         </div>`;
       }
       return `<div class="friend-row">
-        <span class="friend-name">${escapeHtml(u.username)}</span>
+        <span class="friend-name">${nameHtml}</span>
         <button class="secondary btn-add" data-username="${escapeHtml(u.username)}">Add friend</button>
       </div>`;
     }).join("");

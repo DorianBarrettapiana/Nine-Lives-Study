@@ -1,6 +1,11 @@
 """Pydantic schemas for user data."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+# Keep in sync with frontend/src/views/avatar.ts SKIN_IDS.
+CatSkin = Literal["tabby", "black", "white", "gray", "calico", "siamese"]
 
 
 class UserCreate(BaseModel):
@@ -24,6 +29,8 @@ class UserUpdate(BaseModel):
     pomodoro_long_break_minutes: int | None = Field(default=None, ge=1, le=60)
     pomodoro_sessions_before_long_break: int | None = Field(default=None, ge=1, le=10)
 
+    cat_skin: CatSkin | None = None
+
 
 class UserRead(BaseModel):
     """Public representation of a user."""
@@ -38,5 +45,7 @@ class UserRead(BaseModel):
     pomodoro_short_break_minutes: int
     pomodoro_long_break_minutes: int
     pomodoro_sessions_before_long_break: int
+
+    cat_skin: str
 
     model_config = {"from_attributes": True}
