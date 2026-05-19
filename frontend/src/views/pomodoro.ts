@@ -160,15 +160,22 @@ export function render(): void {
       `(next long break in ${untilLong} work session${untilLong === 1 ? "" : "s"})`;
   }
 
-  if (sessions.length === 0) {
-    pomodoroList.innerHTML = `<div class="empty-state">No sessions yet.</div>`;
+  // History list shows today's sessions only; older sessions stay in the
+  // backend (used for stats and historical analysis) but aren't rendered here.
+  const today = new Date().toDateString();
+  const todaySessions = sessions.filter(
+    (s) => parseApiDate(s.started_at).toDateString() === today,
+  );
+
+  if (todaySessions.length === 0) {
+    pomodoroList.innerHTML = `<div class="empty-state">No sessions today yet.</div>`;
     return;
   }
   pomodoroList.innerHTML = [
     `<p class="hint">Today: <strong>${todayCompletedWorkCount()}</strong> work session(s) completed</p>`,
-    ...sessions.slice(0, 20).map((s) => {
+    ...todaySessions.map((s) => {
       const when = parseApiDate(s.started_at).toLocaleString(undefined,
-        { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+        { hour: "2-digit", minute: "2-digit" });
       return `
       <div class="task-item">
         <span class="tag">${s.session_type === "work" ? "Work" : "Break"}</span>
