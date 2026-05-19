@@ -276,6 +276,9 @@ function switchView(views: Record<AppView, HTMLElement>, view: AppView): void {
   document.querySelectorAll<HTMLButtonElement>(".feature-tab").forEach((tab) =>
     tab.classList.toggle("active", tab.dataset.view === view),
   );
+  // Per-view "user opened me" hooks. Keeps notification mark-read tied to an
+  // actual user action instead of every background refresh.
+  if (view === "friends") void FriendsView.onViewActivated();
 }
 
 async function refreshAll(): Promise<void> {

@@ -4,7 +4,7 @@ Counts come from the ``xp_events`` ledger, not from live rows, so deleting
 a task / pomodoro / mood entry does NOT retroactively rewrite history.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
@@ -32,65 +32,84 @@ router = APIRouter(prefix="/stats", tags=["stats"])
 @router.get("", response_model=UserStatsRead)
 def get_stats(
     days: int = Query(default=7, ge=1, le=90),
+    tz_offset: int = Query(default=0, ge=-720, le=840),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> UserStatsRead:
-    """Return aggregated stats for the current user over the last N days."""
+    """Return aggregated stats for the current user over the last N days.
+
+    Daily buckets are computed in the caller's local timezone via tz_offset
+    (minutes east of UTC, same convention as friend stats). Without this,
+    events near midnight bucket against UTC and look "off by a day" to users
+    several hours away from UTC.
+    """
     user_id = current_user.id
 
-    today = date.today()
-    since = today - timedelta(days=days - 1)
+    tz_delta = timedelta(minutes=tz_offset)
+    # "today" in the caller's local timezone — used to bound the N-day window.
+    today_local = (datetime.now(timezone.utc) + tz_delta).date()
+    since = today_local - timedelta(days=days - 1)
+    since_str = since.isoformat()
 
-    # --- Tasks per day (XP_TASK_DONE events grouped by day) -----------------
-    task_rows = db.execute(
-        select(
-            func.date(XpEvent.created_at).label("day"),
-            func.count(XpEvent.id).label("done"),
-        )
+    def _local_day(ts) -> str | None:
+        if ts is None:
+            return None
+        # ts may be naive (SQLite) or tz-aware — coerce both to UTC then shift.
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return (ts.astimezone(timezone.utc) + tz_delta).strftime("%Y-%m-%d")
+
+    # --- Tasks per day (XP_TASK_DONE events grouped by local day) -----------
+    task_events = db.scalars(
+        select(XpEvent)
         .where(XpEvent.user_id == user_id)
         .where(XpEvent.event_type == EVENT_TASK_DONE)
-        .where(func.date(XpEvent.created_at) >= since.isoformat())
-        .group_by(func.date(XpEvent.created_at))
-        .order_by(func.date(XpEvent.created_at))
     ).all()
+    task_counts: dict[str, int] = {}
+    for ev in task_events:
+        day = _local_day(ev.created_at)
+        if day is None or day < since_str:
+            continue
+        task_counts[day] = task_counts.get(day, 0) + 1
     daily_tasks = [
-        DailyTaskStat(date=date.fromisoformat(row.day), total=row.done, done=row.done)
-        for row in task_rows
+        DailyTaskStat(date=date.fromisoformat(d), total=c, done=c)
+        for d, c in sorted(task_counts.items())
     ]
 
-    # --- Mood per day: latest emoji recorded that day -----------------------
-    mood_rows = db.execute(
-        select(
-            func.date(MoodEntry.created_at).label("day"),
-            MoodEntry.mood,
-        )
+    # --- Mood per day: latest emoji recorded that local day -----------------
+    mood_rows = db.scalars(
+        select(MoodEntry)
         .where(MoodEntry.user_id == user_id)
-        .where(func.date(MoodEntry.created_at) >= since.isoformat())
-        .order_by(func.date(MoodEntry.created_at), MoodEntry.created_at.desc())
+        .order_by(MoodEntry.created_at.desc())
     ).all()
-    seen_days: set[str] = set()
-    daily_moods = []
-    for row in mood_rows:
-        if row.day not in seen_days:
-            seen_days.add(row.day)
-            daily_moods.append(DailyMoodStat(date=date.fromisoformat(row.day), mood=row.mood))
-    daily_moods.sort(key=lambda d: d.date)
+    latest_mood: dict[str, str] = {}
+    for entry in mood_rows:
+        day = _local_day(entry.created_at)
+        if day is None or day < since_str:
+            continue
+        # rows are desc by created_at → first one wins per day
+        if day not in latest_mood:
+            latest_mood[day] = entry.mood
+    daily_moods = [
+        DailyMoodStat(date=date.fromisoformat(d), mood=m)
+        for d, m in sorted(latest_mood.items())
+    ]
 
     # --- Pomodoros per day (XP_POMODORO events) -----------------------------
-    pomo_rows = db.execute(
-        select(
-            func.date(XpEvent.created_at).label("day"),
-            func.count(XpEvent.id).label("count"),
-        )
+    pomo_events = db.scalars(
+        select(XpEvent)
         .where(XpEvent.user_id == user_id)
         .where(XpEvent.event_type == EVENT_POMODORO)
-        .where(func.date(XpEvent.created_at) >= since.isoformat())
-        .group_by(func.date(XpEvent.created_at))
-        .order_by(func.date(XpEvent.created_at))
     ).all()
+    pomo_counts: dict[str, int] = {}
+    for ev in pomo_events:
+        day = _local_day(ev.created_at)
+        if day is None or day < since_str:
+            continue
+        pomo_counts[day] = pomo_counts.get(day, 0) + 1
     daily_pomodoros = [
-        DailyPomodoroStat(date=date.fromisoformat(row.day), count=row.count)
-        for row in pomo_rows
+        DailyPomodoroStat(date=date.fromisoformat(d), count=c)
+        for d, c in sorted(pomo_counts.items())
     ]
 
     # --- Totals (all-time, from xp_events for activity-based counters; the

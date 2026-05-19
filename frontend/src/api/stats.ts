@@ -41,7 +41,10 @@ export interface UserProgressRead {
 }
 
 export async function getUserStats(days = 7): Promise<UserStatsRead> {
-  return apiFetch<UserStatsRead>(`/stats?days=${days}`);
+  // tz_offset = minutes east of UTC, so the server can bucket events by the
+  // caller's local day instead of UTC.
+  const tz = new Date().getTimezoneOffset() * -1;
+  return apiFetch<UserStatsRead>(`/stats?days=${days}&tz_offset=${tz}`);
 }
 
 export async function getUserXp(): Promise<UserProgressRead> {

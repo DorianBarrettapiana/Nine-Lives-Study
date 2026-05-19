@@ -79,7 +79,9 @@ function renderFeed(items: FeedItem[], notifs: { liker_username: string; event_t
           </div>`;
         }).join("")}
       </div>`;
-    void markNotificationsRead();
+    // Mark-read is no longer called here — see onViewActivated(): firing on
+    // every background refresh made the unread badge vanish before the user
+    // ever opened the Friends tab.
   }
 
   if (items.length === 0 && notifs.length === 0) {
@@ -385,6 +387,20 @@ export async function refresh(): Promise<void> {
   } catch (e) {
     console.error(e);
   }
+}
+
+/**
+ * Call when the user actually opens the Friends tab. Marks notifications as
+ * read on the server and clears the in-tab unread badge optimistically.
+ */
+export async function onViewActivated(): Promise<void> {
+  try {
+    await markNotificationsRead();
+  } catch (e) {
+    console.error(e);
+    return;
+  }
+  updateNotifBadge(0);
 }
 
 function updateNotifBadge(count: number): void {
