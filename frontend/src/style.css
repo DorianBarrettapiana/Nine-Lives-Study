@@ -1520,17 +1520,30 @@ h3 {
   text-align: center;
   padding: 1.25rem;
 }
+/* Analog clock SVG container — centered, with a touch of breathing room
+   above the digital readout. */
+.stopwatch-clock {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.25rem 0 0.5rem;
+}
+.stopwatch-clock .analog-clock-svg {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+/* The digital line under the clock — secondary precision readout. */
 .stopwatch-display {
   font-variant-numeric: tabular-nums;
-  font-size: 1.85rem;
+  font-size: 1rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
-  margin: 0.4rem 0 0.8rem;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.75rem;
   color: var(--text-soft);
   transition: color 0.2s;
 }
-.stopwatch-display.running {
-  color: var(--text-accent);
+.stopwatch-display.paused {
+  color: var(--text-muted);
 }
 .stopwatch-buttons {
   justify-content: center;
