@@ -243,6 +243,10 @@ const APP_HTML = `
             </div>
           </section>
           <section class="card">
+            <h2>Activity</h2>
+            <div id="friend-feed"></div>
+          </section>
+          <section class="card">
             <h2>My friends</h2>
             <div id="friends-list"></div>
           </section>

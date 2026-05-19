@@ -35,3 +35,14 @@ class FriendStudyStats(BaseModel):
     days: int
     daily_minutes: list[DailyMinutes]
     total_minutes: int
+
+
+class FeedItem(BaseModel):
+    id: int
+    user_id: int
+    username: str
+    event_type: str
+    amount: int
+    created_at: str
+    like_count: int
+    liked_by_me: bool

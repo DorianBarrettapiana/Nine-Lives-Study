@@ -4,16 +4,19 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.models.feed_like import FeedLike
 from app.models.friendship import Friendship
 from app.models.pomodoro_session import PomodoroSession
 from app.models.user import User
+from app.models.xp_event import XpEvent
 from app.schemas.friendship import (
     DailyMinutes,
+    FeedItem,
     FriendEntry,
     FriendRequestEntry,
     FriendStudyStats,
@@ -211,3 +214,95 @@ def get_friend_study_stats(
         daily_minutes=daily_minutes,
         total_minutes=total_minutes,
     )
+
+
+# ---------------------------------------------------------------------------
+# Activity feed
+# ---------------------------------------------------------------------------
+
+def _friend_ids(user_id: int, db: Session) -> list[int]:
+    rows = db.execute(
+        select(Friendship)
+        .where(Friendship.status == "accepted")
+        .where(
+            or_(
+                Friendship.requester_id == user_id,
+                Friendship.addressee_id == user_id,
+            )
+        )
+    ).scalars().all()
+    ids: list[int] = []
+    for f in rows:
+        ids.append(f.addressee_id if f.requester_id == user_id else f.requester_id)
+    return ids
+
+
+@router.get("/feed", response_model=list[FeedItem])
+def get_feed(
+    limit: int = Query(default=30, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[FeedItem]:
+    fids = _friend_ids(current_user.id, db)
+    if not fids:
+        return []
+
+    events = db.execute(
+        select(XpEvent, User.username)
+        .join(User, User.id == XpEvent.user_id)
+        .where(XpEvent.user_id.in_(fids))
+        .order_by(XpEvent.created_at.desc())
+        .limit(limit)
+    ).all()
+
+    event_ids = [e.id for e, _ in events]
+    like_counts: dict[int, int] = {}
+    my_likes: set[int] = set()
+    if event_ids:
+        count_rows = db.execute(
+            select(FeedLike.xp_event_id, func.count(FeedLike.id))
+            .where(FeedLike.xp_event_id.in_(event_ids))
+            .group_by(FeedLike.xp_event_id)
+        ).all()
+        like_counts = {eid: cnt for eid, cnt in count_rows}
+
+        my_rows = db.execute(
+            select(FeedLike.xp_event_id)
+            .where(FeedLike.xp_event_id.in_(event_ids))
+            .where(FeedLike.user_id == current_user.id)
+        ).scalars().all()
+        my_likes = set(my_rows)
+
+    return [
+        FeedItem(
+            id=ev.id,
+            user_id=ev.user_id,
+            username=uname,
+            event_type=ev.event_type,
+            amount=ev.amount,
+            created_at=ev.created_at.isoformat() if ev.created_at else "",
+            like_count=like_counts.get(ev.id, 0),
+            liked_by_me=ev.id in my_likes,
+        )
+        for ev, uname in events
+    ]
+
+
+@router.post("/feed/{event_id}/like", response_model=dict)
+def toggle_like(
+    event_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    existing = db.scalar(
+        select(FeedLike)
+        .where(FeedLike.user_id == current_user.id)
+        .where(FeedLike.xp_event_id == event_id)
+    )
+    if existing:
+        db.delete(existing)
+        db.commit()
+        return {"liked": False}
+    db.add(FeedLike(user_id=current_user.id, xp_event_id=event_id))
+    db.commit()
+    return {"liked": True}

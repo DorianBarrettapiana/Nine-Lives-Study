@@ -7,17 +7,20 @@
 
 import {
   acceptFriendRequest,
+  getFeed,
   getFriendStudyStats,
   listFriendRequests,
   listFriends,
   removeFriend,
   searchUsers,
   sendFriendRequest,
+  toggleLike,
+  type FeedItem,
   type FriendEntry,
   type FriendRequestEntry,
   type FriendStudyStats,
 } from "../api/friends";
-import { escapeHtml, fmtMinutes, setMessage } from "../utils";
+import { escapeHtml, fmtMinutes, parseApiDate, setMessage } from "../utils";
 
 let friendSearchInput: HTMLInputElement;
 let friendSearchButton: HTMLButtonElement;
@@ -29,10 +32,71 @@ let friendSearchMessage: HTMLParagraphElement;
 let friendSearchCard: HTMLElement;
 let friendRequestsCard: HTMLElement;
 let friendRequestsBadge: HTMLSpanElement;
+let friendFeed: HTMLDivElement;
 
 let friends: FriendEntry[] = [];
 let requests: FriendRequestEntry[] = [];
 let selectedFriendDays = 7;
+
+// ---------------------------------------------------------------------------
+// Activity feed
+// ---------------------------------------------------------------------------
+
+const EVENT_LABELS: Record<string, string> = {
+  pomodoro: "completed a pomodoro session",
+  task_done: "completed a task",
+  daily_log: "wrote a daily log",
+  feynman: "added a Feynman entry",
+  note: "added a paper note",
+  mood: "recorded their mood",
+};
+
+function timeAgo(isoStr: string): string {
+  const dt = parseApiDate(isoStr);
+  const diff = Math.max(0, Date.now() - dt.getTime());
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+function renderFeed(items: FeedItem[]): void {
+  if (items.length === 0) {
+    friendFeed.innerHTML = `<div class="empty-state">No activity yet.</div>`;
+    return;
+  }
+
+  friendFeed.innerHTML = items.map(item => {
+    const label = EVENT_LABELS[item.event_type] ?? item.event_type;
+    const likedClass = item.liked_by_me ? " liked" : "";
+    return `
+      <div class="feed-item">
+        <div class="feed-item-content">
+          <strong>${escapeHtml(item.username)}</strong> ${label}
+          <span class="feed-time">${timeAgo(item.created_at)}</span>
+        </div>
+        <button class="feed-like-btn${likedClass}" data-eid="${item.id}">
+          <span class="flower-icon">✿</span>
+          <span class="like-count">${item.like_count || ""}</span>
+        </button>
+      </div>`;
+  }).join("");
+
+  friendFeed.querySelectorAll<HTMLButtonElement>(".feed-like-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const eid = Number(btn.dataset.eid);
+      const res = await toggleLike(eid);
+      btn.classList.toggle("liked", res.liked);
+      const countEl = btn.querySelector<HTMLSpanElement>(".like-count")!;
+      const cur = parseInt(countEl.textContent || "0") || 0;
+      const next = res.liked ? cur + 1 : Math.max(0, cur - 1);
+      countEl.textContent = next ? String(next) : "";
+    });
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Friend stats panel
@@ -291,9 +355,12 @@ async function handleSearch(): Promise<void> {
 
 export async function refresh(): Promise<void> {
   try {
-    [friends, requests] = await Promise.all([listFriends(), listFriendRequests()]);
+    const [f, r, feed] = await Promise.all([listFriends(), listFriendRequests(), getFeed()]);
+    friends = f;
+    requests = r;
     renderRequests();
     renderFriends();
+    renderFeed(feed);
   } catch (e) {
     console.error(e);
   }
@@ -318,6 +385,7 @@ export function init(_onRefreshNeeded: () => Promise<void>): void {
   friendsList         = document.querySelector<HTMLDivElement>("#friends-list")!;
   friendStatsPanel    = document.querySelector<HTMLDivElement>("#friend-stats-panel")!;
   friendSearchMessage = document.querySelector<HTMLParagraphElement>("#friend-search-message")!;
+  friendFeed          = document.querySelector<HTMLDivElement>("#friend-feed")!;
   friendSearchCard    = document.querySelector<HTMLElement>("#friend-search-card")!;
   friendRequestsCard  = document.querySelector<HTMLElement>("#friend-requests-card")!;
   friendRequestsBadge = document.querySelector<HTMLSpanElement>("#friend-requests-badge")!;

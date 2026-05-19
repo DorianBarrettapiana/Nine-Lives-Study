@@ -1100,6 +1100,76 @@ h3 {
   line-height: 1;
 }
 
+.feed-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border-soft);
+  gap: 0.5rem;
+}
+
+.feed-item:last-child {
+  border-bottom: none;
+}
+
+.feed-item-content {
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.feed-time {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  margin-left: 0.3rem;
+}
+
+.feed-like-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: none;
+  border: 1.5px solid var(--border-soft);
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.feed-like-btn:hover {
+  border-color: #f472b6;
+  color: #f472b6;
+}
+
+.feed-like-btn.liked {
+  border-color: #f472b6;
+  color: #f472b6;
+  background: rgba(244, 114, 182, 0.08);
+}
+
+.flower-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.feed-like-btn.liked .flower-icon {
+  animation: bloom 0.35s ease;
+}
+
+@keyframes bloom {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.4); }
+  100% { transform: scale(1); }
+}
+
+.like-count {
+  font-size: 0.75rem;
+  min-width: 0.5rem;
+}
+
 .friend-search-row {
   display: flex;
   gap: 0.5rem;
