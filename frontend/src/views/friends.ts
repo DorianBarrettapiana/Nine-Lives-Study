@@ -27,6 +27,9 @@ let friendRequestsList: HTMLDivElement;
 let friendsList: HTMLDivElement;
 let friendStatsPanel: HTMLDivElement;
 let friendSearchMessage: HTMLParagraphElement;
+let friendSearchCard: HTMLElement;
+let friendRequestsCard: HTMLElement;
+let friendRequestsBadge: HTMLSpanElement;
 
 let friends: FriendEntry[] = [];
 let requests: FriendRequestEntry[] = [];
@@ -204,9 +207,11 @@ function renderFriendStatsContent(stats: FriendStudyStats): void {
 
 function renderRequests(): void {
   if (requests.length === 0) {
-    friendRequestsList.innerHTML = `<div class="empty-state">No pending requests.</div>`;
+    friendRequestsCard.classList.add("hidden");
     return;
   }
+  friendRequestsCard.classList.remove("hidden");
+  friendRequestsBadge.textContent = String(requests.length);
   friendRequestsList.innerHTML = requests.map(r => `
     <div class="friend-row" data-uid="${r.user_id}">
       <span class="friend-name">${escapeHtml(r.username)}</span>
@@ -313,6 +318,17 @@ export async function refresh(): Promise<void> {
   }
 }
 
+function setupCollapsible(card: HTMLElement): void {
+  const header = card.querySelector<HTMLElement>(".collapsible-header")!;
+  const body = card.querySelector<HTMLElement>(".collapsible-body")!;
+  const arrow = card.querySelector<HTMLElement>(".collapse-arrow")!;
+  header.addEventListener("click", () => {
+    const open = !body.classList.contains("hidden");
+    body.classList.toggle("hidden", open);
+    arrow.textContent = open ? "▸" : "▾";
+  });
+}
+
 export function init(_onRefreshNeeded: () => Promise<void>): void {
   friendSearchInput   = document.querySelector<HTMLInputElement>("#friend-search-input")!;
   friendSearchButton  = document.querySelector<HTMLButtonElement>("#friend-search-button")!;
@@ -321,6 +337,12 @@ export function init(_onRefreshNeeded: () => Promise<void>): void {
   friendsList         = document.querySelector<HTMLDivElement>("#friends-list")!;
   friendStatsPanel    = document.querySelector<HTMLDivElement>("#friend-stats-panel")!;
   friendSearchMessage = document.querySelector<HTMLParagraphElement>("#friend-search-message")!;
+  friendSearchCard    = document.querySelector<HTMLElement>("#friend-search-card")!;
+  friendRequestsCard  = document.querySelector<HTMLElement>("#friend-requests-card")!;
+  friendRequestsBadge = document.querySelector<HTMLSpanElement>("#friend-requests-badge")!;
+
+  setupCollapsible(friendSearchCard);
+  setupCollapsible(friendRequestsCard);
 
   friendSearchButton.addEventListener("click", handleSearch);
   friendSearchInput.addEventListener("keydown", e => {

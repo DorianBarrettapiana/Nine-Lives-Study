@@ -225,18 +225,22 @@ const APP_HTML = `
         </div>
 
         <div id="friends-view" class="hidden">
-          <section class="card">
-            <h2>Find friends</h2>
-            <div class="friend-search-row">
-              <input id="friend-search-input" type="text" placeholder="Search by username…" />
-              <button id="friend-search-button">Search</button>
+          <section class="card collapsible" id="friend-search-card">
+            <h2 class="collapsible-header">Find friends <span class="collapse-arrow">&#9656;</span></h2>
+            <div class="collapsible-body hidden">
+              <div class="friend-search-row">
+                <input id="friend-search-input" type="text" placeholder="Search by username…" />
+                <button id="friend-search-button">Search</button>
+              </div>
+              <p id="friend-search-message" class="message"></p>
+              <div id="friend-search-results"></div>
             </div>
-            <p id="friend-search-message" class="message"></p>
-            <div id="friend-search-results"></div>
           </section>
-          <section class="card">
-            <h2>Friend requests</h2>
-            <div id="friend-requests-list"></div>
+          <section class="card collapsible hidden" id="friend-requests-card">
+            <h2 class="collapsible-header">Friend requests <span class="request-badge" id="friend-requests-badge"></span> <span class="collapse-arrow">&#9656;</span></h2>
+            <div class="collapsible-body hidden">
+              <div id="friend-requests-list"></div>
+            </div>
           </section>
           <section class="card">
             <h2>My friends</h2>
