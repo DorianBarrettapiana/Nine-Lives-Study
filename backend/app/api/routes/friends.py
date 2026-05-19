@@ -20,6 +20,8 @@ from app.schemas.friendship import (
     FriendEntry,
     FriendRequestEntry,
     FriendStudyStats,
+    NotificationItem,
+    NotificationsResponse,
 )
 
 router = APIRouter(prefix="/friends", tags=["friends"])
@@ -306,3 +308,56 @@ def toggle_like(
     db.add(FeedLike(user_id=current_user.id, xp_event_id=event_id))
     db.commit()
     return {"liked": True}
+
+
+# ---------------------------------------------------------------------------
+# Notifications
+# ---------------------------------------------------------------------------
+
+@router.get("/notifications", response_model=NotificationsResponse)
+def get_notifications(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> NotificationsResponse:
+    cutoff = current_user.notif_read_at
+
+    query = (
+        select(FeedLike, User.username, XpEvent.event_type)
+        .join(XpEvent, XpEvent.id == FeedLike.xp_event_id)
+        .join(User, User.id == FeedLike.user_id)
+        .where(XpEvent.user_id == current_user.id)
+        .where(FeedLike.user_id != current_user.id)
+        .order_by(FeedLike.created_at.desc())
+        .limit(20)
+    )
+    rows = db.execute(query).all()
+
+    items = [
+        NotificationItem(
+            liker_username=uname,
+            event_type=etype,
+            created_at=like.created_at.isoformat() if like.created_at else "",
+        )
+        for like, uname, etype in rows
+    ]
+
+    unread = 0
+    if cutoff is None:
+        unread = len(items)
+    else:
+        for like, _, _ in rows:
+            if like.created_at and like.created_at > cutoff:
+                unread += 1
+
+    return NotificationsResponse(unread_count=unread, items=items)
+
+
+@router.post("/notifications/read", response_model=dict)
+def mark_notifications_read(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    from datetime import datetime, timezone
+    current_user.notif_read_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"ok": True}

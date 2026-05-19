@@ -46,3 +46,14 @@ class FeedItem(BaseModel):
     created_at: str
     like_count: int
     liked_by_me: bool
+
+
+class NotificationItem(BaseModel):
+    liker_username: str
+    event_type: str
+    created_at: str
+
+
+class NotificationsResponse(BaseModel):
+    unread_count: int
+    items: list[NotificationItem]

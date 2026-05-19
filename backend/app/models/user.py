@@ -1,6 +1,8 @@
 """User ORM model."""
 
-from sqlalchemy import Boolean, Integer, String
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -23,3 +25,5 @@ class User(Base):
     pomodoro_short_break_minutes: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     pomodoro_long_break_minutes: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
     pomodoro_sessions_before_long_break: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
+
+    notif_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
