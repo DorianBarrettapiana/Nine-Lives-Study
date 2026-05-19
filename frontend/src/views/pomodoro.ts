@@ -67,8 +67,10 @@ function todayCompletedWorkCount(): number {
   ).length;
 }
 
-function nextBreakMode(): Mode {
-  const completedToday = todayCompletedWorkCount();
+// `justFinishedWork` accounts for a work session that has just ended but
+// hasn't been persisted/refetched yet, so the count reflects it.
+function nextBreakMode(justFinishedWork: boolean = false): Mode {
+  const completedToday = todayCompletedWorkCount() + (justFinishedWork ? 1 : 0);
   return completedToday > 0 && completedToday % sessionsBeforeLong() === 0
     ? "long_break"
     : "short_break";
@@ -237,16 +239,22 @@ async function startCurrentMode(): Promise<void> {
 async function onComplete(): Promise<void> {
   stopTimer();
   const finished = pomodoroMode;
-  const next = finished === "work" ? nextBreakMode() : "work";
+  const next = finished === "work" ? nextBreakMode(true) : "work";
 
   if (activeSessionId !== null) {
     try {
       await completeSession(activeSessionId);
-      activeSessionId = null;
       const msg = finished === "work" ? "Work session done! +25 XP" : `${modeLabel(finished)} over!`;
       setMessage(pomodoroMessage, msg, "success");
       await refresh();  // refresh the session list (used for stats counting too)
-    } catch (error) { console.error(error); }
+    } catch (error) {
+      console.error(error);
+      setMessage(pomodoroMessage, "Could not save completed session.", "error");
+    } finally {
+      // Always clear so the next phase opens a fresh server-side session;
+      // otherwise a failed complete would attach the next phase to a stale id.
+      activeSessionId = null;
+    }
   }
 
   celebrate(finished, next);
