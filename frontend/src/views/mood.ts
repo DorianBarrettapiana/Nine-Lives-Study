@@ -3,7 +3,7 @@
  */
 
 import { createMoodEntry, deleteMoodEntry, listMoodEntries, type MoodEntryRead } from "../api/mood";
-import { escapeHtml, setMessage } from "../utils";
+import { escapeHtml, parseApiDate, setMessage } from "../utils";
 
 const MOODS = [
   { emoji: "😩", label: "Exhausted" },
@@ -31,7 +31,7 @@ function renderPicker(): void {
 }
 
 function formatDateTime(iso: string): string {
-  const d = new Date(iso);
+  const d = parseApiDate(iso);
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
