@@ -10,7 +10,9 @@ class PomodoroSessionStart(BaseModel):
     """Payload to start a new Pomodoro session."""
 
     session_type: Literal["work", "break"] = "work"
-    duration_minutes: int = Field(default=25, ge=1, le=120)
+    # Upper bound matches the per-user work-minutes cap in UserUpdate so a
+    # user who configures a long work block (e.g. 90+ min) can actually start it.
+    duration_minutes: int = Field(default=25, ge=1, le=240)
 
 
 class PomodoroSessionComplete(BaseModel):
