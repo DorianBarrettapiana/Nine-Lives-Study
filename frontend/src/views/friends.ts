@@ -61,11 +61,37 @@ const EVENT_LABELS: Record<string, string> = {
   mood_logged: "recorded their mood",
 };
 
-// Notifications use this when the event_type is a marker for non-event
-// actions (today: only "someone cheered you").
-const NOTIFICATION_OVERRIDES: Record<string, string> = {
-  cheered_you: "sent you a cheer 🎉 (+1 XP)",
+// For "X liked your <noun>" notifications, what noun to use per event type.
+// Keep these short and human — they read inline.
+const LIKED_OBJECT: Record<string, string> = {
+  pomodoro_done: "pomodoro session",
+  task_done: "completed task",
+  daily_log: "daily log",
+  daily_log_saved: "daily log",
+  feynman: "Feynman entry",
+  feynman_created: "Feynman entry",
+  note: "paper note",
+  note_created: "paper note",
+  mood: "mood log",
+  mood_logged: "mood log",
 };
+
+// Build the full notification sentence (everything after "<username> ...").
+// Returns { icon, body } so the caller can place the icon outside <strong>.
+function notifMessage(n: NotificationItem): { icon: string; body: string } {
+  if (n.event_type === "cheered_you") {
+    return { icon: "🎉", body: "sent you a cheer (+1 XP)" };
+  }
+  const obj = LIKED_OBJECT[n.event_type] ?? "activity";
+  return { icon: "🌸", body: `liked your ${obj}` };
+}
+
+// How many notifs / feed items to show before "Show more". Match-ish to
+// give the panel a stable preview size.
+const NOTIFS_PREVIEW = 4;
+const FEED_PREVIEW = 5;
+let notifsExpanded = false;
+let feedExpanded = false;
 
 function timeAgo(isoStr: string): string {
   const dt = parseApiDate(isoStr);
@@ -79,34 +105,47 @@ function timeAgo(isoStr: string): string {
   return `${days}d ago`;
 }
 
+// Track latest data so the show-more toggles can re-render without re-fetching.
+let lastFeedItems: FeedItem[] = [];
+let lastNotifs: NotificationItem[] = [];
+
 function renderFeed(items: FeedItem[], notifs: NotificationItem[] = []): void {
-  let notifHtml = "";
-  if (notifs.length > 0) {
-    notifHtml = `
-      <div class="feed-notifs">
-        ${notifs.map(n => {
-          const override = NOTIFICATION_OVERRIDES[n.event_type];
-          const body = override
-            ? `${override}`
-            : `liked your activity: ${EVENT_LABELS[n.event_type] ?? n.event_type}`;
-          const icon = override ? "" : "🌸 ";
-          return `<div class="feed-notif-item">
-            ${icon}${avatarRowHtml(n.liker_cat_skin)}<strong>${escapeHtml(n.liker_username)}</strong> ${body}
-            <span class="feed-time">${timeAgo(n.created_at)}</span>
-          </div>`;
-        }).join("")}
-      </div>`;
-    // Mark-read is no longer called here — see onViewActivated(): firing on
-    // every background refresh made the unread badge vanish before the user
-    // ever opened the Friends tab.
-  }
+  lastFeedItems = items;
+  lastNotifs = notifs;
 
   if (items.length === 0 && notifs.length === 0) {
     friendFeed.innerHTML = `<div class="empty-state">No activity yet.</div>`;
     return;
   }
 
-  friendFeed.innerHTML = notifHtml + items.map(item => {
+  // --- Notifications block (collapsible) -------------------------------
+  let notifHtml = "";
+  if (notifs.length > 0) {
+    const showN = notifsExpanded ? notifs.length : Math.min(notifs.length, NOTIFS_PREVIEW);
+    const visible = notifs.slice(0, showN);
+    const hiddenCount = notifs.length - showN;
+    notifHtml = `
+      <div class="feed-notifs">
+        ${visible.map(n => {
+          const { icon, body } = notifMessage(n);
+          return `<div class="feed-notif-item">
+            <span class="notif-icon">${icon}</span>${avatarRowHtml(n.liker_cat_skin)}<strong>${escapeHtml(n.liker_username)}</strong> ${body}
+            <span class="feed-time">${timeAgo(n.created_at)}</span>
+          </div>`;
+        }).join("")}
+        ${(notifs.length > NOTIFS_PREVIEW)
+          ? `<button type="button" class="show-more-toggle" data-toggle="notifs">${
+              notifsExpanded ? "Show less ▴" : `Show ${hiddenCount} more ▾`
+            }</button>`
+          : ""}
+      </div>`;
+  }
+
+  // --- Activity feed block (collapsible) -------------------------------
+  const showM = feedExpanded ? items.length : Math.min(items.length, FEED_PREVIEW);
+  const visibleItems = items.slice(0, showM);
+  const hiddenItems = items.length - showM;
+  const feedHtml = visibleItems.map(item => {
     const label = EVENT_LABELS[item.event_type] ?? item.event_type;
     const likedClass = item.liked_by_me ? " liked" : "";
     return `
@@ -121,6 +160,13 @@ function renderFeed(items: FeedItem[], notifs: NotificationItem[] = []): void {
         </button>
       </div>`;
   }).join("");
+  const feedToggle = items.length > FEED_PREVIEW
+    ? `<button type="button" class="show-more-toggle" data-toggle="feed">${
+        feedExpanded ? "Show less ▴" : `Show ${hiddenItems} more ▾`
+      }</button>`
+    : "";
+
+  friendFeed.innerHTML = notifHtml + feedHtml + feedToggle;
 
   friendFeed.querySelectorAll<HTMLButtonElement>(".feed-like-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
@@ -134,6 +180,13 @@ function renderFeed(items: FeedItem[], notifs: NotificationItem[] = []): void {
     });
   });
 
+  friendFeed.querySelectorAll<HTMLButtonElement>(".show-more-toggle").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (btn.dataset.toggle === "notifs") notifsExpanded = !notifsExpanded;
+      else if (btn.dataset.toggle === "feed") feedExpanded = !feedExpanded;
+      renderFeed(lastFeedItems, lastNotifs);
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
