@@ -30,3 +30,7 @@ class User(Base):
 
     # User avatar — currently a fixed set of pixel-cat skins.
     cat_skin: Mapped[str] = mapped_column(String(20), default="tabby", nullable=False)
+    # Set the first time the user explicitly picks a skin. Subsequent changes
+    # are gated on accumulated completed-pomodoro work minutes since this ts.
+    # NULL = never explicitly picked yet → next change is free.
+    cat_skin_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

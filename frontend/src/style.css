@@ -1351,11 +1351,20 @@ h3 {
 }
 
 .avatar-picker {
+  margin-top: 0.5rem;
+  width: 100%;
+}
+.avatar-swatch-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0.5rem;
-  margin-top: 0.5rem;
   width: 100%;
+}
+.avatar-lock-hint {
+  margin: 0 0 0.6rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  text-align: left;
 }
 .avatar-swatch {
   display: flex;
@@ -1375,6 +1384,15 @@ h3 {
 .avatar-swatch.selected {
   border-color: var(--text-accent);
   background: rgba(99, 102, 241, 0.18);
+}
+.avatar-swatch.disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  filter: grayscale(0.4);
+}
+.avatar-swatch.disabled:hover {
+  background: rgba(255, 255, 255, 0.03);
+  transform: none;
 }
 .avatar-swatch svg { display: block; }
 

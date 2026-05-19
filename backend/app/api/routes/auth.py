@@ -13,6 +13,7 @@ from app.core.auth import (
     set_session_cookie,
     verify_password,
 )
+from app.core.cat_skin import user_read_with_skin_status
 from app.core.config import INVITE_CODE, SESSION_COOKIE_NAME
 from app.core.database import get_db
 from app.models.user import User
@@ -27,7 +28,7 @@ def register(
     payload: RegisterPayload,
     response: Response,
     db: Session = Depends(get_db),
-) -> User:
+) -> UserRead:
     """Create a new user account and start a session.
 
     Registration is gated by INVITE_CODE. If the env var is empty,
@@ -63,7 +64,7 @@ def register(
 
     session = create_session(user.id, db)
     set_session_cookie(response, session.id)
-    return user
+    return user_read_with_skin_status(user, db)
 
 
 @router.post("/login", response_model=UserRead)
@@ -71,7 +72,7 @@ def login(
     payload: LoginPayload,
     response: Response,
     db: Session = Depends(get_db),
-) -> User:
+) -> UserRead:
     """Authenticate and set the session cookie."""
     user = db.scalar(select(User).where(User.username == payload.username))
     if user is None or not verify_password(payload.password, user.password_hash):
@@ -87,7 +88,7 @@ def login(
 
     session = create_session(user.id, db)
     set_session_cookie(response, session.id)
-    return user
+    return user_read_with_skin_status(user, db)
 
 
 @router.post("/logout", status_code=204)
@@ -106,9 +107,12 @@ def logout(
 
 
 @router.get("/me", response_model=UserRead)
-def me(current_user: User = Depends(get_current_user)) -> User:
+def me(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserRead:
     """Return the currently authenticated user."""
-    return current_user
+    return user_read_with_skin_status(current_user, db)
 
 
 @router.post("/password", status_code=204)

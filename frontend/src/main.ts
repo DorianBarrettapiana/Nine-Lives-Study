@@ -4,6 +4,7 @@
 
 import "./style.css";
 import { ApiError, UnauthorizedError } from "./api/client";
+import { fmtMinutes } from "./utils";
 import { getMe, logout, updateMe, type UserRead } from "./api/users";
 import { applyTheme } from "./theme";
 import { CAT_SKINS, renderAvatarSvg } from "./views/avatar";
@@ -338,16 +339,36 @@ function mountApp(user: UserRead): void {
     profileUsername.textContent = u.username;
   }
 
-  function renderPicker(currentSkin: string): void {
-    pickerEl.innerHTML = CAT_SKINS.map((s) => `
-      <button type="button" class="avatar-swatch${s.id === currentSkin ? " selected" : ""}"
-              data-skin="${s.id}" title="${s.name}">
-        ${renderAvatarSvg(s.id, 44)}
-      </button>`).join("");
+  // The picker is locked once enough pomodoro minutes have NOT yet been
+  // earned since the user's last explicit skin pick. accumulated >= required
+  // means "free to change".
+  function isLocked(u: UserRead): boolean {
+    return u.cat_skin_minutes_accumulated < u.cat_skin_minutes_required;
+  }
+
+  function renderPicker(u: UserRead): void {
+    const locked = isLocked(u);
+    const remaining = Math.max(0, u.cat_skin_minutes_required - u.cat_skin_minutes_accumulated);
+    const statusLine = locked
+      ? `<p class="hint avatar-lock-hint">🔒 Locked — earn <strong>${fmtMinutes(remaining)}</strong> of pomodoro work to change cat again.</p>`
+      : `<p class="hint avatar-lock-hint">Pick a cat. Once chosen, requires ${fmtMinutes(u.cat_skin_minutes_required)} of pomodoro work before changing again.</p>`;
+    const swatches = CAT_SKINS.map((s) => {
+      const isCurrent = s.id === u.cat_skin;
+      const disabled = locked && !isCurrent;
+      return `
+        <button type="button"
+                class="avatar-swatch${isCurrent ? " selected" : ""}${disabled ? " disabled" : ""}"
+                data-skin="${s.id}"
+                title="${s.name}${disabled ? " (locked)" : ""}"
+                ${disabled ? "aria-disabled=\"true\"" : ""}>
+          ${renderAvatarSvg(s.id, 44)}
+        </button>`;
+    }).join("");
+    pickerEl.innerHTML = statusLine + `<div class="avatar-swatch-grid">${swatches}</div>`;
   }
 
   renderUserChrome(user);
-  renderPicker(user.cat_skin);
+  renderPicker(user);
   updateThemeButton(themeToggle, user.theme);
 
   pickerToggle.addEventListener("click", () => {
@@ -361,21 +382,42 @@ function mountApp(user: UserRead): void {
     if (!target) return;
     const skin = target.dataset.skin;
     if (!skin || skin === user.cat_skin) return;
+
+    if (isLocked(user)) {
+      const remaining = user.cat_skin_minutes_required - user.cat_skin_minutes_accumulated;
+      pickerMsg.className = "message error";
+      pickerMsg.textContent = `🔒 ${fmtMinutes(remaining)} of pomodoro work left to unlock.`;
+      return;
+    }
+
+    const skinName = CAT_SKINS.find((s) => s.id === skin)?.name ?? skin;
+    const required = fmtMinutes(user.cat_skin_minutes_required);
+    if (!window.confirm(
+      `Pick "${skinName}"?\n\n` +
+      `After confirming, you'll need ${required} of pomodoro work before you can change cat again.`
+    )) return;
+
     try {
       const updated = await updateMe({ cat_skin: skin });
-      user.cat_skin = updated.cat_skin;
+      Object.assign(user, updated);
       renderUserChrome(updated);
-      renderPicker(updated.cat_skin);
-      // Push the new skin into views that show the current user (e.g.
-      // pomodoro settings panel currently doesn't, but FriendsView reloads
-      // on next refresh; trigger a friends refresh so feed shows updated skin).
+      renderPicker(updated);
       void FriendsView.refresh();
       pickerMsg.className = "message success";
       pickerMsg.textContent = "Avatar updated.";
     } catch (error) {
       console.error(error);
       pickerMsg.className = "message error";
-      pickerMsg.textContent = "Could not update avatar.";
+      if (error instanceof ApiError) {
+        try {
+          const parsed = JSON.parse(error.body) as { detail?: string };
+          pickerMsg.textContent = parsed?.detail ?? "Could not update avatar.";
+        } catch {
+          pickerMsg.textContent = "Could not update avatar.";
+        }
+      } else {
+        pickerMsg.textContent = "Could not update avatar.";
+      }
     }
   });
 

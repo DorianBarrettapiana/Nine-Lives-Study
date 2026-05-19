@@ -17,6 +17,8 @@ export interface UserRead {
   pomodoro_sessions_before_long_break: number;
 
   cat_skin: string;
+  cat_skin_minutes_accumulated: number;
+  cat_skin_minutes_required: number;
 }
 
 export interface RegisterPayload {
