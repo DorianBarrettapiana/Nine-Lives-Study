@@ -35,6 +35,15 @@ export function setMessage(
   element.className = `message ${kind}`;
 }
 
+export function fmtMinutes(mins: number): string {
+  if (mins === 0) return "—";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}m`;
+  if (h > 0) return `${h}h`;
+  return `${m}m`;
+}
+
 export function makeDateLabel(dateStr: string): string {
   return new Date(dateStr + "T12:00:00").toLocaleDateString(undefined, {
     weekday: "short", month: "short", day: "numeric",

@@ -1069,3 +1069,57 @@ h3 {
 .pomo-period-label {
   color: var(--text-muted);
 }
+
+/* --- Friends view --- */
+.friend-search-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.friend-search-row input {
+  flex: 1;
+}
+
+.friend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--border-soft);
+  gap: 0.75rem;
+}
+
+.friend-row:last-child {
+  border-bottom: none;
+}
+
+.friend-name {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.friend-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.friend-actions button {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.65rem;
+}
+
+.friend-stats-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.friend-stats-header strong {
+  font-size: 1rem;
+  color: var(--text-accent);
+}

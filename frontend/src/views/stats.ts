@@ -8,7 +8,7 @@
 import { getUserStats, getUserXp, type UserProgressRead, type UserStatsRead } from "../api/stats";
 import { getDailyState, type DailyStateRead } from "../api/tracker";
 import { listSessions, type PomodoroSessionRead } from "../api/pomodoro";
-import { escapeHtml, makeDateLabel, parseApiDate } from "../utils";
+import { escapeHtml, fmtMinutes, makeDateLabel, parseApiDate } from "../utils";
 
 let statsTotals: HTMLDivElement;
 let statsTasksChart: HTMLDivElement;
@@ -162,14 +162,6 @@ function timePeriodKey(hour: number): string {
   return "night";
 }
 
-function fmtMinutes(mins: number): string {
-  if (mins === 0) return "—";
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (h > 0 && m > 0) return `${h}h ${m}m`;
-  if (h > 0) return `${h}h`;
-  return `${m}m`;
-}
 
 function renderPomodoroSection(): void {
   const cutoff = new Date();
