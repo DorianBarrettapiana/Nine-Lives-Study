@@ -17,7 +17,7 @@ import {
   type FriendRequestEntry,
   type FriendStudyStats,
 } from "../api/friends";
-import { escapeHtml, fmtMinutes, makeDateLabel, setMessage } from "../utils";
+import { escapeHtml, fmtMinutes, setMessage } from "../utils";
 
 let friendSearchInput: HTMLInputElement;
 let friendSearchButton: HTMLButtonElement;
@@ -38,22 +38,72 @@ let selectedFriendDays = 7;
 // Friend stats panel
 // ---------------------------------------------------------------------------
 
-function renderDailyList(stats: FriendStudyStats): string {
+function renderLineChart(stats: FriendStudyStats): string {
   if (stats.total_minutes === 0) {
     return `<div class="empty-state">No study sessions in this period.</div>`;
   }
-  const rows = [...stats.daily_minutes].reverse().map(d => {
-    const label = makeDateLabel(d.date);
-    return `
-      <div class="friend-day-row">
-        <span class="friend-day-date">${label}</span>
-        <span class="friend-day-mins">${fmtMinutes(d.minutes)}</span>
-      </div>`;
-  }).join("");
+
+  const W = 600; const H = 140;
+  const PAD = { top: 16, right: 16, bottom: 30, left: 46 };
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top - PAD.bottom;
+  const values = stats.daily_minutes.map(d => d.minutes);
+  const maxVal = Math.max(...values, 1);
+
+  const xPos = (i: number) =>
+    PAD.left + (values.length <= 1 ? chartW / 2 : (i / (values.length - 1)) * chartW);
+  const yPos = (v: number) =>
+    PAD.top + chartH - (v / maxVal) * chartH;
+
+  const linePoints = values.map((v, i) => `${xPos(i)},${yPos(v)}`).join(" ");
+  const areaPoints = [
+    `${xPos(0)},${PAD.top + chartH}`,
+    ...values.map((v, i) => `${xPos(i)},${yPos(v)}`),
+    `${xPos(values.length - 1)},${PAD.top + chartH}`,
+  ].join(" ");
+
+  const yTicks = [0, Math.round(maxVal / 2), maxVal].map(v => ({
+    y: yPos(v), label: fmtMinutes(v),
+  }));
+
+  const labelStep = Math.max(1, Math.floor(values.length / 6));
+  const xLabels = stats.daily_minutes.map((d, i) => {
+    if (i % labelStep !== 0 && i !== values.length - 1) return "";
+    const parts = d.date.split("-");
+    return `${parseInt(parts[1])}/${parseInt(parts[2])}`;
+  });
 
   return `
     <div class="friend-total-label">Total: <strong>${fmtMinutes(stats.total_minutes)}</strong></div>
-    <div class="friend-daily-list">${rows}</div>`;
+    <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"
+         class="pomo-line-chart" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="friendAreaGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#6366f1" stop-opacity="0.22"/>
+          <stop offset="100%" stop-color="#6366f1" stop-opacity="0.02"/>
+        </linearGradient>
+      </defs>
+      ${yTicks.map(t =>
+        `<line x1="${PAD.left}" y1="${t.y}" x2="${W - PAD.right}" y2="${t.y}"
+               stroke="var(--border-soft)" stroke-width="1"/>`
+      ).join("")}
+      <polygon points="${areaPoints}" fill="url(#friendAreaGrad)"/>
+      <polyline points="${linePoints}" fill="none" stroke="#6366f1"
+                stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${values.map((v, i) => v > 0
+        ? `<circle cx="${xPos(i)}" cy="${yPos(v)}" r="3.5" fill="#6366f1"/>`
+        : ""
+      ).join("")}
+      ${yTicks.map(t =>
+        `<text x="${PAD.left - 6}" y="${t.y + 4}" text-anchor="end"
+               font-size="10" fill="var(--text-muted)">${t.label}</text>`
+      ).join("")}
+      ${xLabels.map((lbl, i) => lbl
+        ? `<text x="${xPos(i)}" y="${H - 5}" text-anchor="middle"
+                 font-size="10" fill="var(--text-muted)">${lbl}</text>`
+        : ""
+      ).join("")}
+    </svg>`;
 }
 
 async function showFriendStats(friend: FriendEntry): Promise<void> {
@@ -84,7 +134,7 @@ async function showFriendStats(friend: FriendEntry): Promise<void> {
           ).join("")}
         </div>
       </div>
-      ${renderDailyList(stats)}`;
+      ${renderLineChart(stats)}`;
     bindDayButtons(friend);
   } catch {
     friendStatsPanel.querySelector(".hint")!.textContent = "Failed to load stats.";

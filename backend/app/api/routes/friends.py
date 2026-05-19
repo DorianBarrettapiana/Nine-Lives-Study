@@ -176,20 +176,23 @@ def get_friend_study_stats(
 
     since = date.today() - timedelta(days=days - 1)
 
-    since_str = since.isoformat()
     sessions = db.execute(
         select(PomodoroSession)
         .where(PomodoroSession.user_id == user_id)
         .where(PomodoroSession.is_completed == True)  # noqa: E712
         .where(PomodoroSession.session_type == "work")
-        .where(PomodoroSession.started_at >= since_str)
     ).scalars().all()
 
     tz_delta = timedelta(minutes=tz_offset)
+    since_str = since.isoformat()
     minutes_by_day: dict[str, int] = {}
     for s in sessions:
-        local_dt = (s.started_at + tz_delta) if s.started_at else None
-        day_str = local_dt.strftime("%Y-%m-%d") if local_dt else since.isoformat()
+        if s.started_at is None:
+            continue
+        local_dt = s.started_at + tz_delta
+        day_str = local_dt.strftime("%Y-%m-%d")
+        if day_str < since_str:
+            continue
         minutes_by_day[day_str] = minutes_by_day.get(day_str, 0) + s.duration_minutes
 
     daily_minutes = [
