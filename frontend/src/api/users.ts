@@ -15,6 +15,8 @@ export interface UserRead {
   pomodoro_short_break_minutes: number;
   pomodoro_long_break_minutes: number;
   pomodoro_sessions_before_long_break: number;
+
+  cat_skin: string;
 }
 
 export interface RegisterPayload {
@@ -38,6 +40,8 @@ export interface UserUpdate {
   pomodoro_short_break_minutes?: number;
   pomodoro_long_break_minutes?: number;
   pomodoro_sessions_before_long_break?: number;
+
+  cat_skin?: string;
 }
 
 export async function register(payload: RegisterPayload): Promise<UserRead> {

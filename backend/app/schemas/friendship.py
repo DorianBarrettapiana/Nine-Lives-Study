@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class UserSearchResult(BaseModel):
     id: int
     username: str
+    cat_skin: str = "tabby"
 
     model_config = {"from_attributes": True}
 
@@ -13,6 +14,7 @@ class UserSearchResult(BaseModel):
 class FriendEntry(BaseModel):
     user_id: int
     username: str
+    cat_skin: str = "tabby"
 
     model_config = {"from_attributes": True}
 
@@ -20,6 +22,7 @@ class FriendEntry(BaseModel):
 class FriendRequestEntry(BaseModel):
     user_id: int
     username: str
+    cat_skin: str = "tabby"
 
     model_config = {"from_attributes": True}
 
@@ -41,6 +44,7 @@ class FeedItem(BaseModel):
     id: int
     user_id: int
     username: str
+    cat_skin: str = "tabby"
     event_type: str
     amount: int
     created_at: str
@@ -50,6 +54,7 @@ class FeedItem(BaseModel):
 
 class NotificationItem(BaseModel):
     liker_username: str
+    liker_cat_skin: str = "tabby"
     event_type: str
     created_at: str
 

@@ -51,4 +51,13 @@ describe("view modules import cleanly", () => {
     expect(typeof mod.init).toBe("function");
     expect(typeof mod.refresh).toBe("function");
   });
+
+  it("avatar", async () => {
+    const mod = await import("./avatar");
+    expect(typeof mod.renderAvatarSvg).toBe("function");
+    expect(Array.isArray(mod.CAT_SKINS)).toBe(true);
+    expect(mod.CAT_SKINS.length).toBeGreaterThan(0);
+    // Unknown skin id should fall back to a valid SVG, not throw.
+    expect(mod.renderAvatarSvg("nonexistent", 32)).toContain("<svg");
+  });
 });
