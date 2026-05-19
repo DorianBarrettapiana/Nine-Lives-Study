@@ -11,7 +11,6 @@ from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.feed_like import FeedLike
 from app.models.friendship import Friendship
-from app.models.pomodoro_session import PomodoroSession
 from app.models.user import User
 from app.models.xp_event import XpEvent
 from app.schemas.friendship import (
@@ -181,24 +180,23 @@ def get_friend_study_stats(
 
     since = date.today() - timedelta(days=days - 1)
 
-    sessions = db.execute(
-        select(PomodoroSession)
-        .where(PomodoroSession.user_id == user_id)
-        .where(PomodoroSession.is_completed == True)  # noqa: E712
-        .where(PomodoroSession.session_type == "work")
+    events = db.execute(
+        select(XpEvent)
+        .where(XpEvent.user_id == user_id)
+        .where(XpEvent.event_type == "pomodoro_done")
     ).scalars().all()
 
     tz_delta = timedelta(minutes=tz_offset)
     since_str = since.isoformat()
     minutes_by_day: dict[str, int] = {}
-    for s in sessions:
-        if s.started_at is None:
+    for ev in events:
+        if ev.created_at is None:
             continue
-        local_dt = s.started_at + tz_delta
+        local_dt = ev.created_at + tz_delta
         day_str = local_dt.strftime("%Y-%m-%d")
         if day_str < since_str:
             continue
-        minutes_by_day[day_str] = minutes_by_day.get(day_str, 0) + s.duration_minutes
+        minutes_by_day[day_str] = minutes_by_day.get(day_str, 0) + ev.amount
 
     daily_minutes = [
         DailyMinutes(
