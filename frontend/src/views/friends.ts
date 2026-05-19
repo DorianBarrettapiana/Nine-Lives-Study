@@ -45,12 +45,13 @@ let selectedFriendDays = 7;
 // ---------------------------------------------------------------------------
 
 const EVENT_LABELS: Record<string, string> = {
-  pomodoro: "completed a pomodoro session",
+  pomodoro_done: "completed a pomodoro session",
   task_done: "completed a task",
   daily_log: "wrote a daily log",
   feynman: "added a Feynman entry",
   note: "added a paper note",
   mood: "recorded their mood",
+  mood_logged: "recorded their mood",
 };
 
 function timeAgo(isoStr: string): string {
