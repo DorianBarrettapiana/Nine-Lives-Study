@@ -4,8 +4,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-# Keep in sync with frontend/src/views/avatar.ts SKIN_IDS.
-CatSkin = Literal["tabby", "black", "white", "gray", "calico", "siamese"]
+# Keep in sync with frontend/src/views/avatar.ts CAT_SKINS.
+CatSkin = Literal[
+    "tabby", "black", "white", "gray", "calico", "siamese",
+    "tortie", "ragdoll", "cow",
+]
 
 
 class UserCreate(BaseModel):
@@ -47,5 +50,10 @@ class UserRead(BaseModel):
     pomodoro_sessions_before_long_break: int
 
     cat_skin: str
+    # Minutes of accumulated completed pomodoro work since the last skin change.
+    cat_skin_minutes_accumulated: int = 0
+    # Required minutes between changes (currently 30h = 1800 min). Constant
+    # but exposed so the frontend doesn't need to hard-code it.
+    cat_skin_minutes_required: int = 1800
 
     model_config = {"from_attributes": True}
