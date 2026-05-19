@@ -21,6 +21,7 @@ import {
   type FriendEntry,
   type FriendRequestEntry,
   type FriendStudyStats,
+  type NotificationItem,
 } from "../api/friends";
 import { escapeHtml, fmtMinutes, parseApiDate, setMessage } from "../utils";
 import { renderAvatarSvg } from "./avatar";
@@ -71,7 +72,7 @@ function timeAgo(isoStr: string): string {
   return `${days}d ago`;
 }
 
-function renderFeed(items: FeedItem[], notifs: { liker_username: string; event_type: string; created_at: string }[] = []): void {
+function renderFeed(items: FeedItem[], notifs: NotificationItem[] = []): void {
   let notifHtml = "";
   if (notifs.length > 0) {
     notifHtml = `
