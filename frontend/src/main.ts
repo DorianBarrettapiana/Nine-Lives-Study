@@ -53,6 +53,7 @@ const APP_HTML = `
         </section>
         <section class="card stopwatch-card" id="stopwatch-card">
           <h2>Work timer</h2>
+          <div id="stopwatch-clock" class="stopwatch-clock"></div>
           <div id="stopwatch-display" class="stopwatch-display">00:00:00</div>
           <div class="button-row stopwatch-buttons">
             <button id="stopwatch-start-btn" type="button">▶ Start</button>
@@ -432,6 +433,8 @@ function mountApp(user: UserRead): void {
       Object.assign(user, updated);
       renderUserChrome(updated);
       renderPicker(updated);
+      // Propagate the new skin to the stopwatch clock's ear color.
+      StopwatchView.setCatSkin(updated.cat_skin);
       void FriendsView.refresh();
       pickerMsg.className = "message success";
       pickerMsg.textContent = "Avatar updated.";
@@ -487,7 +490,7 @@ function mountApp(user: UserRead): void {
   PomodoroView.setUser(user);  // pass settings (work/break durations etc.) to the timer
   MoodView.init(() => Promise.all([MoodView.refresh(), StatsView.refresh()]).then());
   StatsView.init(() => StatsView.refresh());
-  StopwatchView.init();
+  StopwatchView.init(user.cat_skin);
   FriendsView.init(() => FriendsView.refresh());
 
   document.querySelectorAll<HTMLButtonElement>(".feature-tab").forEach((tab) => {

@@ -56,6 +56,16 @@ describe("view modules import cleanly", () => {
     const mod = await import("./stopwatch");
     expect(typeof mod.init).toBe("function");
     expect(typeof mod.refresh).toBe("function");
+    expect(typeof mod.setCatSkin).toBe("function");
+  });
+
+  it("clock", async () => {
+    const mod = await import("./clock");
+    expect(typeof mod.renderAnalogClockSvg).toBe("function");
+    const svg = mod.renderAnalogClockSvg({ seconds: 0, running: false, catSkin: "tabby" });
+    expect(svg).toContain("<svg");
+    // Unknown skin id should fall back without throwing.
+    expect(() => mod.renderAnalogClockSvg({ seconds: 123, running: true, catSkin: "nonexistent" })).not.toThrow();
   });
 
   it("avatar", async () => {

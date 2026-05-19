@@ -22,8 +22,10 @@ import {
   type StopwatchSessionRead,
 } from "../api/stopwatch";
 import { parseApiDate, setMessage } from "../utils";
+import { renderAnalogClockSvg } from "./clock";
 
-let displayEl: HTMLDivElement;
+let clockEl: HTMLDivElement;       // analog clock SVG container
+let displayEl: HTMLDivElement;     // digital readout below the clock
 let startBtn: HTMLButtonElement;
 let endBtn: HTMLButtonElement;
 let messageEl: HTMLParagraphElement;
@@ -32,6 +34,16 @@ let active: StopwatchSessionRead | null = null;
 let tickIntervalId: ReturnType<typeof setInterval> | null = null;
 // True when a pomodoro is currently running locally; blocks Start.
 let pomodoroBlocking = false;
+// User's currently-selected cat skin — drives the ear fill on the analog
+// clock so the timer visually matches their avatar.
+let catSkin = "tabby";
+
+/** Update the cat skin used to color the clock's ears. Called from main.ts
+ *  when the user picks a new skin in the sidebar picker. */
+export function setCatSkin(skin: string): void {
+  catSkin = skin;
+  render();
+}
 
 function fmtHMS(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
@@ -56,7 +68,15 @@ function currentElapsedSeconds(): number {
 }
 
 function render(): void {
-  displayEl.textContent = fmtHMS(currentElapsedSeconds());
+  const seconds = currentElapsedSeconds();
+  const running = !!(active && active.is_running);
+
+  // Analog clock face (primary visual).
+  clockEl.innerHTML = renderAnalogClockSvg({ seconds, running, catSkin });
+
+  // Digital readout (secondary, for precise reading).
+  displayEl.textContent = fmtHMS(seconds);
+  displayEl.classList.toggle("paused", !running);
 
   if (!active) {
     startBtn.textContent = "▶ Start";
@@ -65,21 +85,18 @@ function render(): void {
       ? "Stop the pomodoro first to start a stopwatch"
       : "Start the stopwatch";
     endBtn.disabled = true;
-    displayEl.classList.remove("running");
     return;
   }
-  if (active.is_running) {
+  if (running) {
     startBtn.textContent = "⏸ Pause";
     startBtn.disabled = false;
     startBtn.title = "Pause the stopwatch";
-    displayEl.classList.add("running");
   } else {
     startBtn.textContent = "▶ Resume";
     startBtn.disabled = pomodoroBlocking;
     startBtn.title = pomodoroBlocking
       ? "Stop the pomodoro first"
       : "Resume the stopwatch";
-    displayEl.classList.remove("running");
   }
   endBtn.disabled = false;
 }
@@ -165,7 +182,9 @@ export async function refresh(): Promise<void> {
   }
 }
 
-export function init(): void {
+export function init(initialCatSkin: string = "tabby"): void {
+  catSkin = initialCatSkin;
+  clockEl = document.querySelector<HTMLDivElement>("#stopwatch-clock")!;
   displayEl = document.querySelector<HTMLDivElement>("#stopwatch-display")!;
   startBtn = document.querySelector<HTMLButtonElement>("#stopwatch-start-btn")!;
   endBtn = document.querySelector<HTMLButtonElement>("#stopwatch-end-btn")!;
