@@ -21,7 +21,7 @@ import {
   startStopwatch,
   type StopwatchSessionRead,
 } from "../api/stopwatch";
-import { setMessage } from "../utils";
+import { parseApiDate, setMessage } from "../utils";
 
 let displayEl: HTMLDivElement;
 let startBtn: HTMLButtonElement;
@@ -45,7 +45,10 @@ function fmtHMS(totalSeconds: number): string {
 function currentElapsedSeconds(): number {
   if (!active) return 0;
   if (active.is_running && active.last_started_at) {
-    const startedMs = new Date(active.last_started_at).getTime();
+    // SQLite drops timezone info → server timestamps are naive UTC. Use
+    // parseApiDate so JS doesn't interpret them as local time (which
+    // would cause a tz-offset-sized jump on Start, e.g. +2h in CEST).
+    const startedMs = parseApiDate(active.last_started_at).getTime();
     const sinceResume = Math.max(0, (Date.now() - startedMs) / 1000);
     return active.accumulated_seconds + sinceResume;
   }
