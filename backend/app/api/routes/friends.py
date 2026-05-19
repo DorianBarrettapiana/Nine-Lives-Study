@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -176,12 +176,13 @@ def get_friend_study_stats(
 
     since = date.today() - timedelta(days=days - 1)
 
+    since_str = since.isoformat()
     sessions = db.execute(
         select(PomodoroSession)
         .where(PomodoroSession.user_id == user_id)
         .where(PomodoroSession.is_completed == True)  # noqa: E712
         .where(PomodoroSession.session_type == "work")
-        .where(func.date(PomodoroSession.started_at) >= since.isoformat())
+        .where(PomodoroSession.started_at >= since_str)
     ).scalars().all()
 
     tz_delta = timedelta(minutes=tz_offset)
