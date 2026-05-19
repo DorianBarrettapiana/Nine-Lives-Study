@@ -12,4 +12,12 @@ class UserProgressRead(BaseModel):
     xp_in_level: int
     xp_to_next_level: int
 
+    # Consecutive days (in caller's local tz) with at least one completed
+    # work pomodoro. Today counts only if a work session is completed today;
+    # but the streak isn't broken until the *end* of the next day with no
+    # activity (so users have a grace day to come back without seeing 0).
+    streak_days: int = 0
+    # True if the user already has a completed work session for today.
+    streak_active_today: bool = False
+
     model_config = {"from_attributes": False}

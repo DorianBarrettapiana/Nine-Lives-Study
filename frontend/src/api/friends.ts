@@ -77,6 +77,8 @@ export interface FeedItem {
   created_at: string;
   like_count: number;
   liked_by_me: boolean;
+  cheer_count: number;
+  cheered_by_me: boolean;
 }
 
 export async function getFeed(limit = 30): Promise<FeedItem[]> {
@@ -85,6 +87,10 @@ export async function getFeed(limit = 30): Promise<FeedItem[]> {
 
 export async function toggleLike(eventId: number): Promise<{ liked: boolean }> {
   return apiFetch<{ liked: boolean }>(`/friends/feed/${eventId}/like`, { method: "POST" });
+}
+
+export async function cheerEvent(eventId: number): Promise<{ cheered: boolean; already: boolean }> {
+  return apiFetch<{ cheered: boolean; already: boolean }>(`/friends/feed/${eventId}/cheer`, { method: "POST" });
 }
 
 export interface NotificationItem {

@@ -1402,3 +1402,100 @@ h3 {
   vertical-align: middle;
   margin-right: 0.5rem;
 }
+
+/* --- Streak line in sidebar XP card ------------------------------------ */
+
+.streak-line {
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+}
+.streak-line.streak-active {
+  color: #f59e0b;
+  font-weight: 600;
+}
+.streak-line.streak-grace {
+  color: #f59e0b;
+  opacity: 0.85;
+}
+
+/* --- Cat cheer animation (fires when a pomodoro work session completes) - */
+
+@keyframes catCheerBounce {
+  0%   { transform: translateY(0)    scale(1)    rotate(0deg); }
+  18%  { transform: translateY(-12px) scale(1.06) rotate(-3deg); }
+  36%  { transform: translateY(0)    scale(0.97) rotate(2deg); }
+  54%  { transform: translateY(-7px) scale(1.04) rotate(-1deg); }
+  72%  { transform: translateY(0)    scale(1)    rotate(0deg); }
+  100% { transform: translateY(0)    scale(1)    rotate(0deg); }
+}
+.cat-cheer {
+  animation: catCheerBounce 1.2s ease-out;
+  transform-origin: center bottom;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cat-cheer { animation: none; }
+}
+
+/* --- Weekly summary card on /stats ------------------------------------- */
+
+.weekly-stat {
+  display: grid;
+  gap: 0.15rem;
+  text-align: center;
+}
+.weekly-stat .weekly-prev {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.weekly-delta {
+  display: inline-block;
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.weekly-delta.up { color: #10b981; }
+.weekly-delta.down { color: #ef4444; }
+.weekly-delta.neutral { color: var(--text-muted); }
+
+/* --- Cheer button (friend feed) ---------------------------------------- */
+
+.feed-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+.feed-cheer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.55rem;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.08s ease, border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.feed-cheer-btn:hover:not(:disabled) {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  transform: translateY(-1px);
+}
+.feed-cheer-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.feed-cheer-btn.cheered {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.18);
+  color: #f59e0b;
+  cursor: default;
+}
+.feed-cheer-btn:disabled {
+  cursor: not-allowed;
+}
+.feed-cheer-btn .cheer-icon { font-size: 0.95rem; line-height: 1; }
+.feed-cheer-btn .cheer-count:empty { display: none; }

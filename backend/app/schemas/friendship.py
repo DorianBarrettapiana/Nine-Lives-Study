@@ -50,6 +50,8 @@ class FeedItem(BaseModel):
     created_at: str
     like_count: int
     liked_by_me: bool
+    cheer_count: int = 0
+    cheered_by_me: bool = False
 
 
 class NotificationItem(BaseModel):

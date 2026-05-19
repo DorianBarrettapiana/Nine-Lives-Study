@@ -1,10 +1,11 @@
 """User XP / level routes (scoped to current user)."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.core.streak import compute_streak
 from app.models.user import User
 from app.models.user_progress import XP_PER_LEVEL, UserProgress
 from app.schemas.user_progress import UserProgressRead
@@ -14,10 +15,15 @@ router = APIRouter(prefix="/xp", tags=["xp"])
 
 @router.get("", response_model=UserProgressRead)
 def get_xp(
+    tz_offset: int = Query(default=0, ge=-720, le=840),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> UserProgressRead:
-    """Return XP, level, and progress to next level for the current user."""
+    """Return XP, level, and progress to next level for the current user.
+
+    `tz_offset` is used only for the streak computation (consecutive local days
+    with completed work pomodoros).
+    """
     progress = db.get(UserProgress, current_user.id)
     if progress is None:
         progress = UserProgress(user_id=current_user.id, xp=0, level=1)
@@ -28,10 +34,14 @@ def get_xp(
     xp_in_level = progress.xp % XP_PER_LEVEL
     xp_to_next = XP_PER_LEVEL - xp_in_level
 
+    streak_days, active_today = compute_streak(current_user.id, tz_offset, db)
+
     return UserProgressRead(
         user_id=progress.user_id,
         xp=progress.xp,
         level=progress.level,
         xp_in_level=xp_in_level,
         xp_to_next_level=xp_to_next,
+        streak_days=streak_days,
+        streak_active_today=active_today,
     )

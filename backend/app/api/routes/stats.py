@@ -24,7 +24,14 @@ from app.models.mood_entry import MoodEntry
 from app.models.paper_note import PaperNote
 from app.models.user import User
 from app.models.xp_event import XpEvent
-from app.schemas.stats import DailyMoodStat, DailyPomodoroStat, DailyTaskStat, UserStatsRead
+from app.schemas.stats import (
+    DailyMoodStat,
+    DailyPomodoroStat,
+    DailyTaskStat,
+    UserStatsRead,
+    WeeklySummary,
+    WeeklySummaryCounts,
+)
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -142,6 +149,55 @@ def get_stats(
     # Silence unused-import linter without breaking type hint inference
     _ = (EVENT_NOTE, EVENT_FEYNMAN, EVENT_MOOD)
 
+    # --- Weekly summary: last 7 days vs prior 7 days (caller's local tz) ----
+    # Uses the same _local_day bucketing as the daily series above so deltas
+    # and the daily charts always agree.
+    this_week_start = today_local - timedelta(days=6)   # inclusive
+    prev_week_start = today_local - timedelta(days=13)  # inclusive
+    prev_week_end   = today_local - timedelta(days=7)   # inclusive
+
+    def _bucket(events_or_entries, get_ts) -> tuple[int, int]:
+        this_n = prev_n = 0
+        for item in events_or_entries:
+            day = _local_day(get_ts(item))
+            if day is None:
+                continue
+            if this_week_start.isoformat() <= day <= today_local.isoformat():
+                this_n += 1
+            elif prev_week_start.isoformat() <= day <= prev_week_end.isoformat():
+                prev_n += 1
+        return this_n, prev_n
+
+    pomo_this, pomo_prev = _bucket(pomo_events, lambda e: e.created_at)
+    task_this, task_prev = _bucket(task_events, lambda e: e.created_at)
+
+    # Notes / Feynman / Moods are live rows (not xp_events) — fetch their
+    # created_at timestamps once and bucket the same way.
+    note_rows = db.scalars(
+        select(PaperNote.created_at).where(PaperNote.user_id == user_id)
+    ).all()
+    feynman_rows = db.scalars(
+        select(FeynmanEntry.created_at).where(FeynmanEntry.user_id == user_id)
+    ).all()
+    mood_rows_ts = db.scalars(
+        select(MoodEntry.created_at).where(MoodEntry.user_id == user_id)
+    ).all()
+
+    notes_this, notes_prev = _bucket(note_rows, lambda ts: ts)
+    feyn_this, feyn_prev = _bucket(feynman_rows, lambda ts: ts)
+    mood_this, mood_prev = _bucket(mood_rows_ts, lambda ts: ts)
+
+    weekly_summary = WeeklySummary(
+        this_week=WeeklySummaryCounts(
+            pomodoros=pomo_this, tasks_done=task_this,
+            notes=notes_this, feynman=feyn_this, moods=mood_this,
+        ),
+        prev_week=WeeklySummaryCounts(
+            pomodoros=pomo_prev, tasks_done=task_prev,
+            notes=notes_prev, feynman=feyn_prev, moods=mood_prev,
+        ),
+    )
+
     return UserStatsRead(
         days=days,
         daily_tasks=daily_tasks,
@@ -152,4 +208,5 @@ def get_stats(
         total_notes=total_notes,
         total_feynman=total_feynman,
         total_moods=total_moods,
+        weekly_summary=weekly_summary,
     )

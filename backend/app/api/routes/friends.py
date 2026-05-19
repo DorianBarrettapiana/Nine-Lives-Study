@@ -1,6 +1,6 @@
 """Friends system routes."""
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -9,6 +9,14 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.core.xp import (
+    CHEERS_PER_DAY,
+    ENTITY_FEED_CHEER,
+    EVENT_CHEER,
+    XP_CHEER_RECEIVED,
+    award_xp_event,
+)
+from app.models.feed_cheer import FeedCheer
 from app.models.feed_like import FeedLike
 from app.models.friendship import Friendship
 from app.models.pomodoro_session import PomodoroSession
@@ -277,6 +285,8 @@ def get_feed(
     event_ids = [e.id for e, _, _ in events]
     like_counts: dict[int, int] = {}
     my_likes: set[int] = set()
+    cheer_counts: dict[int, int] = {}
+    my_cheers: set[int] = set()
     if event_ids:
         count_rows = db.execute(
             select(FeedLike.xp_event_id, func.count(FeedLike.id))
@@ -292,6 +302,20 @@ def get_feed(
         ).scalars().all()
         my_likes = set(my_rows)
 
+        cheer_rows = db.execute(
+            select(FeedCheer.xp_event_id, func.count(FeedCheer.id))
+            .where(FeedCheer.xp_event_id.in_(event_ids))
+            .group_by(FeedCheer.xp_event_id)
+        ).all()
+        cheer_counts = {eid: cnt for eid, cnt in cheer_rows}
+
+        my_cheer_rows = db.execute(
+            select(FeedCheer.xp_event_id)
+            .where(FeedCheer.xp_event_id.in_(event_ids))
+            .where(FeedCheer.user_id == current_user.id)
+        ).scalars().all()
+        my_cheers = set(my_cheer_rows)
+
     return [
         FeedItem(
             id=ev.id,
@@ -303,6 +327,8 @@ def get_feed(
             created_at=ev.created_at.isoformat() if ev.created_at else "",
             like_count=like_counts.get(ev.id, 0),
             liked_by_me=ev.id in my_likes,
+            cheer_count=cheer_counts.get(ev.id, 0),
+            cheered_by_me=ev.id in my_cheers,
         )
         for ev, uname, skin in events
     ]
@@ -337,6 +363,67 @@ def toggle_like(
     db.add(FeedLike(user_id=current_user.id, xp_event_id=event_id))
     db.commit()
     return {"liked": True}
+
+
+@router.post("/feed/{event_id}/cheer", response_model=dict)
+def cheer_event(
+    event_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Send a one-way cheer to a friend's activity.
+
+    Awards the recipient +XP_CHEER_RECEIVED XP via the standard XP ledger.
+    One cheer per (user, event) and a daily cap per sender.
+    """
+    event = db.get(XpEvent, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found.")
+    if event.user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot cheer your own activity.")
+    f = _get_friendship(current_user.id, event.user_id, db)
+    if f is None or f.status != "accepted":
+        raise HTTPException(status_code=403, detail="Not allowed.")
+
+    # Already cheered? Idempotent no-op.
+    existing = db.scalar(
+        select(FeedCheer)
+        .where(FeedCheer.user_id == current_user.id)
+        .where(FeedCheer.xp_event_id == event_id)
+    )
+    if existing is not None:
+        return {"cheered": True, "already": True}
+
+    # Daily cap. Count cheers sent in the last 24h (rolling window — simpler
+    # than calendar-day in user's tz and harder to game by hopping timezones).
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    sent_today = db.scalar(
+        select(func.count(FeedCheer.id))
+        .where(FeedCheer.user_id == current_user.id)
+        .where(FeedCheer.created_at >= since)
+    ) or 0
+    if sent_today >= CHEERS_PER_DAY:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily cheer limit reached ({CHEERS_PER_DAY}/day). Try again later.",
+        )
+
+    cheer = FeedCheer(user_id=current_user.id, xp_event_id=event_id)
+    db.add(cheer)
+    db.flush()  # populate cheer.id for the XP entity_id below
+
+    # Award XP to the recipient. Idempotent via (event_type, entity_id).
+    award_xp_event(
+        user_id=event.user_id,
+        event_type=EVENT_CHEER,
+        entity_type=ENTITY_FEED_CHEER,
+        entity_id=cheer.id,
+        amount=XP_CHEER_RECEIVED,
+        db=db,
+    )
+
+    db.commit()
+    return {"cheered": True, "already": False}
 
 
 # ---------------------------------------------------------------------------
