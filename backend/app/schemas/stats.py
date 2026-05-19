@@ -16,13 +16,15 @@ class DailyMoodStat(BaseModel):
     mood: str
 
 
-class DailyPomodoroStat(BaseModel):
+class DailyWorkStat(BaseModel):
+    """Minutes of work (pomodoro_work + stopwatch) on a given local day."""
+
     date: date
-    count: int
+    minutes: int
 
 
 class WeeklySummaryCounts(BaseModel):
-    pomodoros: int = 0
+    work_minutes: int = 0
     tasks_done: int = 0
     notes: int = 0
     feynman: int = 0
@@ -40,9 +42,9 @@ class UserStatsRead(BaseModel):
     days: int
     daily_tasks: list[DailyTaskStat]
     daily_moods: list[DailyMoodStat]
-    daily_pomodoros: list[DailyPomodoroStat]
+    daily_work_minutes: list[DailyWorkStat]
     total_tasks_done: int
-    total_pomodoros: int
+    total_work_minutes: int
     total_notes: int
     total_feynman: int
     total_moods: int = 0

@@ -14,6 +14,7 @@ import * as MoodView from "./views/mood";
 import * as NotesView from "./views/notes";
 import * as PomodoroView from "./views/pomodoro";
 import * as StatsView from "./views/stats";
+import * as StopwatchView from "./views/stopwatch";
 import * as FriendsView from "./views/friends";
 import * as TrackerView from "./views/tracker";
 
@@ -48,7 +49,16 @@ const APP_HTML = `
           <h2>Level <span id="xp-level">1</span></h2>
           <div class="xp-bar-wrap"><div class="xp-bar-fill" id="xp-bar-fill"></div></div>
           <p class="hint" id="xp-label">0 / 100 XP</p>
-          <p class="hint streak-line" id="streak-line" title="Consecutive days with at least one completed work pomodoro"></p>
+          <p class="hint streak-line" id="streak-line" title="Consecutive days with at least one work session"></p>
+        </section>
+        <section class="card stopwatch-card" id="stopwatch-card">
+          <h2>Work timer</h2>
+          <div id="stopwatch-display" class="stopwatch-display">00:00:00</div>
+          <div class="button-row stopwatch-buttons">
+            <button id="stopwatch-start-btn" type="button">▶ Start</button>
+            <button id="stopwatch-end-btn" type="button" class="secondary">End</button>
+          </div>
+          <p id="stopwatch-message" class="message"></p>
         </section>
       </aside>
 
@@ -212,7 +222,7 @@ const APP_HTML = `
             <div id="stats-tasks-chart" class="stats-chart"></div>
           </section>
           <section class="card">
-            <h2 id="stats-pomodoro-title">Last 7 days — Pomodoro sessions</h2>
+            <h2 id="stats-pomodoro-title">Last 7 days — work time</h2>
             <div id="stats-pomodoro-chart" class="stats-chart"></div>
           </section>
           <section class="card">
@@ -308,6 +318,7 @@ async function refreshAll(): Promise<void> {
       PomodoroView.refresh(),
       MoodView.refresh(),
       StatsView.refresh(),
+      StopwatchView.refresh(),
       FriendsView.refresh(),
     ]);
   } catch (error) {
@@ -476,6 +487,7 @@ function mountApp(user: UserRead): void {
   PomodoroView.setUser(user);  // pass settings (work/break durations etc.) to the timer
   MoodView.init(() => Promise.all([MoodView.refresh(), StatsView.refresh()]).then());
   StatsView.init(() => StatsView.refresh());
+  StopwatchView.init();
   FriendsView.init(() => FriendsView.refresh());
 
   document.querySelectorAll<HTMLButtonElement>(".feature-tab").forEach((tab) => {

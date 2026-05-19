@@ -15,13 +15,13 @@ export interface DailyMoodStat {
   mood: string;
 }
 
-export interface DailyPomodoroStat {
+export interface DailyWorkStat {
   date: string;
-  count: number;
+  minutes: number;
 }
 
 export interface WeeklySummaryCounts {
-  pomodoros: number;
+  work_minutes: number;
   tasks_done: number;
   notes: number;
   feynman: number;
@@ -37,9 +37,9 @@ export interface UserStatsRead {
   days: number;
   daily_tasks: DailyTaskStat[];
   daily_moods: DailyMoodStat[];
-  daily_pomodoros: DailyPomodoroStat[];
+  daily_work_minutes: DailyWorkStat[];
   total_tasks_done: number;
-  total_pomodoros: number;
+  total_work_minutes: number;
   total_notes: number;
   total_feynman: number;
   total_moods?: number;

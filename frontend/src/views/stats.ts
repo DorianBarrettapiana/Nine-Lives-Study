@@ -7,8 +7,7 @@
 
 import { getUserStats, getUserXp, type UserProgressRead, type UserStatsRead } from "../api/stats";
 import { getDailyState, type DailyStateRead } from "../api/tracker";
-import { listSessions, type PomodoroSessionRead } from "../api/pomodoro";
-import { escapeHtml, fmtMinutes, makeDateLabel, parseApiDate } from "../utils";
+import { escapeHtml, fmtMinutes, makeDateLabel } from "../utils";
 
 let statsTotals: HTMLDivElement;
 let weeklyCard: HTMLElement | null;
@@ -26,7 +25,6 @@ let streakLine: HTMLParagraphElement | null;
 
 let userStats: UserStatsRead | null = null;
 let userProgress: UserProgressRead | null = null;
-let allSessions: PomodoroSessionRead[] = [];
 let expandedDay: string | null = null;
 const dayCache = new Map<string, DailyStateRead>();
 
@@ -42,7 +40,7 @@ export function renderXp(): void {
   if (streakLine) {
     const n = userProgress.streak_days;
     if (n <= 0) {
-      streakLine.textContent = "Complete a pomodoro today to start a streak.";
+      streakLine.textContent = "Complete a work session today to start a streak.";
       streakLine.classList.remove("streak-active", "streak-grace");
     } else if (userProgress.streak_active_today) {
       streakLine.textContent = `🔥 ${n}-day streak`;
@@ -65,12 +63,13 @@ function renderWeeklySummary(): void {
     weeklyCard.classList.add("hidden");
     return;
   }
-  const items = [
-    { label: "Pomodoros",    a: ws.this_week.pomodoros,  b: ws.prev_week.pomodoros },
-    { label: "Tasks done",   a: ws.this_week.tasks_done, b: ws.prev_week.tasks_done },
-    { label: "Paper notes",  a: ws.this_week.notes,      b: ws.prev_week.notes },
-    { label: "Feynman",      a: ws.this_week.feynman,    b: ws.prev_week.feynman },
-    { label: "Mood entries", a: ws.this_week.moods,      b: ws.prev_week.moods },
+  // `format` lets us render minutes as "Xh Ym" while keeping integers raw.
+  const items: Array<{ label: string; a: number; b: number; format?: (n: number) => string }> = [
+    { label: "Work time",    a: ws.this_week.work_minutes, b: ws.prev_week.work_minutes, format: fmtMinutes },
+    { label: "Tasks done",   a: ws.this_week.tasks_done,   b: ws.prev_week.tasks_done },
+    { label: "Paper notes",  a: ws.this_week.notes,        b: ws.prev_week.notes },
+    { label: "Feynman",      a: ws.this_week.feynman,      b: ws.prev_week.feynman },
+    { label: "Mood entries", a: ws.this_week.moods,        b: ws.prev_week.moods },
   ];
   const anyData = items.some((i) => i.a > 0 || i.b > 0);
   if (!anyData) {
@@ -78,7 +77,7 @@ function renderWeeklySummary(): void {
     return;
   }
   weeklyCard.classList.remove("hidden");
-  weeklyGrid.innerHTML = items.map(({ label, a, b }) => {
+  weeklyGrid.innerHTML = items.map(({ label, a, b, format }) => {
     let deltaHtml = `<span class="weekly-delta neutral">—</span>`;
     if (b === 0 && a > 0) {
       deltaHtml = `<span class="weekly-delta up">new ↑</span>`;
@@ -88,11 +87,14 @@ function renderWeeklySummary(): void {
       else if (pct < 0) deltaHtml = `<span class="weekly-delta down">${pct}% ↓</span>`;
       else deltaHtml = `<span class="weekly-delta neutral">=</span>`;
     }
+    const fmt = format ?? ((n: number) => String(n));
+    const aStr = fmt(a);
+    const bStr = fmt(b);
     return `
       <div class="stat-card weekly-stat">
-        <strong>${a}</strong>
+        <strong>${aStr}</strong>
         <span>${label}</span>
-        <span class="weekly-prev">prev: ${b}</span>
+        <span class="weekly-prev">prev: ${bStr}</span>
         ${deltaHtml}
       </div>`;
   }).join("");
@@ -102,10 +104,10 @@ function renderWeeklySummary(): void {
 function renderTotals(): void {
   if (!userStats) { statsTotals.innerHTML = `<div class="empty-state">Stats not loaded.</div>`; return; }
   statsTotals.innerHTML = [
-    { label: "Pomodoros", value: userStats.total_pomodoros },
-    { label: "Paper notes", value: userStats.total_notes },
-    { label: "Feynman records", value: userStats.total_feynman },
-    { label: "Mood entries", value: userStats.total_moods ?? 0 },
+    { label: "Work time",      value: fmtMinutes(userStats.total_work_minutes) },
+    { label: "Paper notes",    value: String(userStats.total_notes) },
+    { label: "Feynman records",value: String(userStats.total_feynman) },
+    { label: "Mood entries",   value: String(userStats.total_moods ?? 0) },
   ].map(({ label, value }) =>
     `<div class="stat-card"><strong>${value}</strong><span>${label}</span></div>`
   ).join("");
@@ -204,58 +206,29 @@ function renderTaskDayList(): void {
   });
 }
 
-// --- Pomodoro: line chart + time-of-day distribution ---
-const TIME_PERIODS = [
-  { key: "morning",   label: "Morning",   start: 6,  end: 12 },
-  { key: "afternoon", label: "Afternoon", start: 12, end: 18 },
-  { key: "evening",   label: "Evening",   start: 18, end: 22 },
-  { key: "night",     label: "Night",     start: 22, end: 30 },
-];
-
+// --- Work time: minutes-per-day line chart ---
 function localDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function timePeriodKey(hour: number): string {
-  if (hour >= 6 && hour < 12) return "morning";
-  if (hour >= 12 && hour < 18) return "afternoon";
-  if (hour >= 18 && hour < 22) return "evening";
-  return "night";
-}
-
-
-function renderPomodoroSection(): void {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - statsDays + 1);
-  cutoff.setHours(0, 0, 0, 0);
-
-  const completedWork = allSessions.filter(s =>
-    s.is_completed && s.session_type === "work" && parseApiDate(s.started_at) >= cutoff
-  );
-
+function renderWorkSection(): void {
+  // Server returns minutes per local day for pomodoro + stopwatch combined.
+  const dataset = userStats?.daily_work_minutes ?? [];
   const minutesByDay = new Map<string, number>();
-  const periodMins: Record<string, number> = { morning: 0, afternoon: 0, evening: 0, night: 0 };
+  for (const d of dataset) minutesByDay.set(d.date, d.minutes);
 
-  for (const s of completedWork) {
-    const d = parseApiDate(s.started_at);
-    const dateStr = localDateStr(d);
-    minutesByDay.set(dateStr, (minutesByDay.get(dateStr) ?? 0) + s.duration_minutes);
-    periodMins[timePeriodKey(d.getHours())] += s.duration_minutes;
-  }
-
-  // Build full day range for x-axis
+  // Build full day range for x-axis so empty days show as 0.
   const days: string[] = [];
   for (let i = statsDays - 1; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     days.push(localDateStr(d));
   }
-
   const values = days.map(d => minutesByDay.get(d) ?? 0);
   const totalMinutes = values.reduce((a, b) => a + b, 0);
 
   if (totalMinutes === 0) {
-    statsPomodoroChart.innerHTML = `<div class="empty-state">No pomodoro data yet.</div>`;
+    statsPomodoroChart.innerHTML = `<div class="empty-state">No work time logged yet.</div>`;
     return;
   }
 
@@ -322,29 +295,9 @@ function renderPomodoroSection(): void {
       ).join("")}
     </svg>`;
 
-  // Time-of-day distribution bars
-  const maxPeriod = Math.max(...Object.values(periodMins), 1);
-  const distributionHtml = `
-    <div class="pomo-period-grid">
-      ${TIME_PERIODS.map(p => {
-        const mins = periodMins[p.key];
-        const pct = Math.round((mins / maxPeriod) * 100);
-        return `
-          <div class="pomo-period-row">
-            <span class="pomo-period-label">${p.label}</span>
-            <div class="chart-bar-bg">
-              <div class="chart-bar-fill" style="width:${pct}%"></div>
-            </div>
-            <span class="chart-value">${fmtMinutes(mins)}</span>
-          </div>`;
-      }).join("")}
-    </div>`;
-
   statsPomodoroChart.innerHTML = `
     <div class="pomo-total-label">Total: <strong>${fmtMinutes(totalMinutes)}</strong></div>
-    ${svgHtml}
-    <p class="pomo-dist-title">Time of day</p>
-    ${distributionHtml}`;
+    ${svgHtml}`;
 }
 
 // --- Mood ---
@@ -366,22 +319,21 @@ function renderMoodChart(): void {
 export function render(): void {
   const label = `Last ${statsDays} day${statsDays > 1 ? "s" : ""}`;
   statsTasksTitle.textContent = `${label} — daily log`;
-  statsPomodoroTitle.textContent = `${label} — Pomodoro`;
+  statsPomodoroTitle.textContent = `${label} — work time`;
   statsMoodTitle.textContent = `${label} — mood`;
 
   renderWeeklySummary();
   renderTotals();
   renderTaskDayList();
-  renderPomodoroSection();
+  renderWorkSection();
   renderMoodChart();
 }
 
 export async function refresh(): Promise<void> {
   try {
-    [userStats, userProgress, allSessions] = await Promise.all([
+    [userStats, userProgress] = await Promise.all([
       getUserStats(statsDays),
       getUserXp(),
-      listSessions(),
     ]);
     dayCache.clear();
     render();

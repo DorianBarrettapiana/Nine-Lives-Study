@@ -16,26 +16,35 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.pomodoro_session import PomodoroSession
+from app.models.stopwatch_session import StopwatchSession
 
 
 def compute_streak(user_id: int, tz_offset_minutes: int, db: Session) -> tuple[int, bool]:
     """Return (streak_days, active_today) for the given user.
+
+    A day counts as "active" if the user completed at least one work pomodoro
+    OR a stopwatch session that day (both are work time).
 
     `tz_offset_minutes` is minutes east of UTC (matches the JS getTimezoneOffset
     convention with sign flipped).
     """
     tz_delta = timedelta(minutes=tz_offset_minutes)
 
-    rows = db.scalars(
+    pomo_ts = db.scalars(
         select(PomodoroSession.started_at)
         .where(PomodoroSession.user_id == user_id)
         .where(PomodoroSession.is_completed.is_(True))
         .where(PomodoroSession.session_type == "work")
     ).all()
+    sw_ts = db.scalars(
+        select(StopwatchSession.started_at)
+        .where(StopwatchSession.user_id == user_id)
+        .where(StopwatchSession.ended_at.is_not(None))
+    ).all()
 
-    # Distinct set of local-day strings on which the user completed a work session.
+    # Distinct set of local-day strings on which the user did *any* work.
     active_days: set[str] = set()
-    for ts in rows:
+    for ts in [*pomo_ts, *sw_ts]:
         if ts is None:
             continue
         if ts.tzinfo is None:
