@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.auth import router as auth_router
+from app.api.routes.friends import router as friends_router
 from app.api.routes.daily_tracker import router as daily_tracker_router
 from app.api.routes.feynman_entries import router as feynman_entries_router
 from app.api.routes.health import router as health_router
@@ -29,6 +30,7 @@ from app.models.pomodoro_session import PomodoroSession  # noqa: F401
 from app.models.session import Session  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.user_progress import UserProgress  # noqa: F401
+from app.models.friendship import Friendship  # noqa: F401
 from app.models.xp_event import XpEvent  # noqa: F401
 
 # Create missing database tables on startup, then apply ad-hoc migrations
@@ -65,3 +67,4 @@ app.include_router(pomodoro_router)
 app.include_router(xp_router)
 app.include_router(mood_router)
 app.include_router(stats_router)
+app.include_router(friends_router)

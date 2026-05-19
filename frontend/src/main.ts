@@ -12,9 +12,10 @@ import * as MoodView from "./views/mood";
 import * as NotesView from "./views/notes";
 import * as PomodoroView from "./views/pomodoro";
 import * as StatsView from "./views/stats";
+import * as FriendsView from "./views/friends";
 import * as TrackerView from "./views/tracker";
 
-type AppView = "notes" | "feynman" | "tracker" | "pomodoro" | "stats" | "mood";
+type AppView = "notes" | "feynman" | "tracker" | "pomodoro" | "stats" | "mood" | "friends";
 
 const APP_HTML = `
   <div class="app-shell">
@@ -46,6 +47,7 @@ const APP_HTML = `
           <button class="feature-tab" data-view="pomodoro">Pomodoro</button>
           <button class="feature-tab" data-view="mood">Mood</button>
           <button class="feature-tab" data-view="stats">Stats</button>
+          <button class="feature-tab" data-view="friends">Friends</button>
         </nav>
 
         <div id="notes-view">
@@ -220,6 +222,27 @@ const APP_HTML = `
             </div>
             <div id="mood-list" class="mood-history-list"></div>
           </section>
+
+        <div id="friends-view" class="hidden">
+          <section class="card">
+            <h2>Find friends</h2>
+            <div class="friend-search-row">
+              <input id="friend-search-input" type="text" placeholder="Search by username…" />
+              <button id="friend-search-button">Search</button>
+            </div>
+            <p id="friend-search-message" class="message"></p>
+            <div id="friend-search-results"></div>
+          </section>
+          <section class="card">
+            <h2>Friend requests</h2>
+            <div id="friend-requests-list"></div>
+          </section>
+          <section class="card">
+            <h2>My friends</h2>
+            <div id="friends-list"></div>
+          </section>
+          <section class="card hidden" id="friend-stats-panel">
+          </section>
         </div>
 
       </section>
@@ -255,6 +278,7 @@ async function refreshAll(): Promise<void> {
       PomodoroView.refresh(),
       MoodView.refresh(),
       StatsView.refresh(),
+      FriendsView.refresh(),
     ]);
   } catch (error) {
     if (error instanceof UnauthorizedError) {
@@ -300,6 +324,7 @@ function mountApp(user: UserRead): void {
     pomodoro: app!.querySelector<HTMLDivElement>("#pomodoro-view")!,
     mood:     app!.querySelector<HTMLDivElement>("#mood-view")!,
     stats:    app!.querySelector<HTMLDivElement>("#stats-view")!,
+    friends:  app!.querySelector<HTMLDivElement>("#friends-view")!,
   };
 
   // Init each view module
@@ -316,6 +341,7 @@ function mountApp(user: UserRead): void {
   PomodoroView.setUser(user);  // pass settings (work/break durations etc.) to the timer
   MoodView.init(() => Promise.all([MoodView.refresh(), StatsView.refresh()]).then());
   StatsView.init(() => StatsView.refresh());
+  FriendsView.init(() => FriendsView.refresh());
 
   document.querySelectorAll<HTMLButtonElement>(".feature-tab").forEach((tab) => {
     tab.addEventListener("click", () => {

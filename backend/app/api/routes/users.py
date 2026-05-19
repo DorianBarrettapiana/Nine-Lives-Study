@@ -1,13 +1,14 @@
 """User routes (self-only)."""
 
-from fastapi import APIRouter, Depends, Response, status
-from sqlalchemy import delete
+from fastapi import APIRouter, Depends, Query, Response, status
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session as DbSession
 
 from app.core.auth import clear_session_cookie, get_current_user
 from app.core.database import get_db
 from app.models.session import Session as SessionModel
 from app.models.user import User
+from app.schemas.friendship import UserSearchResult
 from app.schemas.user import UserRead, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -47,3 +48,18 @@ def delete_me(
     db.commit()
     clear_session_cookie(response)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/search", response_model=list[UserSearchResult])
+def search_users(
+    q: str = Query(min_length=1, max_length=100),
+    current_user: User = Depends(get_current_user),
+    db: DbSession = Depends(get_db),
+) -> list[User]:
+    return db.scalars(
+        select(User)
+        .where(User.username.ilike(f"%{q}%"))
+        .where(User.id != current_user.id)
+        .where(User.is_active == True)  # noqa: E712
+        .limit(10)
+    ).all()
