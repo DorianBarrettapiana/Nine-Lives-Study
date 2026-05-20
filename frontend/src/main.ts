@@ -55,6 +55,7 @@ const APP_HTML = `
           <h2>Work timer</h2>
           <div id="stopwatch-clock" class="stopwatch-clock"></div>
           <div id="stopwatch-display" class="stopwatch-display">00:00:00</div>
+          <p id="stopwatch-today" class="hint stopwatch-today">Today: —</p>
           <div class="button-row stopwatch-buttons">
             <button id="stopwatch-start-btn" type="button">▶ Start</button>
             <button id="stopwatch-end-btn" type="button" class="secondary">End</button>

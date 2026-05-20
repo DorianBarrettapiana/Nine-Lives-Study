@@ -13,7 +13,8 @@
 
 import { completeSession, deleteSession, listSessions, startSession, type PomodoroSessionRead } from "../api/pomodoro";
 import { updateMe, type UserRead } from "../api/users";
-import { formatTime, parseApiDate, setMessage } from "../utils";
+import { flashMessage, fmtMinutes, formatTime, parseApiDate, setMessage } from "../utils";
+import { getTodayWorkMinutes } from "./stats";
 
 type Mode = "work" | "short_break" | "long_break";
 
@@ -201,7 +202,7 @@ export function render(): void {
     return;
   }
   pomodoroList.innerHTML = [
-    `<p class="hint">Today: <strong>${todayCompletedWorkCount()}</strong> work session(s) completed</p>`,
+    `<p class="hint">Today: <strong>${todayCompletedWorkCount()}</strong> work session(s) · <strong>${fmtMinutes(getTodayWorkMinutes())}</strong> work time</p>`,
     ...todaySessions.map((s) => {
       const when = parseApiDate(s.started_at).toLocaleString(undefined,
         { hour: "2-digit", minute: "2-digit" });
@@ -351,7 +352,9 @@ async function onComplete(): Promise<void> {
       const msg = finished === "work"
         ? `Work session done! +${earnedXp} XP`
         : `${modeLabel(finished)} over!`;
-      setMessage(pomodoroMessage, msg, "success");
+      // Toast-style: fade after a few seconds so the bottom of the card
+      // doesn't carry stale text into the next session.
+      flashMessage(pomodoroMessage, msg, "success");
       await refresh();  // refresh the session list (used for stats counting too)
     } catch (error) {
       console.error(error);
@@ -403,6 +406,10 @@ export function init(onDataChanged: () => Promise<void>): void {
   settingsAutoStartInput   = document.querySelector<HTMLInputElement>("#pomodoro-setting-auto-start");
   settingsMessage          = document.querySelector<HTMLParagraphElement>("#pomodoro-settings-message")!;
   modeHintEl               = document.querySelector<HTMLParagraphElement>("#pomodoro-mode-hint")!;
+
+  // Today's-work-minutes line in the session list reads from the stats
+  // module's cache; re-render when that cache is refreshed.
+  window.addEventListener("progress:updated", () => render());
 
   pomodoroStartButton.addEventListener("click", async () => {
     if (pomodoroRunning) { stopTimer(); render(); return; }

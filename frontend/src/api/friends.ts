@@ -41,7 +41,9 @@ export async function searchUsers(q: string): Promise<UserSearchResult[]> {
 }
 
 export async function listFriends(): Promise<FriendEntry[]> {
-  return apiFetch<FriendEntry[]>("/friends");
+  // tz_offset lets the server reset can_cheer at the user's local midnight.
+  const tz = new Date().getTimezoneOffset() * -1;
+  return apiFetch<FriendEntry[]>(`/friends?tz_offset=${tz}`);
 }
 
 export async function listFriendRequests(): Promise<FriendRequestEntry[]> {
@@ -89,7 +91,10 @@ export async function toggleLike(eventId: number): Promise<{ liked: boolean }> {
 }
 
 export async function cheerFriend(userId: number): Promise<{ ok: boolean }> {
-  return apiFetch<{ ok: boolean }>(`/friends/${userId}/cheer`, { method: "POST" });
+  // tz_offset matches the listFriends call so per-pair limit and visible
+  // can_cheer agree on "today".
+  const tz = new Date().getTimezoneOffset() * -1;
+  return apiFetch<{ ok: boolean }>(`/friends/${userId}/cheer?tz_offset=${tz}`, { method: "POST" });
 }
 
 export interface NotificationItem {

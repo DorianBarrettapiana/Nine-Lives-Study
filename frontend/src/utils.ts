@@ -35,6 +35,29 @@ export function setMessage(
   element.className = `message ${kind}`;
 }
 
+/** Like setMessage, but auto-clears the element after `ms` (default 3 s)
+ *  so success/neutral toasts don't linger forever in the UI.
+ *  If called again before the timer fires, the prior timeout is cancelled
+ *  so the message stays visible for the full duration each time.
+ *  Use setMessage (not this) for errors that should persist until the user
+ *  takes an action. */
+const flashTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
+export function flashMessage(
+  element: HTMLElement,
+  text: string,
+  kind: "success" | "error" | "neutral" = "neutral",
+  ms: number = 3000,
+): void {
+  setMessage(element, text, kind);
+  const prev = flashTimers.get(element);
+  if (prev !== undefined) clearTimeout(prev);
+  const id = setTimeout(() => {
+    setMessage(element, "", "neutral");
+    flashTimers.delete(element);
+  }, ms);
+  flashTimers.set(element, id);
+}
+
 export function fmtMinutes(mins: number): string {
   if (mins === 0) return "—";
   const h = Math.floor(mins / 60);

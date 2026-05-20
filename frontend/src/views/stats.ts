@@ -25,6 +25,12 @@ let streakLine: HTMLParagraphElement | null;
 
 let userStats: UserStatsRead | null = null;
 let userProgress: UserProgressRead | null = null;
+
+/** Read-only accessor used by the pomodoro/stopwatch views so they can
+ *  display today's work-minutes without a separate /xp round trip. */
+export function getTodayWorkMinutes(): number {
+  return userProgress?.today_work_minutes ?? 0;
+}
 let expandedDay: string | null = null;
 const dayCache = new Map<string, DailyStateRead>();
 
@@ -338,6 +344,10 @@ export async function refresh(): Promise<void> {
     dayCache.clear();
     render();
     renderXp();
+    // Tell views that show today's work minutes (pomodoro, stopwatch) to
+    // pick up the new value. Loose coupling: those views don't need to
+    // know about stats internals.
+    window.dispatchEvent(new CustomEvent("progress:updated"));
   } catch (error) {
     console.error(error);
   }

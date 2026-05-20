@@ -54,6 +54,7 @@ export interface UserProgressRead {
   xp_to_next_level: number;
   streak_days: number;
   streak_active_today: boolean;
+  today_work_minutes: number;
 }
 
 export async function getUserStats(days = 7): Promise<UserStatsRead> {
