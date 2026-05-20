@@ -56,12 +56,26 @@ def _require_accepted_friendship(me: int, other: int, db: Session) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not friends.")
 
 
+def _local_midnight_utc(tz_offset_minutes: int) -> datetime:
+    """Return today's local-day midnight expressed as a UTC datetime.
+
+    `tz_offset_minutes` follows the JS getTimezoneOffset convention with the
+    sign flipped (minutes east of UTC). The result is comparable against
+    timestamps stored in the DB (which are UTC-aware or naive UTC).
+    """
+    tz_delta = timedelta(minutes=tz_offset_minutes)
+    local_now = datetime.now(timezone.utc) + tz_delta
+    local_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return local_midnight - tz_delta
+
+
 # ---------------------------------------------------------------------------
 # Friend list & requests
 # ---------------------------------------------------------------------------
 
 @router.get("", response_model=list[FriendEntry])
 def list_friends(
+    tz_offset: int = Query(default=0, ge=-720, le=840),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[FriendEntry]:
@@ -84,9 +98,9 @@ def list_friends(
     ).all()
     friends = [user for _, user in rows]
 
-    # Bulk-fetch cheers I sent in the last 24h so each FriendEntry knows
-    # whether the Cheer button should be enabled.
-    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    # Bulk-fetch cheers I sent since today's local midnight so each
+    # FriendEntry knows whether the Cheer button should be enabled.
+    since = _local_midnight_utc(tz_offset)
     recipient_ids = {f.id for f in friends}
     cheered_recently: set[int] = set()
     if recipient_ids:
@@ -362,6 +376,7 @@ def toggle_like(
 @router.post("/{user_id}/cheer", response_model=dict)
 def cheer_friend(
     user_id: int,
+    tz_offset: int = Query(default=0, ge=-720, le=840),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -369,7 +384,8 @@ def cheer_friend(
 
     Sends +XP_CHEER_RECEIVED XP to the recipient via the standard XP ledger
     and seeds a notification (the recipient sees it in the Friends tab).
-    Each sender→recipient pair is limited to one cheer per rolling 24h.
+    One cheer per (sender, recipient) pair per **local calendar day** — the
+    limit resets at the sender's local midnight.
     """
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot cheer yourself.")
@@ -377,8 +393,8 @@ def cheer_friend(
     if f is None or f.status != "accepted":
         raise HTTPException(status_code=403, detail="Not friends.")
 
-    # Per-pair daily cap (rolling 24h).
-    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    # Per-pair daily cap: one cheer per local calendar day, resets at midnight.
+    since = _local_midnight_utc(tz_offset)
     already = db.scalar(
         select(FriendCheer)
         .where(FriendCheer.sender_id == current_user.id)
@@ -388,7 +404,7 @@ def cheer_friend(
     if already is not None:
         raise HTTPException(
             status_code=429,
-            detail="You already cheered this friend today. Try again tomorrow.",
+            detail="You already cheered this friend today. Resets at midnight.",
         )
 
     cheer = FriendCheer(sender_id=current_user.id, recipient_id=user_id)

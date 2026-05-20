@@ -21,11 +21,13 @@ import {
   startStopwatch,
   type StopwatchSessionRead,
 } from "../api/stopwatch";
-import { parseApiDate, setMessage } from "../utils";
+import { flashMessage, fmtMinutes, parseApiDate, setMessage } from "../utils";
 import { renderAnalogClockSvg } from "./clock";
+import { getTodayWorkMinutes } from "./stats";
 
 let clockEl: HTMLDivElement;       // analog clock SVG container
 let displayEl: HTMLDivElement;     // digital readout below the clock
+let todayEl: HTMLParagraphElement; // "Today: Xh Ym" hint line
 let startBtn: HTMLButtonElement;
 let endBtn: HTMLButtonElement;
 let messageEl: HTMLParagraphElement;
@@ -77,6 +79,15 @@ function render(): void {
   // Digital readout (secondary, for precise reading).
   displayEl.textContent = fmtHMS(seconds);
   displayEl.classList.toggle("paused", !running);
+
+  // Today's accumulated work time (pomodoro + stopwatch). Server-computed
+  // baseline counts only ENDED sessions; while a stopwatch is active
+  // (running or paused) its in-progress minutes aren't in the baseline
+  // yet, so add them locally for a live, accurate readout.
+  if (todayEl) {
+    const live = active ? Math.floor(seconds / 60) : 0;
+    todayEl.textContent = `Today: ${fmtMinutes(getTodayWorkMinutes() + live)}`;
+  }
 
   if (!active) {
     startBtn.textContent = "▶ Start";
@@ -162,11 +173,11 @@ async function onEndClick(): Promise<void> {
     setActive(null);
     const minutes = Math.floor(finished.accumulated_seconds / 60);
     if (minutes > 0) {
-      setMessage(messageEl, `Session ended. +${minutes} XP`, "success");
+      flashMessage(messageEl, `Session ended. +${minutes} XP`, "success");
       // Reuse the pomodoro completion bus: bounce the cat + refresh XP/streak.
       window.dispatchEvent(new CustomEvent("cat:cheer"));
     } else {
-      setMessage(messageEl, "Session ended (under 1 min, no XP).", "neutral");
+      flashMessage(messageEl, "Session ended (under 1 min, no XP).", "neutral");
     }
   } catch (e) {
     setMessage(messageEl, parseDetail(e), "error");
@@ -186,9 +197,14 @@ export function init(initialCatSkin: string = "tabby"): void {
   catSkin = initialCatSkin;
   clockEl = document.querySelector<HTMLDivElement>("#stopwatch-clock")!;
   displayEl = document.querySelector<HTMLDivElement>("#stopwatch-display")!;
+  todayEl = document.querySelector<HTMLParagraphElement>("#stopwatch-today")!;
   startBtn = document.querySelector<HTMLButtonElement>("#stopwatch-start-btn")!;
   endBtn = document.querySelector<HTMLButtonElement>("#stopwatch-end-btn")!;
   messageEl = document.querySelector<HTMLParagraphElement>("#stopwatch-message")!;
+
+  // The today-work line lives on a stale baseline until StatsView refreshes.
+  // After each refresh, re-render so the line picks up the new value.
+  window.addEventListener("progress:updated", () => render());
 
   startBtn.addEventListener("click", () => void onStartClick());
   endBtn.addEventListener("click", () => void onEndClick());

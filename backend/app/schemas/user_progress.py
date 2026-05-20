@@ -20,4 +20,8 @@ class UserProgressRead(BaseModel):
     # True if the user already has a completed work session for today.
     streak_active_today: bool = False
 
+    # Minutes of work (pomodoro + stopwatch) completed today, in the caller's
+    # local timezone. Shown on the pomodoro and stopwatch cards.
+    today_work_minutes: int = 0
+
     model_config = {"from_attributes": False}

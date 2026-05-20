@@ -1538,12 +1538,16 @@ h3 {
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.04em;
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.25rem;
   color: var(--text-soft);
   transition: color 0.2s;
 }
 .stopwatch-display.paused {
   color: var(--text-muted);
+}
+.stopwatch-today {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
 }
 .stopwatch-buttons {
   justify-content: center;
