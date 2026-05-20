@@ -4,6 +4,7 @@
 
 import { createNote, deleteNote, listNotes, updateNote, type PaperNoteRead } from "../api/notes";
 import { escapeHtml, setMessage } from "../utils";
+import { renderEmptyStateWithCat } from "./icons";
 
 let notesList: HTMLDivElement;
 let noteForm: HTMLFormElement;
@@ -36,7 +37,7 @@ function clearNoteForm(): void {
 
 export function render(): void {
   if (notes.length === 0) {
-    notesList.innerHTML = `<div class="empty-state">No paper note yet.</div>`;
+    notesList.innerHTML = renderEmptyStateWithCat("No paper note yet.");
     return;
   }
   notesList.innerHTML = notes.map((note) => {
@@ -83,6 +84,9 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
   noteSubmitButton = document.querySelector<HTMLButtonElement>("#note-submit-button")!;
   noteCancelButton = document.querySelector<HTMLButtonElement>("#note-cancel-button")!;
   noteMessage = document.querySelector<HTMLParagraphElement>("#note-message")!;
+
+  // Re-tint the sleeping-cat empty state when the user picks a new skin.
+  window.addEventListener("cat:skin-changed", () => render());
 
   noteForm.addEventListener("submit", async (event) => {
     event.preventDefault();

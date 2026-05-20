@@ -63,8 +63,23 @@ describe("view modules import cleanly", () => {
     const mod = await import("./icons");
     expect(typeof mod.renderBeerIconSvg).toBe("function");
     expect(typeof mod.renderFlameIconSvg).toBe("function");
+    expect(typeof mod.renderSleepingCatSvg).toBe("function");
+    expect(typeof mod.renderEmptyStateWithCat).toBe("function");
     expect(mod.renderBeerIconSvg()).toContain("<svg");
     expect(mod.renderFlameIconSvg()).toContain("<svg");
+    expect(mod.renderSleepingCatSvg("tabby")).toContain("<svg");
+    // Unknown skin should fall back without throwing.
+    expect(() => mod.renderSleepingCatSvg("nope")).not.toThrow();
+    expect(mod.renderEmptyStateWithCat("Hi")).toContain("Hi");
+  });
+
+  it("user-state", async () => {
+    const mod = await import("./user-state");
+    expect(typeof mod.getCurrentCatSkin).toBe("function");
+    expect(typeof mod.setCurrentCatSkin).toBe("function");
+    mod.setCurrentCatSkin("black");
+    expect(mod.getCurrentCatSkin()).toBe("black");
+    mod.setCurrentCatSkin("tabby"); // restore default for other tests
   });
 
   it("clock", async () => {

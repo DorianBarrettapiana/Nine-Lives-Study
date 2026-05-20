@@ -1558,3 +1558,19 @@ h3 {
   padding: 0.5rem 0.9rem;
   font-size: 0.85rem;
 }
+
+/* --- Sleeping-cat empty state ------------------------------------------- */
+
+.empty-state.with-cat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1.5rem 1rem;
+}
+.empty-cat {
+  line-height: 0;       /* avoid extra inline-block descender */
+}
+.empty-cat svg {
+  display: block;
+}

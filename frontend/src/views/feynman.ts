@@ -7,6 +7,7 @@ import {
   updateFeynmanEntry, type FeynmanEntryRead,
 } from "../api/feynman";
 import { escapeHtml, formatDate, setMessage } from "../utils";
+import { renderEmptyStateWithCat } from "./icons";
 
 const FEYNMAN_STEPS = [
   { title: "1. Pick a concept", description: "Write down one concept or theory you want to understand deeply.", fieldLabel: "Concept", placeholder: "e.g. Monte Carlo ray tracing, separatrix, BRDF, heat flux..." },
@@ -58,7 +59,7 @@ export function renderInitial(): void { renderStep(); }
 
 export function render(): void {
   if (feynmanEntries.length === 0) {
-    feynmanList.innerHTML = `<div class="empty-state">No Feynman record yet.</div>`;
+    feynmanList.innerHTML = renderEmptyStateWithCat("No Feynman record yet.");
     return;
   }
   feynmanList.innerHTML = feynmanEntries.map((entry) => `
@@ -100,6 +101,8 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
   feynmanResetButton = document.querySelector<HTMLButtonElement>("#feynman-reset-button")!;
   feynmanMessage = document.querySelector<HTMLParagraphElement>("#feynman-message")!;
   feynmanList = document.querySelector<HTMLDivElement>("#feynman-list")!;
+
+  window.addEventListener("cat:skin-changed", () => render());
 
   feynmanInput.addEventListener("input", () => { feynmanDraft[feynmanStep] = feynmanInput.value; });
   feynmanPrevButton.addEventListener("click", () => {

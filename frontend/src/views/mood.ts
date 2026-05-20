@@ -4,6 +4,7 @@
 
 import { createMoodEntry, deleteMoodEntry, listMoodEntries, type MoodEntryRead } from "../api/mood";
 import { escapeHtml, parseApiDate, setMessage } from "../utils";
+import { renderEmptyStateWithCat } from "./icons";
 
 const MOODS = [
   { emoji: "😩", label: "Exhausted" },
@@ -39,7 +40,7 @@ export function render(): void {
   renderPicker();
 
   if (entries.length === 0) {
-    moodList.innerHTML = `<div class="empty-state">No mood entries yet. How are you feeling?</div>`;
+    moodList.innerHTML = renderEmptyStateWithCat("No mood entries yet. How are you feeling?");
     return;
   }
 
@@ -80,6 +81,8 @@ export function init(onDataChanged: () => Promise<void>): void {
   saveMoodButton = document.querySelector<HTMLButtonElement>("#save-mood-button")!;
   moodMessage = document.querySelector<HTMLParagraphElement>("#mood-message")!;
   moodList = document.querySelector<HTMLDivElement>("#mood-list")!;
+
+  window.addEventListener("cat:skin-changed", () => render());
 
   renderPicker();
 

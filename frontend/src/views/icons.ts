@@ -6,6 +6,9 @@
  * "this is the cheer icon" / "this is the streak icon" recognition.
  */
 
+import { CAT_SKINS } from "./avatar";
+import { getCurrentCatSkin } from "./user-state";
+
 type Palette = Record<string, string>;
 
 function renderPixelSprite(rows: readonly string[], palette: Palette, pixelSize: number): string {
@@ -75,4 +78,59 @@ const FLAME_PALETTE: Palette = {
 /** Flame pixel sprite, used inline before the streak counter. */
 export function renderFlameIconSvg(pixelSize: number = 2): string {
   return renderPixelSprite(FLAME_ROWS, FLAME_PALETTE, pixelSize);
+}
+
+// --- Sleeping cat with Zzz (empty-state illustration) ----------------------
+//
+// 20×14 sprite — front-facing cat head with closed eyes + 3 graduated Z's
+// drifting up-right. Body color follows the user's current avatar skin so
+// empty states feel personal.
+//   O = outline (skin.O)   B = body (skin.B)   E = closed-eye line (skin.O)
+//   N = nose pink (fixed)  Z = drifting Z's (fixed muted gray)
+const SLEEPING_CAT_ROWS = [
+  "................ZZZZ",
+  "..................Z.",
+  ".................Z..",
+  "................ZZZZ",
+  "..............ZZZZ..",
+  ".OO......OO.....Z...",
+  ".OBO....OBO....Z....",
+  "OBBOOOOOOBBO..ZZZZ..",
+  "OBBBBBBBBBBOZZZZ....",
+  "OBBEEBBEEBBO..Z.....",
+  "OBBBBNNBBBBO.Z......",
+  ".OBBBBBBBBO.ZZZZ....",
+  "..OOOOOOOO..........",
+  "....................",
+] as const;
+const SLEEPING_Z_COLOR = "#9ca3af"; // muted gray; readable on both themes.
+
+/** Render a sleeping cat with drifting Zzz, tinted to the given skin id.
+ *  Falls back to the default (tabby) on unknown ids so call sites don't
+ *  have to validate input. Default pixelSize keeps it small enough to fit
+ *  inside an `.empty-state` block without dominating the message. */
+export function renderSleepingCatSvg(skinId: string | null | undefined, pixelSize: number = 3): string {
+  const skin = (skinId && CAT_SKINS.find((s) => s.id === skinId)) || CAT_SKINS[0];
+  const palette: Palette = {
+    O: skin.O,
+    B: skin.B,
+    E: skin.O,       // closed eye uses the outline color
+    N: "#d96b8a",    // shared nose pink across all cats
+    Z: SLEEPING_Z_COLOR,
+  };
+  return renderPixelSprite(SLEEPING_CAT_ROWS, palette, pixelSize);
+}
+
+/** Convenience: build the standard `<div class="empty-state">` block with
+ *  a sleeping-cat illustration above the message. Cat tint follows the
+ *  user's currently-selected skin (read at call time, so re-renders after
+ *  a skin change pick up the new value).
+ *
+ *  `message` is rendered verbatim — pass plain text only; if you need to
+ *  inject user-provided content, escape it first. */
+export function renderEmptyStateWithCat(message: string): string {
+  return `<div class="empty-state with-cat">
+    <div class="empty-cat">${renderSleepingCatSvg(getCurrentCatSkin())}</div>
+    <div>${message}</div>
+  </div>`;
 }
