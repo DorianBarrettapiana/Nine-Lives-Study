@@ -8,6 +8,7 @@ import { fmtMinutes } from "./utils";
 import { getMe, logout, updateMe, type UserRead } from "./api/users";
 import { applyTheme } from "./theme";
 import { CAT_SKINS, renderAvatarSvg } from "./views/avatar";
+import { setCurrentCatSkin } from "./views/user-state";
 import { showAuthScreen } from "./views/auth";
 import * as FeynmanView from "./views/feynman";
 import * as MoodView from "./views/mood";
@@ -388,6 +389,7 @@ function mountApp(user: UserRead): void {
 
   renderUserChrome(user);
   renderPicker(user);
+  setCurrentCatSkin(user.cat_skin);
   updateThemeButton(themeToggle, user.theme);
 
   // Cat reaction on pomodoro work completion. Pomodoro view dispatches
@@ -434,8 +436,11 @@ function mountApp(user: UserRead): void {
       Object.assign(user, updated);
       renderUserChrome(updated);
       renderPicker(updated);
-      // Propagate the new skin to the stopwatch clock's ear color.
+      // Propagate the new skin to all views that show it.
+      setCurrentCatSkin(updated.cat_skin);
       StopwatchView.setCatSkin(updated.cat_skin);
+      // Re-render any visible sleeping-cat empty states with the new skin.
+      window.dispatchEvent(new CustomEvent("cat:skin-changed"));
       void FriendsView.refresh();
       pickerMsg.className = "message success";
       pickerMsg.textContent = "Avatar updated.";

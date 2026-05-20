@@ -14,6 +14,7 @@
 import { completeSession, deleteSession, listSessions, startSession, type PomodoroSessionRead } from "../api/pomodoro";
 import { updateMe, type UserRead } from "../api/users";
 import { flashMessage, fmtMinutes, formatTime, parseApiDate, setMessage } from "../utils";
+import { renderEmptyStateWithCat } from "./icons";
 import { getTodayWorkMinutes } from "./stats";
 
 type Mode = "work" | "short_break" | "long_break";
@@ -198,7 +199,7 @@ export function render(): void {
   );
 
   if (todaySessions.length === 0) {
-    pomodoroList.innerHTML = `<div class="empty-state">No sessions today yet.</div>`;
+    pomodoroList.innerHTML = renderEmptyStateWithCat("No sessions today yet.");
     return;
   }
   pomodoroList.innerHTML = [
@@ -410,6 +411,8 @@ export function init(onDataChanged: () => Promise<void>): void {
   // Today's-work-minutes line in the session list reads from the stats
   // module's cache; re-render when that cache is refreshed.
   window.addEventListener("progress:updated", () => render());
+  // Sleeping-cat empty state needs to re-tint on skin change.
+  window.addEventListener("cat:skin-changed", () => render());
 
   pomodoroStartButton.addEventListener("click", async () => {
     if (pomodoroRunning) { stopTimer(); render(); return; }

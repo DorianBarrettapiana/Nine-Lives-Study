@@ -26,7 +26,7 @@ import {
 } from "../api/friends";
 import { escapeHtml, fmtMinutes, parseApiDate, setMessage } from "../utils";
 import { renderAvatarSvg } from "./avatar";
-import { renderBeerIconSvg } from "./icons";
+import { renderBeerIconSvg, renderEmptyStateWithCat } from "./icons";
 
 function avatarRowHtml(skin: string, sizePx = 26): string {
   return `<span class="avatar avatar-sm row-avatar">${renderAvatarSvg(skin, sizePx)}</span>`;
@@ -116,7 +116,7 @@ function renderFeed(items: FeedItem[], notifs: NotificationItem[] = []): void {
   lastNotifs = notifs;
 
   if (items.length === 0 && notifs.length === 0) {
-    friendFeed.innerHTML = `<div class="empty-state">No activity yet.</div>`;
+    friendFeed.innerHTML = renderEmptyStateWithCat("No activity yet.");
     return;
   }
 
@@ -345,7 +345,7 @@ function renderRequests(): void {
 
 function renderFriends(): void {
   if (friends.length === 0) {
-    friendsList.innerHTML = `<div class="empty-state">No friends yet. Search for a user above.</div>`;
+    friendsList.innerHTML = renderEmptyStateWithCat("No friends yet. Search for a user above.");
     return;
   }
   friendsList.innerHTML = friends.map(f => `
