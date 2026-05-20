@@ -6,6 +6,7 @@ import { login, register, type UserRead } from "../api/users";
 import { ApiError } from "../api/client";
 import { applyTheme } from "../theme";
 import { setMessage } from "../utils";
+import { renderMoonIconSvg, renderSunIconSvg } from "./icons";
 
 type Mode = "login" | "register";
 
@@ -13,7 +14,7 @@ const AUTH_HTML = `
   <div class="auth-shell">
     <header class="auth-topbar">
       <h1>Nine Lives Study</h1>
-      <button id="auth-theme-toggle" class="theme-toggle" title="Toggle theme">☀️</button>
+      <button id="auth-theme-toggle" class="theme-toggle" title="Toggle theme"></button>
     </header>
 
     <main class="auth-card-wrap">
@@ -58,7 +59,7 @@ const AUTH_HTML = `
 `;
 
 function updateThemeButton(button: HTMLButtonElement, theme: string): void {
-  button.textContent = theme === "dark" ? "☀️" : "🌙";
+  button.innerHTML = theme === "dark" ? renderSunIconSvg(2) : renderMoonIconSvg(2);
   button.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
 }
 
