@@ -8,6 +8,7 @@
 import { getUserStats, getUserXp, type UserProgressRead, type UserStatsRead } from "../api/stats";
 import { getDailyState, type DailyStateRead } from "../api/tracker";
 import { escapeHtml, fmtMinutes, makeDateLabel } from "../utils";
+import { renderFlameIconSvg } from "./icons";
 
 let statsTotals: HTMLDivElement;
 let weeklyCard: HTMLElement | null;
@@ -46,15 +47,16 @@ export function renderXp(): void {
   if (streakLine) {
     const n = userProgress.streak_days;
     if (n <= 0) {
+      // textContent (not innerHTML) so the prompt has no leading icon.
       streakLine.textContent = "Complete a work session today to start a streak.";
       streakLine.classList.remove("streak-active", "streak-grace");
     } else if (userProgress.streak_active_today) {
-      streakLine.textContent = `🔥 ${n}-day streak`;
+      streakLine.innerHTML = `${renderFlameIconSvg()} ${n}-day streak`;
       streakLine.classList.add("streak-active");
       streakLine.classList.remove("streak-grace");
     } else {
       // Streak alive thanks to yesterday — grace day until midnight.
-      streakLine.textContent = `🔥 ${n}-day streak — keep it alive today`;
+      streakLine.innerHTML = `${renderFlameIconSvg()} ${n}-day streak — keep it alive today`;
       streakLine.classList.add("streak-grace");
       streakLine.classList.remove("streak-active");
     }

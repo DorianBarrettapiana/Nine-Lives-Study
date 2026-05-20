@@ -59,6 +59,14 @@ describe("view modules import cleanly", () => {
     expect(typeof mod.setCatSkin).toBe("function");
   });
 
+  it("icons", async () => {
+    const mod = await import("./icons");
+    expect(typeof mod.renderBeerIconSvg).toBe("function");
+    expect(typeof mod.renderFlameIconSvg).toBe("function");
+    expect(mod.renderBeerIconSvg()).toContain("<svg");
+    expect(mod.renderFlameIconSvg()).toContain("<svg");
+  });
+
   it("clock", async () => {
     const mod = await import("./clock");
     expect(typeof mod.renderAnalogClockSvg).toBe("function");

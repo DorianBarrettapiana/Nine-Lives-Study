@@ -26,6 +26,7 @@ import {
 } from "../api/friends";
 import { escapeHtml, fmtMinutes, parseApiDate, setMessage } from "../utils";
 import { renderAvatarSvg } from "./avatar";
+import { renderBeerIconSvg } from "./icons";
 
 function avatarRowHtml(skin: string, sizePx = 26): string {
   return `<span class="avatar avatar-sm row-avatar">${renderAvatarSvg(skin, sizePx)}</span>`;
@@ -80,7 +81,8 @@ const LIKED_OBJECT: Record<string, string> = {
 // Returns { icon, body } so the caller can place the icon outside <strong>.
 function notifMessage(n: NotificationItem): { icon: string; body: string } {
   if (n.event_type === "cheered_you") {
-    return { icon: "🎉", body: "sent you a cheer (+1 XP)" };
+    // Match the cheer button's beer icon for consistency across the feature.
+    return { icon: renderBeerIconSvg(2), body: "sent you a cheer (+1 XP)" };
   }
   const obj = LIKED_OBJECT[n.event_type] ?? "activity";
   return { icon: "🌸", body: `liked your ${obj}` };
@@ -354,7 +356,7 @@ function renderFriends(): void {
                 data-cheer-uid="${f.user_id}"
                 title="${f.can_cheer ? "Send a cheer (+1 XP to them, once a day)" : "Already cheered today"}"
                 ${f.can_cheer ? "" : "disabled"}>
-          🎉 Cheer
+          ${renderBeerIconSvg(2)} Cheer
         </button>
         <button class="secondary btn-view-stats" data-uid="${f.user_id}">View stats</button>
         <button class="btn-remove-small" data-uid="${f.user_id}" title="Remove friend">&times;</button>
