@@ -8,6 +8,7 @@ import { fmtMinutes } from "./utils";
 import { getMe, logout, updateMe, type UserRead } from "./api/users";
 import { applyTheme } from "./theme";
 import { CAT_SKINS, renderAvatarSvg } from "./views/avatar";
+import { renderMoonIconSvg, renderSunIconSvg } from "./views/icons";
 import { setCurrentCatSkin } from "./views/user-state";
 import { showAuthScreen } from "./views/auth";
 import * as FeynmanView from "./views/feynman";
@@ -28,7 +29,7 @@ const APP_HTML = `
         <h1>Nine Lives Study</h1>
       </div>
       <div class="topbar-right">
-        <button id="theme-toggle-button" class="theme-toggle" title="Toggle theme">☀️</button>
+        <button id="theme-toggle-button" class="theme-toggle" title="Toggle theme"></button>
         <div class="current-user" id="current-user-label">
           <span class="avatar avatar-sm" id="topbar-avatar"></span>
           <span id="topbar-username">—</span>
@@ -297,7 +298,9 @@ const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Could not find #app root element.");
 
 function updateThemeButton(button: HTMLButtonElement, theme: string): void {
-  button.textContent = theme === "dark" ? "☀️" : "🌙";
+  // Show the icon for the theme the user would SWITCH TO (sun = "go light",
+  // moon = "go dark") — same convention the old emoji used.
+  button.innerHTML = theme === "dark" ? renderSunIconSvg(2) : renderMoonIconSvg(2);
   button.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
 }
 

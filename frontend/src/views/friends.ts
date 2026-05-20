@@ -26,7 +26,7 @@ import {
 } from "../api/friends";
 import { escapeHtml, fmtMinutes, parseApiDate, setMessage } from "../utils";
 import { renderAvatarSvg } from "./avatar";
-import { renderBeerIconSvg, renderEmptyStateWithCat } from "./icons";
+import { renderBeerIconSvg, renderEmptyStateWithCat, renderFlowerIconSvg } from "./icons";
 
 function avatarRowHtml(skin: string, sizePx = 26): string {
   return `<span class="avatar avatar-sm row-avatar">${renderAvatarSvg(skin, sizePx)}</span>`;
@@ -157,7 +157,7 @@ function renderFeed(items: FeedItem[], notifs: NotificationItem[] = []): void {
           <span class="feed-time">${timeAgo(item.created_at)}</span>
         </div>
         <button class="feed-like-btn${likedClass}" data-eid="${item.id}" title="Like">
-          <span class="flower-icon">✿</span>
+          <span class="flower-icon">${renderFlowerIconSvg(2)}</span>
           <span class="like-count">${item.like_count || ""}</span>
         </button>
       </div>`;

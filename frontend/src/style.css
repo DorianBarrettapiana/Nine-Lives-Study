@@ -1186,12 +1186,15 @@ h3 {
 }
 
 .flower-icon {
-  font-size: 1rem;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
 }
+.flower-icon svg { display: block; }
 
 .feed-like-btn.liked .flower-icon {
   animation: bloom 0.35s ease;
+  transform-origin: center;
 }
 
 @keyframes bloom {
@@ -1574,3 +1577,6 @@ h3 {
 .empty-cat svg {
   display: block;
 }
+
+/* SVG inside the theme toggle should sit centered in the round button. */
+.theme-toggle svg { display: block; }

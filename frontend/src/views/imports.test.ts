@@ -63,10 +63,16 @@ describe("view modules import cleanly", () => {
     const mod = await import("./icons");
     expect(typeof mod.renderBeerIconSvg).toBe("function");
     expect(typeof mod.renderFlameIconSvg).toBe("function");
+    expect(typeof mod.renderFlowerIconSvg).toBe("function");
+    expect(typeof mod.renderSunIconSvg).toBe("function");
+    expect(typeof mod.renderMoonIconSvg).toBe("function");
     expect(typeof mod.renderSleepingCatSvg).toBe("function");
     expect(typeof mod.renderEmptyStateWithCat).toBe("function");
     expect(mod.renderBeerIconSvg()).toContain("<svg");
     expect(mod.renderFlameIconSvg()).toContain("<svg");
+    expect(mod.renderFlowerIconSvg()).toContain("<svg");
+    expect(mod.renderSunIconSvg()).toContain("<svg");
+    expect(mod.renderMoonIconSvg()).toContain("<svg");
     expect(mod.renderSleepingCatSvg("tabby")).toContain("<svg");
     // Unknown skin should fall back without throwing.
     expect(() => mod.renderSleepingCatSvg("nope")).not.toThrow();
