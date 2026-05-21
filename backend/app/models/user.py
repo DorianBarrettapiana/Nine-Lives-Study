@@ -31,6 +31,13 @@ class User(Base):
     # User avatar — currently a fixed set of pixel-cat skins.
     cat_skin: Mapped[str] = mapped_column(String(20), default="tabby", nullable=False)
     # Set the first time the user explicitly picks a skin. Subsequent changes
-    # are gated on accumulated completed-pomodoro work minutes since this ts.
-    # NULL = never explicitly picked yet → next change is free.
+    # are gated on accumulated study minutes (pomodoro + stopwatch) since
+    # this ts. NULL = never explicitly picked yet → next change is free.
     cat_skin_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Number of "free" skin changes that bypass the 30h study-time lock.
+    # Existing users get 1 via migration so they always have one reset.
+    cat_skin_free_changes: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+    # Daily work-time goal in minutes (pomodoro + stopwatch combined).
+    # Displayed as a progress meter under the XP card. Default 120 = 2h.
+    daily_goal_minutes: Mapped[int] = mapped_column(Integer, default=120, nullable=False)

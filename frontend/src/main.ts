@@ -52,6 +52,9 @@ const APP_HTML = `
           <div class="xp-bar-wrap"><div class="xp-bar-fill" id="xp-bar-fill"></div></div>
           <p class="hint" id="xp-label">0 / 100 XP</p>
           <p class="hint streak-line" id="streak-line" title="Consecutive days with at least one work session"></p>
+          <div class="daily-goal-line" id="daily-goal-line"
+               title="Today's work-time goal (pomodoro + stopwatch). Click to edit."></div>
+          <p id="perfect-day-badge" class="perfect-day-badge hidden">✨ Perfect day!</p>
         </section>
         <section class="card stopwatch-card" id="stopwatch-card">
           <h2>Work timer</h2>
@@ -132,6 +135,7 @@ const APP_HTML = `
               <h2>Daily tracker</h2>
               <p class="hint">Tasks, mood and daily reflection.</p>
             </div>
+            <div id="tracker-date-bar" class="tracker-date-bar"></div>
             <div class="tracker-progress">
               <div class="progress-header"><span>Today progress</span><strong id="tracker-percent">0%</strong></div>
               <div class="progress-bar"><div id="tracker-progress-fill" class="progress-fill"></div></div>

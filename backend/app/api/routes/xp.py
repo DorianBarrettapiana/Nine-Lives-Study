@@ -10,6 +10,8 @@ from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.core.streak import compute_streak
 from app.core.xp import EVENT_POMODORO, EVENT_STOPWATCH
+from app.models.daily_tracker import DailyLog, DailyTask
+from app.models.mood_entry import MoodEntry
 from app.models.user import User
 from app.models.user_progress import UserProgress, level_from_xp
 from app.models.xp_event import XpEvent
@@ -63,6 +65,53 @@ def get_xp(
         .where(XpEvent.created_at >= today_start)
     ) or 0
 
+    # --- Perfect day --------------------------------------------------------
+    # All four conditions must hold:
+    #   1. At least 1 daily task TODAY, and zero undone.
+    #   2. A mood entry today.
+    #   3. A reflection (non-empty text) today.
+    #   4. At least 1 completed work session today (today_minutes > 0).
+    today_local_date = (datetime.now(timezone.utc) + timedelta(minutes=tz_offset)).date()
+
+    # Tasks: DailyTask has an explicit task_date — query directly.
+    task_rows = db.execute(
+        select(DailyTask.is_done)
+        .where(DailyTask.user_id == current_user.id)
+        .where(DailyTask.task_date == today_local_date)
+    ).all()
+    total_today = len(task_rows)
+    undone_today = sum(1 for (is_done,) in task_rows if not is_done)
+    tasks_complete_today = total_today > 0 and undone_today == 0
+
+    # Daily log for today by log_date (the table uses a literal date, not a tz).
+    log_today = db.scalar(
+        select(DailyLog)
+        .where(DailyLog.user_id == current_user.id)
+        .where(DailyLog.log_date == today_local_date)
+    )
+    has_reflection_today = bool(log_today and log_today.reflection and log_today.reflection.strip())
+
+    # Mood: any MoodEntry today (by created_at local date).
+    mood_today = False
+    mood_rows = db.scalars(
+        select(MoodEntry.created_at)
+        .where(MoodEntry.user_id == current_user.id)
+    ).all()
+    for ts in mood_rows:
+        if ts is None:
+            continue
+        ts_aware = ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+        if (ts_aware + timedelta(minutes=tz_offset)).date() == today_local_date:
+            mood_today = True
+            break
+
+    is_today_perfect = (
+        tasks_complete_today
+        and has_reflection_today
+        and mood_today
+        and today_minutes > 0
+    )
+
     return UserProgressRead(
         user_id=progress.user_id,
         xp=progress.xp,
@@ -72,4 +121,6 @@ def get_xp(
         streak_days=streak_days,
         streak_active_today=active_today,
         today_work_minutes=int(today_minutes),
+        today_work_minutes_goal=current_user.daily_goal_minutes,
+        is_today_perfect=is_today_perfect,
     )

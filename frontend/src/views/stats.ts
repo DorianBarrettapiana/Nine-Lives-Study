@@ -8,6 +8,7 @@
 import { listMoodEntries, type MoodEntryRead } from "../api/mood";
 import { getUserStats, getUserXp, type UserProgressRead, type UserStatsRead } from "../api/stats";
 import { getDailyState, type DailyStateRead } from "../api/tracker";
+import { updateMe } from "../api/users";
 import { escapeHtml, fmtMinutes, makeDateLabel, parseApiDate } from "../utils";
 import { renderFlameIconSvg } from "./icons";
 
@@ -24,6 +25,8 @@ let xpLevel: HTMLSpanElement;
 let xpBarFill: HTMLDivElement;
 let xpLabel: HTMLParagraphElement;
 let streakLine: HTMLParagraphElement | null;
+let dailyGoalLine: HTMLDivElement | null;
+let perfectDayBadge: HTMLParagraphElement | null;
 
 let userStats: UserStatsRead | null = null;
 let userProgress: UserProgressRead | null = null;
@@ -66,6 +69,30 @@ export function renderXp(): void {
       streakLine.classList.add("streak-grace");
       streakLine.classList.remove("streak-active");
     }
+  }
+
+  // Daily work-time goal: progress bar with editable target.
+  if (dailyGoalLine) {
+    const done = userProgress.today_work_minutes;
+    const goal = Math.max(1, userProgress.today_work_minutes_goal);
+    const pct = Math.min(100, Math.round((done / goal) * 100));
+    const hit = done >= goal;
+    dailyGoalLine.innerHTML = `
+      <div class="daily-goal-row">
+        <span class="daily-goal-text">
+          Today: <strong>${fmtMinutes(done)}</strong> /
+          <button class="goal-edit-btn" type="button" data-edit-goal="1"
+                  title="Click to change daily goal">${fmtMinutes(goal)}</button>
+        </span>
+        ${hit ? `<span class="goal-hit">✓ goal!</span>` : ""}
+      </div>
+      <div class="daily-goal-bar"><div class="daily-goal-fill${hit ? " hit" : ""}" style="width:${pct}%"></div></div>
+    `;
+  }
+
+  // Perfect-day badge.
+  if (perfectDayBadge) {
+    perfectDayBadge.classList.toggle("hidden", !userProgress.is_today_perfect);
   }
 }
 
@@ -496,6 +523,33 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
   xpBarFill = document.querySelector<HTMLDivElement>("#xp-bar-fill")!;
   xpLabel = document.querySelector<HTMLParagraphElement>("#xp-label")!;
   streakLine = document.querySelector<HTMLParagraphElement>("#streak-line");
+  dailyGoalLine = document.querySelector<HTMLDivElement>("#daily-goal-line");
+  perfectDayBadge = document.querySelector<HTMLParagraphElement>("#perfect-day-badge");
+
+  // Inline goal editor — small prompt to keep the implementation tiny.
+  // Could later become a proper inline input; for now it's just a prompt.
+  dailyGoalLine?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.editGoal !== "1") return;
+    const current = userProgress?.today_work_minutes_goal ?? 120;
+    const raw = window.prompt(
+      "Daily work-time goal (in minutes, 15–720):",
+      String(current),
+    );
+    if (raw === null) return;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 15 || parsed > 720) {
+      window.alert("Please enter a number between 15 and 720.");
+      return;
+    }
+    try {
+      await updateMe({ daily_goal_minutes: Math.round(parsed) });
+      await refresh();
+    } catch (e) {
+      console.error(e);
+    }
+  });
 
   // Scope to #stats-view so we don't accidentally pick up mood-view days
   // buttons (same class) and trigger cross-view side effects.

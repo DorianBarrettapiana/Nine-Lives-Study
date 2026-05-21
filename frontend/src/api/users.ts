@@ -44,6 +44,8 @@ export interface UserUpdate {
   pomodoro_sessions_before_long_break?: number;
 
   cat_skin?: string;
+
+  daily_goal_minutes?: number;
 }
 
 export async function register(payload: RegisterPayload): Promise<UserRead> {

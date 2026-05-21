@@ -55,6 +55,8 @@ export interface UserProgressRead {
   streak_days: number;
   streak_active_today: boolean;
   today_work_minutes: number;
+  today_work_minutes_goal: number;
+  is_today_perfect: boolean;
 }
 
 export async function getUserStats(days = 7): Promise<UserStatsRead> {

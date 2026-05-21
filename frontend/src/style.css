@@ -1615,3 +1615,120 @@ h3 {
   height: 12px;
   border-radius: 3px;
 }
+
+/* --- Daily tracker — date navigation -------------------------------------- */
+.tracker-date-bar {
+  display: flex; align-items: center; gap: 0.6rem;
+  margin: 0.5rem 0 1rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--bg-card);
+  font-size: 0.88rem;
+}
+.date-nav-btn {
+  width: 1.8rem; height: 1.8rem; padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-soft);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.date-nav-btn:hover:not(:disabled) {
+  background: var(--bg-muted);
+  border-color: var(--accent);
+}
+.date-nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.date-nav-label {
+  flex: 1; font-weight: 600; color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+.date-nav-today { font-size: 0.8rem; }
+
+/* --- Daily tracker — done section ---------------------------------------- */
+.task-done-header {
+  width: 100%;
+  margin-top: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.task-done-header:hover { background: var(--bg-muted); }
+.task-done-header .arrow { display: inline-block; width: 1em; }
+.task-done-list { display: grid; gap: 0.35rem; margin-top: 0.25rem; }
+.task-item.task-done { opacity: 0.7; }
+
+/* --- Daily tracker — inline edit + drag --------------------------------- */
+.task-edit-input {
+  flex: 1;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+}
+.task-item[draggable=true] { cursor: grab; }
+.task-item.dragging { opacity: 0.4; }
+.task-item.drop-above { box-shadow: 0 -2px 0 var(--accent); }
+
+/* --- Daily goal progress in sidebar XP card ----------------------------- */
+.daily-goal-line {
+  margin-top: 0.45rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.daily-goal-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.daily-goal-text strong { color: var(--text-soft); }
+.goal-edit-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  font-weight: 700;
+}
+.goal-edit-btn:hover { color: var(--accent-dark, var(--accent)); }
+.goal-hit { color: var(--success); font-weight: 700; }
+.daily-goal-bar {
+  height: 6px;
+  background: var(--bg-muted);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.daily-goal-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.daily-goal-fill.hit {
+  background: var(--success);
+}
+
+/* --- Perfect day badge -------------------------------------------------- */
+.perfect-day-badge {
+  margin: 0.5rem 0 0;
+  padding: 0.35rem 0.6rem;
+  border-radius: 12px;
+  text-align: center;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(217, 107, 138, 0.18));
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+}

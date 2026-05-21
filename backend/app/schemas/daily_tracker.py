@@ -17,6 +17,10 @@ class DailyTaskUpdate(BaseModel):
 
     text: str | None = Field(default=None, min_length=1, max_length=500)
     is_done: bool | None = None
+    # User-controlled position within the day's list. The PATCH endpoint
+    # accepts a float so the frontend can compute "between neighbors" via
+    # the midpoint trick without ever touching other rows.
+    sort_order: float | None = None
 
 
 class DailyTaskRead(BaseModel):
@@ -27,6 +31,7 @@ class DailyTaskRead(BaseModel):
     task_date: date
     text: str
     is_done: bool
+    sort_order: float = 0
     created_at: datetime
     updated_at: datetime
 
