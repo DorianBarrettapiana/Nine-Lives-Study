@@ -10,6 +10,7 @@ export interface DailyTaskRead {
   task_date: string;
   text: string;
   is_done: boolean;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }
@@ -41,6 +42,7 @@ export interface DailyTaskCreate {
 export interface DailyTaskUpdate {
   text?: string;
   is_done?: boolean;
+  sort_order?: number;
 }
 
 export interface DailyLogUpsert {

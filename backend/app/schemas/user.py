@@ -34,6 +34,9 @@ class UserUpdate(BaseModel):
 
     cat_skin: CatSkin | None = None
 
+    # Daily work-time goal, 15 min – 12 h.
+    daily_goal_minutes: int | None = Field(default=None, ge=15, le=720)
+
 
 class UserRead(BaseModel):
     """Public representation of a user."""
@@ -50,10 +53,14 @@ class UserRead(BaseModel):
     pomodoro_sessions_before_long_break: int
 
     cat_skin: str
-    # Minutes of accumulated completed pomodoro work since the last skin change.
+    # Minutes of accumulated study time (pomodoro + stopwatch) since the
+    # last skin change. The 30h lock unlocks when this hits required.
     cat_skin_minutes_accumulated: int = 0
-    # Required minutes between changes (currently 30h = 1800 min). Constant
-    # but exposed so the frontend doesn't need to hard-code it.
     cat_skin_minutes_required: int = 1800
+    # Free skin-change coupons (default 1; refilled by rules later).
+    cat_skin_free_changes: int = 0
+
+    # Daily work-time goal — surfaced so the picker UI can read/write it.
+    daily_goal_minutes: int = 120
 
     model_config = {"from_attributes": True}

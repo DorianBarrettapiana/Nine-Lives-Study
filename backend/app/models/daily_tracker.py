@@ -2,7 +2,7 @@
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -29,6 +29,12 @@ class DailyTask(Base):
     task_date: Mapped[date] = mapped_column(Date, index=True, nullable=False)
     text: Mapped[str] = mapped_column(String(500), nullable=False)
     is_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # User-controlled ordering within a day. Lower sorts first; ties break
+    # by `created_at`. Float so the frontend can insert "between neighbors"
+    # via the midpoint trick (e.g. 1.0 / 2.0 → drop between → 1.5).
+    # Defaults to 0 so legacy rows stay in their original creation order
+    # until the user reorders them.
+    sort_order: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

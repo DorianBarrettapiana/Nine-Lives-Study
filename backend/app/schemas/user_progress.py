@@ -23,5 +23,13 @@ class UserProgressRead(BaseModel):
     # Minutes of work (pomodoro + stopwatch) completed today, in the caller's
     # local timezone. Shown on the pomodoro and stopwatch cards.
     today_work_minutes: int = 0
+    # User's daily work-time goal in minutes — used by the sidebar progress meter.
+    today_work_minutes_goal: int = 120
+    # True if today qualifies as a "perfect day":
+    #   - at least 1 daily task created and ALL today's tasks done
+    #   - mood logged today
+    #   - reflection text written today
+    #   - at least 1 completed work session (pomodoro or stopwatch)
+    is_today_perfect: bool = False
 
     model_config = {"from_attributes": False}

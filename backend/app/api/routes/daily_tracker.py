@@ -61,7 +61,8 @@ def get_daily_state(
         select(DailyTask)
         .where(DailyTask.user_id == current_user.id)
         .where(DailyTask.task_date == day)
-        .order_by(DailyTask.created_at.asc())
+        # Manual sort_order first (drag-reorder), creation time as tie-breaker.
+        .order_by(DailyTask.sort_order.asc(), DailyTask.created_at.asc())
     )
     tasks = list(db.scalars(tasks_statement).all())
 
@@ -91,11 +92,24 @@ def create_daily_task(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DailyTask:
+    day = resolve_target_date(payload.task_date)
+    # New tasks land at the bottom of the day's list. Compute as
+    # (current max sort_order for the day) + 1, defaulting to 1.0 for the
+    # very first task.
+    max_so = db.scalar(
+        select(DailyTask.sort_order)
+        .where(DailyTask.user_id == current_user.id)
+        .where(DailyTask.task_date == day)
+        .order_by(DailyTask.sort_order.desc())
+        .limit(1)
+    )
+    next_so = (max_so or 0.0) + 1.0
     task = DailyTask(
         user_id=current_user.id,
-        task_date=resolve_target_date(payload.task_date),
+        task_date=day,
         text=payload.text,
         is_done=False,
+        sort_order=next_so,
     )
     db.add(task)
     db.commit()
