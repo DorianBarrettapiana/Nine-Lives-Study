@@ -85,7 +85,9 @@ function notifMessage(n: NotificationItem): { icon: string; body: string } {
     return { icon: renderBeerIconSvg(2), body: "sent you a cheer (+1 XP)" };
   }
   const obj = LIKED_OBJECT[n.event_type] ?? "activity";
-  return { icon: "🌸", body: `liked your ${obj}` };
+  // Match the Like button's pixel flower so the "liked your X" line uses
+  // the same visual signature.
+  return { icon: renderFlowerIconSvg(2), body: `liked your ${obj}` };
 }
 
 // How many notifs / feed items to show before "Show more". Match-ish to

@@ -5,9 +5,10 @@
  * Pomodoro section: SVG line chart (minutes/day) + time-of-day distribution.
  */
 
+import { listMoodEntries, type MoodEntryRead } from "../api/mood";
 import { getUserStats, getUserXp, type UserProgressRead, type UserStatsRead } from "../api/stats";
 import { getDailyState, type DailyStateRead } from "../api/tracker";
-import { escapeHtml, fmtMinutes, makeDateLabel } from "../utils";
+import { escapeHtml, fmtMinutes, makeDateLabel, parseApiDate } from "../utils";
 import { renderFlameIconSvg } from "./icons";
 
 let statsTotals: HTMLDivElement;
@@ -26,6 +27,7 @@ let streakLine: HTMLParagraphElement | null;
 
 let userStats: UserStatsRead | null = null;
 let userProgress: UserProgressRead | null = null;
+let moodEntries: MoodEntryRead[] = [];
 
 /** Read-only accessor used by the pomodoro/stopwatch views so they can
  *  display today's work-minutes without a separate /xp round trip. */
@@ -40,9 +42,13 @@ export let statsDays = 7;
 // --- XP ---
 export function renderXp(): void {
   if (!userProgress) return;
+  // Levels are progressive — current level's XP capacity = xp_in_level +
+  // xp_to_next_level. Use that as the denominator so the bar fills to 100%
+  // exactly when the user reaches the next level.
+  const levelCap = userProgress.xp_in_level + userProgress.xp_to_next_level;
   xpLevel.textContent = String(userProgress.level);
-  xpBarFill.style.width = `${Math.round((userProgress.xp_in_level / 100) * 100)}%`;
-  xpLabel.textContent = `${userProgress.xp_in_level} / 100 XP`;
+  xpBarFill.style.width = `${Math.round((userProgress.xp_in_level / Math.max(1, levelCap)) * 100)}%`;
+  xpLabel.textContent = `${userProgress.xp_in_level} / ${levelCap} XP`;
 
   if (streakLine) {
     const n = userProgress.streak_days;
@@ -303,25 +309,143 @@ function renderWorkSection(): void {
       ).join("")}
     </svg>`;
 
+  // Daily average across the selected window — gives "are you actually
+  // putting in time most days?" at a glance, independent of the chart shape.
+  const avgPerDay = Math.round(totalMinutes / Math.max(1, statsDays));
   statsPomodoroChart.innerHTML = `
-    <div class="pomo-total-label">Total: <strong>${fmtMinutes(totalMinutes)}</strong></div>
+    <div class="pomo-total-label">
+      Total: <strong>${fmtMinutes(totalMinutes)}</strong>
+      · Daily avg: <strong>${fmtMinutes(avgPerDay)}</strong>
+    </div>
     ${svgHtml}`;
 }
 
 // --- Mood ---
+// Color per mood emoji — kept in the same order as the picker for visual
+// consistency between recording and review.
+const MOOD_ORDER = ["😩", "😔", "😐", "🙂", "🔥"] as const;
+const MOOD_COLORS: Record<string, string> = {
+  "😩": "#6b7280", // exhausted — grey
+  "😔": "#3b82f6", // low — blue
+  "😐": "#a3a3a3", // neutral — light grey
+  "🙂": "#10b981", // good — green
+  "🔥": "#f59e0b", // on fire — orange
+};
+const TIME_BUCKETS = [
+  { key: "morning",   label: "Morning",   from: 6,  to: 12 },
+  { key: "afternoon", label: "Afternoon", from: 12, to: 18 },
+  { key: "evening",   label: "Evening",   from: 18, to: 22 },
+  { key: "night",     label: "Night",     from: 22, to: 30 }, // 22-06
+];
+function bucketForHour(h: number): string {
+  if (h >= 6  && h < 12) return "morning";
+  if (h >= 12 && h < 18) return "afternoon";
+  if (h >= 18 && h < 22) return "evening";
+  return "night";
+}
+function localDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Stacked bar — given { [emoji]: count } per category, returns an SVG of
+ *  vertical bars one per category. Heights are normalized to maxTotal. */
+function renderStackedBars(categories: { key: string; label: string; counts: Record<string, number> }[], maxTotal: number): string {
+  const W = 480;
+  const H = 130;
+  const PAD = { top: 14, right: 14, bottom: 28, left: 24 };
+  const chartH = H - PAD.top - PAD.bottom;
+  const barSlot = (W - PAD.left - PAD.right) / Math.max(1, categories.length);
+  const barW = Math.max(8, Math.min(48, barSlot * 0.65));
+
+  let rects = "";
+  let labels = "";
+  let counts = "";
+  categories.forEach((cat, i) => {
+    const total = Object.values(cat.counts).reduce((a, b) => a + b, 0);
+    const cx = PAD.left + barSlot * (i + 0.5);
+    const x = cx - barW / 2;
+    let yCursor = PAD.top + chartH; // start at bottom and stack upward
+    for (const emoji of MOOD_ORDER) {
+      const c = cat.counts[emoji] || 0;
+      if (c === 0) continue;
+      const segH = (c / Math.max(1, maxTotal)) * chartH;
+      yCursor -= segH;
+      rects += `<rect x="${x}" y="${yCursor}" width="${barW}" height="${segH}" fill="${MOOD_COLORS[emoji]}" />`;
+    }
+    labels += `<text x="${cx}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--text-muted)">${cat.label}</text>`;
+    if (total > 0) {
+      counts += `<text x="${cx}" y="${PAD.top + chartH - (total / Math.max(1, maxTotal)) * chartH - 4}" text-anchor="middle" font-size="10" font-weight="700" fill="var(--text-soft)">${total}</text>`;
+    }
+  });
+
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" class="mood-bar-svg">${rects}${counts}${labels}</svg>`;
+}
+
+function renderMoodLegend(): string {
+  return `<div class="mood-legend">${
+    MOOD_ORDER.map(e =>
+      `<span class="mood-legend-item">
+        <span class="mood-legend-swatch" style="background:${MOOD_COLORS[e]}"></span>
+        ${e}
+      </span>`
+    ).join("")
+  }</div>`;
+}
+
 function renderMoodChart(): void {
   if (!userStats) return;
-  statsMoodChart.innerHTML = userStats.daily_moods.length === 0
-    ? `<div class="empty-state">No mood data yet.</div>`
-    : userStats.daily_moods
-        .slice()
-        .sort((a, b) => b.date.localeCompare(a.date))
-        .map(d =>
-          `<div class="mood-history-item">
-            <span class="hint">${makeDateLabel(d.date)}</span>
-            <span class="mood-emoji">${d.mood || "—"}</span>
-          </div>`
-        ).join("");
+  if (moodEntries.length === 0) {
+    statsMoodChart.innerHTML = `<div class="empty-state">No mood data yet.</div>`;
+    return;
+  }
+
+  // --- Bucket A: by time-of-day ----------------------------------------
+  const byTime: Record<string, Record<string, number>> = {};
+  for (const b of TIME_BUCKETS) byTime[b.key] = {};
+  for (const e of moodEntries) {
+    const d = parseApiDate(e.created_at);
+    const bucket = bucketForHour(d.getHours());
+    byTime[bucket][e.mood] = (byTime[bucket][e.mood] || 0) + 1;
+  }
+  const timeCategories = TIME_BUCKETS.map(b => ({
+    key: b.key, label: b.label, counts: byTime[b.key],
+  }));
+  const maxTime = Math.max(1, ...timeCategories.map(c => Object.values(c.counts).reduce((a, b) => a + b, 0)));
+
+  // --- Bucket B: by date — last N days, oldest → newest -----------------
+  const days: { key: string; label: string }[] = [];
+  for (let i = statsDays - 1; i >= 0; i--) {
+    const dd = new Date();
+    dd.setDate(dd.getDate() - i);
+    days.push({ key: localDate(dd), label: `${dd.getMonth() + 1}/${dd.getDate()}` });
+  }
+  const byDate: Record<string, Record<string, number>> = {};
+  for (const d of days) byDate[d.key] = {};
+  for (const e of moodEntries) {
+    const localKey = localDate(parseApiDate(e.created_at));
+    if (byDate[localKey] !== undefined) {
+      byDate[localKey][e.mood] = (byDate[localKey][e.mood] || 0) + 1;
+    }
+  }
+  // For 30/90 day windows we sparsify the labels so they don't overlap.
+  const labelStep = Math.max(1, Math.floor(days.length / 10));
+  const dateCategories = days.map((d, i) => ({
+    key: d.key,
+    label: (i % labelStep === 0 || i === days.length - 1) ? d.label : "",
+    counts: byDate[d.key],
+  }));
+  const maxDate = Math.max(1, ...dateCategories.map(c => Object.values(c.counts).reduce((a, b) => a + b, 0)));
+
+  statsMoodChart.innerHTML = `
+    <div class="mood-subchart">
+      <p class="mood-subchart-title">By time of day</p>
+      ${renderStackedBars(timeCategories, maxTime)}
+    </div>
+    <div class="mood-subchart">
+      <p class="mood-subchart-title">By date</p>
+      ${renderStackedBars(dateCategories, maxDate)}
+    </div>
+    ${renderMoodLegend()}`;
 }
 
 export function render(): void {
@@ -339,9 +463,12 @@ export function render(): void {
 
 export async function refresh(): Promise<void> {
   try {
-    [userStats, userProgress] = await Promise.all([
+    [userStats, userProgress, moodEntries] = await Promise.all([
       getUserStats(statsDays),
       getUserXp(),
+      // Fetch raw mood entries so we can build the time-of-day and per-day
+      // bar charts client-side (no extra backend aggregation needed).
+      listMoodEntries(statsDays),
     ]);
     dayCache.clear();
     render();

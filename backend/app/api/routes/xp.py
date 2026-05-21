@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.core.streak import compute_streak
 from app.core.xp import EVENT_POMODORO, EVENT_STOPWATCH
 from app.models.user import User
-from app.models.user_progress import XP_PER_LEVEL, UserProgress
+from app.models.user_progress import UserProgress, level_from_xp
 from app.models.xp_event import XpEvent
 from app.schemas.user_progress import UserProgressRead
 
@@ -43,8 +43,13 @@ def get_xp(
         db.commit()
         db.refresh(progress)
 
-    xp_in_level = progress.xp % XP_PER_LEVEL
-    xp_to_next = XP_PER_LEVEL - xp_in_level
+    # Progressive levels: level N needs N*100 XP. Recompute on every read
+    # so users created under the old (flat) rule self-heal to the new level
+    # without a separate migration.
+    level, xp_in_level, xp_to_next = level_from_xp(progress.xp)
+    if progress.level != level:
+        progress.level = level
+        db.commit()
 
     streak_days, active_today = compute_streak(current_user.id, tz_offset, db)
 
@@ -61,7 +66,7 @@ def get_xp(
     return UserProgressRead(
         user_id=progress.user_id,
         xp=progress.xp,
-        level=progress.level,
+        level=level,
         xp_in_level=xp_in_level,
         xp_to_next_level=xp_to_next,
         streak_days=streak_days,

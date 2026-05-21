@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.user_progress import XP_PER_LEVEL, UserProgress
+from app.models.user_progress import UserProgress, level_from_xp
 from app.models.xp_event import XpEvent
 
 # --- XP amounts (single source of truth) ------------------------------------
@@ -102,7 +102,7 @@ def award_xp_event(
     db.add(event)
     progress = _get_or_create_progress(user_id, db)
     progress.xp += amount
-    progress.level = (progress.xp // XP_PER_LEVEL) + 1
+    progress.level, _, _ = level_from_xp(progress.xp)
 
     try:
         db.flush()
