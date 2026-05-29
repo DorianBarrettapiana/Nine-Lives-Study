@@ -15,11 +15,13 @@ from app.api.routes.paper_notes import router as paper_notes_router
 from app.api.routes.pomodoro import router as pomodoro_router
 from app.api.routes.stats import router as stats_router
 from app.api.routes.stopwatch import router as stopwatch_router
+from app.api.routes.summaries import router as summaries_router
 from app.api.routes.users import router as users_router
 from app.api.routes.xp import router as xp_router
 from app.core.config import APP_NAME, APP_VERSION
 from app.core.database import Base, engine
 from app.core.migrations import run_migrations
+from app.models.ai_summary import AiSummary  # noqa: F401
 
 # Import ORM models before creating tables.
 # This ensures that SQLAlchemy knows every table definition.
@@ -82,3 +84,4 @@ app.include_router(xp_router)
 app.include_router(mood_router)
 app.include_router(stats_router)
 app.include_router(friends_router)
+app.include_router(summaries_router)
