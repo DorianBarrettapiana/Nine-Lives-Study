@@ -16,7 +16,7 @@ rows — so cost is bounded by distinct periods, not click count.
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core import ai
@@ -33,12 +33,18 @@ from app.schemas.ai_summary import (
 
 router = APIRouter(prefix="/summaries", tags=["summaries"])
 
-# Daily cap per (user, kind). Each call to Claude bills regardless of whether
-# the row UPSERT-overwrites — so this cap is the only thing standing between a
-# trigger-happy user and a runaway bill. 1/day matches normal use (Sunday
-# ritual + the occasional ad-hoc reflection); raising it back to 3 was
-# previously a misjudgment that turned a $5 budget into a 2-3 week ceiling.
-_MANUAL_DAILY_CAP = 1
+# Weekly recap has TWO slots: Tuesday and Friday. Together they cap weekly
+# Claude spend at 2 * cost-per-call regardless of how many times the user
+# clicks Generate — the prior "1/day rolling 24h" cap let a determined user
+# rack up 21 calls/week. Each slot writes a distinct period_key
+# (`2026-W22-T` vs `2026-W22-F`), so they don't UPSERT-overwrite each other,
+# and the DB UNIQUE on (user_id, kind, period_key) makes a second click on
+# the same slot a no-op-with-429.
+_WEEKLY_SLOTS: dict[int, str] = {
+    1: "T",  # Tuesday  → "...-T"
+    4: "F",  # Friday   → "...-F"
+}
+_SLOT_LABEL = {"T": "Tuesday", "F": "Friday"}
 
 
 def _utc_now() -> datetime:
@@ -64,6 +70,13 @@ def _iso_week_key(week_start_utc: datetime) -> str:
     the UTC representation of the user's local Monday."""
     iso_year, iso_week, _ = week_start_utc.isocalendar()
     return f"{iso_year}-W{iso_week:02d}"
+
+
+def _local_weekday(tz_offset_minutes: int) -> int:
+    """Day of week in the caller's local TZ. Mon=0 ... Sun=6, matching
+    Python's `datetime.weekday()` (which client-side JS code does NOT
+    match — JS `getDay()` returns Sun=0)."""
+    return (_utc_now() + timedelta(minutes=tz_offset_minutes)).weekday()
 
 
 # --- Config / opt-in --------------------------------------------------------
@@ -125,7 +138,8 @@ def list_summaries(
 # --- Generate ---------------------------------------------------------------
 
 
-def _check_preconditions(current_user: User, kind: str, db: Session) -> None:
+def _check_base_preconditions(current_user: User) -> None:
+    """Server-level + per-user gates that apply to every summary kind."""
     if not ai.is_configured():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -136,20 +150,24 @@ def _check_preconditions(current_user: User, kind: str, db: Session) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Opt-in required before generating AI summaries.",
         )
-    # Daily-cap: count distinct (period_key) generated today for this kind.
-    # We count rows generated in the last 24h instead of by calendar day so
-    # a user clicking at 23:59 doesn't get a fresh quota one minute later.
-    since = _utc_now() - timedelta(hours=24)
-    n_recent = db.scalar(
-        select(func.count(AiSummary.id))
-        .where(AiSummary.user_id == current_user.id)
+
+
+def _check_period_not_yet_generated(
+    user_id: int, kind: str, period_key: str, db: Session,
+) -> None:
+    """Refuse if a summary already exists for this (kind, period_key).
+    Replaces the prior 24h rolling cap — each call bills Claude, so this
+    structural per-period check is the only thing keeping cost bounded."""
+    existing = db.scalar(
+        select(AiSummary.id)
+        .where(AiSummary.user_id == user_id)
         .where(AiSummary.kind == kind)
-        .where(AiSummary.generated_at >= since.replace(tzinfo=None))
-    ) or 0
-    if n_recent >= _MANUAL_DAILY_CAP:
+        .where(AiSummary.period_key == period_key)
+    )
+    if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Daily generate limit reached ({_MANUAL_DAILY_CAP}/day).",
+            detail=f"Already generated for this period ({period_key}).",
         )
 
 
@@ -195,22 +213,82 @@ def _upsert(
     return row
 
 
+@router.get("/weekly/availability", response_model=dict)
+def weekly_availability(
+    tz_offset: int = Query(default=0, ge=-720, le=840),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Tell the frontend (a) whether Generate is allowed RIGHT NOW for the
+    user's local day, and (b) the period_key the current slot would write.
+
+    Lets the UI grey out the button on non-Tue/Fri days, and surface
+    "already generated" without a 429 round-trip."""
+    weekday = _local_weekday(tz_offset)
+    slot = _WEEKLY_SLOTS.get(weekday)
+    if slot is None:
+        return {
+            "can_generate": False,
+            "reason": "off_day",
+            "next_slot": _SLOT_LABEL.get(_next_slot_letter(weekday)),
+        }
+    week_start = _local_monday_utc(tz_offset)
+    period_key = f"{_iso_week_key(week_start)}-{slot}"
+    existing = db.scalar(
+        select(AiSummary.id)
+        .where(AiSummary.user_id == current_user.id)
+        .where(AiSummary.kind == "weekly")
+        .where(AiSummary.period_key == period_key)
+    )
+    if existing is not None:
+        return {
+            "can_generate": False,
+            "reason": "already_generated",
+            "period_key": period_key,
+        }
+    return {
+        "can_generate": True,
+        "slot": _SLOT_LABEL[slot],
+        "period_key": period_key,
+    }
+
+
+def _next_slot_letter(today_weekday: int) -> str:
+    """Letter of the next upcoming slot from today's weekday (Mon=0)."""
+    # Walk forward 1..7 days; first day that matches a slot wins.
+    for offset in range(1, 8):
+        candidate = (today_weekday + offset) % 7
+        if candidate in _WEEKLY_SLOTS:
+            return _WEEKLY_SLOTS[candidate]
+    return "T"  # unreachable — both slots are in the dict
+
+
 @router.post("/weekly/generate", response_model=AiSummaryRead, status_code=201)
 def generate_weekly(
     tz_offset: int = Query(default=0, ge=-720, le=840),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AiSummary:
-    """Generate (or regenerate) THIS week's recap for the current user.
+    """Generate THIS week's recap — restricted to Tuesday and Friday slots.
 
-    The week is anchored on the caller's local Monday, so a user in CEST
-    asking on a Sunday evening gets last week's Monday-Sunday window
-    instead of a half-empty "this week so far" view from UTC's
-    perspective. `tz_offset` is minutes east of UTC (JS getTimezoneOffset
-    convention with sign flipped)."""
-    _check_preconditions(current_user, "weekly", db)
+    Each slot writes its own period_key (`2026-W22-T` for Tue, `-F` for Fri)
+    so the two recaps coexist instead of overwriting each other. Together
+    they hard-cap weekly Claude spend at 2 calls per user per week.
+
+    `tz_offset` is minutes east of UTC (JS getTimezoneOffset convention with
+    sign flipped) — needed because "today is Tuesday" depends on the user's
+    local calendar, not the server's UTC clock."""
+    _check_base_preconditions(current_user)
+    weekday = _local_weekday(tz_offset)
+    slot = _WEEKLY_SLOTS.get(weekday)
+    if slot is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Weekly recap can only be generated on Tuesdays and Fridays.",
+        )
     week_start = _local_monday_utc(tz_offset)
-    period_key = _iso_week_key(week_start)
+    period_key = f"{_iso_week_key(week_start)}-{slot}"
+    _check_period_not_yet_generated(current_user.id, "weekly", period_key, db)
     try:
         result = ai.summarise_weekly(current_user.id, week_start, db)
     except Exception as exc:  # noqa: BLE001 — surface SDK errors as 502

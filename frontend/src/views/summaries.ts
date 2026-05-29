@@ -16,10 +16,12 @@
 import {
   generateWeekly,
   getAiConfig,
+  getWeeklyAvailability,
   listSummaries,
   setAiOptIn,
   type AiConfigRead,
   type AiSummaryRead,
+  type WeeklyAvailability,
 } from "../api/summaries";
 import { ApiError } from "../api/client";
 import { escapeHtml, flashMessage, parseApiDate, setMessage } from "../utils";
@@ -175,8 +177,10 @@ async function onGenerateClick(): Promise<void> {
   } catch (e) {
     setMessage(messageEl, parseError(e), "error");
   } finally {
-    generateBtn.disabled = false;
-    generateBtn.textContent = "Generate";
+    // refreshAvailability decides the final button state — "Already
+    // generated" on success, normal/off-day on failure — so we don't
+    // hard-code anything here.
+    void refreshAvailability();
   }
 }
 
@@ -227,77 +231,98 @@ export async function init(): Promise<void> {
     console.warn("AI summary history fetch failed.", e);
   }
 
-  // After history loads, decide whether to fire the weekly-ritual nudge.
-  // Opted-in only — for un-opted users the always-visible Generate button
-  // is enough discovery; we shouldn't surprise-prompt people who haven't
-  // even tried the feature.
+  // Day-gate the Generate button. Server returns the same answer (so the
+  // 429/400 keeps it honest), but doing the check up front turns a wrong
+  // click into a greyed-out button with a helpful tooltip.
+  await refreshAvailability();
+
+  // After history loads, decide whether to fire the Tue/Fri ritual nudge.
+  // Opted-in only — for un-opted users the always-visible button is enough
+  // discovery; we shouldn't surprise-prompt people who haven't tried the
+  // feature.
   if (config.user_opted_in) {
-    maybePromptWeeklyRitual(history);
+    maybePromptWeeklyRitual();
+  }
+}
+
+async function refreshAvailability(): Promise<void> {
+  if (!generateBtn) return;
+  let avail: WeeklyAvailability;
+  try {
+    avail = await getWeeklyAvailability(-new Date().getTimezoneOffset());
+  } catch (e) {
+    console.warn("availability fetch failed", e);
+    return;
+  }
+  if (avail.can_generate) {
+    generateBtn.disabled = false;
+    generateBtn.textContent = `Generate (${avail.slot})`;
+    generateBtn.title = `${avail.slot} slot · creates ${avail.period_key}`;
+  } else if (avail.reason === "off_day") {
+    generateBtn.disabled = true;
+    generateBtn.textContent = "Generate";
+    generateBtn.title =
+      `Weekly recap is available Tuesdays and Fridays. ` +
+      `Next slot: ${avail.next_slot ?? "Tuesday"}.`;
+  } else if (avail.reason === "already_generated") {
+    generateBtn.disabled = true;
+    generateBtn.textContent = "Already generated";
+    generateBtn.title = `You've already generated ${avail.period_key}. ` +
+      `The other slot or next week unlocks the button.`;
   }
 }
 
 // --- Weekly-ritual nudge ----------------------------------------------------
 //
-// Fires Sunday 18:00+ local time (ISO weeks end on Sunday, so this anchors
-// the prompt at the natural end-of-week reflection point). The modal asks
-// once per ISO week; localStorage carries the dismissal flag, and an
-// already-generated summary for this period also suppresses it.
+// Fires Tuesday 18:00+ and Friday 18:00+ local time — matching the only two
+// days the server lets the user generate. Modal asks once per slot;
+// localStorage carries the dismissal flag (per period_key, so next week's
+// matching day fires fresh).
 //
-// Why client-side trigger instead of a server cron: the user's *local*
-// Sunday evening is what matters (CEST 20:00 ≠ EST 14:00), and the app
-// is the only place we know that. Server-side scheduling would need a
-// per-user TZ field, plus delivery via email or push (we have neither).
+// Server-side state is the source of truth via `getWeeklyAvailability()`:
+// if the slot is already generated, no prompt. We don't replicate the
+// server's day check on the client (it's redundant with the availability
+// fetch), but we still gate on time-of-day so morning lectures aren't
+// interrupted by an evening-reflection nudge.
 
 const PROMPT_DISMISSED_PREFIX = "nl_ai_prompt_dismissed_";
 
-function isoWeekKey(localDate: Date): string {
-  // Match Python's isocalendar(): ISO 8601 weeks (Mon=1..Sun=7, week
-  // containing Jan 4 is W01). We build a UTC date from the local Y/M/D
-  // bytes — the standard trick to compute calendar weeks while sidestepping
-  // DST drift inside arithmetic.
-  const d = new Date(Date.UTC(localDate.getFullYear(), localDate.getMonth(), localDate.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+async function maybePromptWeeklyRitual(): Promise<void> {
+  const now = new Date();
+  // Tue=2, Fri=5 in JS getDay() (Sun=0).
+  const isRitualDay = now.getDay() === 2 || now.getDay() === 5;
+  if (!isRitualDay) return;
+  if (now.getHours() < 18) return;
+
+  // Server tells us whether this slot is still open. If it isn't (or it's
+  // an off-day per the server — should agree with our local check, but
+  // server is authoritative), no prompt.
+  let avail: WeeklyAvailability;
+  try {
+    avail = await getWeeklyAvailability(-now.getTimezoneOffset());
+  } catch {
+    return;
+  }
+  if (!avail.can_generate || !avail.period_key || !avail.slot) return;
+
+  // Dedupe: user dismissed this slot already.
+  if (localStorage.getItem(PROMPT_DISMISSED_PREFIX + avail.period_key)) return;
+
+  setTimeout(
+    () => void showWeeklyRitualPrompt(avail.period_key!, avail.slot!),
+    1500,
+  );
 }
 
-function shouldPromptWeekly(now: Date): { periodKey: string } | null {
-  // Sunday 18:00 local time onwards. Avoid prompting during work hours
-  // earlier in the day — the ritual is an end-of-week reflection, not a
-  // mid-afternoon interruption.
-  if (now.getDay() !== 0) return null;
-  if (now.getHours() < 18) return null;
-  return { periodKey: isoWeekKey(now) };
-}
-
-function maybePromptWeeklyRitual(history: AiSummaryRead[]): void {
-  const target = shouldPromptWeekly(new Date());
-  if (target === null) return;
-
-  // Dedupe layer 1: user already saw the modal this period and said "Not now".
-  if (localStorage.getItem(PROMPT_DISMISSED_PREFIX + target.periodKey)) return;
-
-  // Dedupe layer 2: a summary for this period already exists in history —
-  // user already generated, no need to prompt again.
-  if (history.some((s) => s.period_key === target.periodKey)) return;
-
-  // Small delay so the prompt doesn't slam the user the millisecond the app
-  // mounts — feels more like "the app noticed it's Sunday evening" than a
-  // hostile popup.
-  setTimeout(() => void showWeeklyRitualPrompt(target.periodKey), 1500);
-}
-
-async function showWeeklyRitualPrompt(periodKey: string): Promise<void> {
+async function showWeeklyRitualPrompt(periodKey: string, slot: string): Promise<void> {
   const accepted = await new Promise<boolean>((resolve) => {
     const backdrop = document.createElement("div");
     backdrop.className = "modal-backdrop";
     backdrop.innerHTML = `
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ai-ritual-title">
-        <h3 id="ai-ritual-title">It's Sunday evening — recap this week?</h3>
+        <h3 id="ai-ritual-title">${escapeHtml(slot)} evening — recap this week?</h3>
         <p>Claude can turn this week's data into a short narrative you can reflect on or share with your advisor.</p>
-        <p class="hint">Takes about 10 seconds. We'll only ask once per week.</p>
+        <p class="hint">Takes about 10 seconds. We'll only ask once per ${escapeHtml(slot)} slot.</p>
         <div class="modal-actions">
           <button type="button" class="secondary" data-ai-ritual="cancel">Not now</button>
           <button type="button" data-ai-ritual="ok">Generate recap</button>
