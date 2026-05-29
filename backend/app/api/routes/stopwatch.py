@@ -116,7 +116,7 @@ def start(
     db.add(s)
     try:
         db.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         # Partial unique index on (user_id) WHERE ended_at IS NULL fired.
         # A concurrent /start request landed first and beat us through the
         # TOCTOU window. Surface the existing session so the client picks
@@ -126,8 +126,10 @@ def start(
         existing = _get_active(current_user.id, db)
         if existing is not None:
             return _to_read(existing)
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                            detail="A stopwatch session is already active.")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A stopwatch session is already active.",
+        ) from exc
     db.refresh(s)
     return _to_read(s)
 

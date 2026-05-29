@@ -18,7 +18,7 @@ when running.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -67,7 +67,7 @@ class StopwatchSession(Base):
             "uq_stopwatch_one_active_per_user",
             "user_id",
             unique=True,
-            sqlite_where=ended_at.is_(None),
-            postgresql_where=ended_at.is_(None),
+            sqlite_where=text("ended_at IS NULL"),
+            postgresql_where=text("ended_at IS NULL"),
         ),
     )
