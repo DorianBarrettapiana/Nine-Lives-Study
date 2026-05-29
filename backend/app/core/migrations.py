@@ -79,3 +79,36 @@ def run_migrations(engine: Engine) -> None:
                 conn.execute(_BACKFILL_POMODORO)
             if "daily_tasks" in existing_tables:
                 conn.execute(_BACKFILL_TASKS)
+
+        # Stopwatch orphan cleanup + uniqueness guard.
+        # Background: POST /stopwatch/start had a TOCTOU race that could
+        # leave a user with >1 sessions where ended_at IS NULL. Each ghost
+        # kept "running" server-side and inflated today's work-minutes when
+        # eventually ended. Step 1: for each user, close every duplicate
+        # active session EXCEPT the newest. Closed silently — no XP awarded
+        # for ghost time the user never saw on screen. Step 2: install a
+        # partial unique index so the race can't recur.
+        if "stopwatch_sessions" in existing_tables:
+            conn.execute(text("""
+                UPDATE stopwatch_sessions
+                SET ended_at = COALESCE(last_started_at, started_at),
+                    last_started_at = NULL
+                WHERE ended_at IS NULL
+                  AND id NOT IN (
+                    SELECT id FROM (
+                        SELECT id,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY user_id
+                                   ORDER BY started_at DESC, id DESC
+                               ) AS rn
+                        FROM stopwatch_sessions
+                        WHERE ended_at IS NULL
+                    ) ranked
+                    WHERE rn = 1
+                  )
+            """))
+            conn.execute(text("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_stopwatch_one_active_per_user
+                ON stopwatch_sessions (user_id)
+                WHERE ended_at IS NULL
+            """))

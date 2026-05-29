@@ -18,7 +18,7 @@ when running.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -55,4 +55,19 @@ class StopwatchSession(Base):
     # NULL when the session is paused or ended.
     last_started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,
+    )
+
+    # Partial unique index: at most ONE not-yet-ended row per user. Blocks the
+    # TOCTOU race in POST /stopwatch/start where two concurrent requests both
+    # passed the "no active session" check and inserted, leaving the user with
+    # two parallel running sessions that each awarded XP on End → today's
+    # work-minutes were doubled.
+    __table_args__ = (
+        Index(
+            "uq_stopwatch_one_active_per_user",
+            "user_id",
+            unique=True,
+            sqlite_where=text("ended_at IS NULL"),
+            postgresql_where=text("ended_at IS NULL"),
+        ),
     )
