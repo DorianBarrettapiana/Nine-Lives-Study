@@ -22,8 +22,18 @@ export async function startStopwatch(): Promise<StopwatchSessionRead> {
   return apiFetch<StopwatchSessionRead>("/stopwatch/start", { method: "POST" });
 }
 
-export async function pauseStopwatch(sessionId: number): Promise<StopwatchSessionRead> {
-  return apiFetch<StopwatchSessionRead>(`/stopwatch/${sessionId}/pause`, { method: "POST" });
+export async function pauseStopwatch(
+  sessionId: number,
+  clientElapsedSeconds?: number,
+): Promise<StopwatchSessionRead> {
+  // We pass the client's idea of the running-segment length so the server
+  // can cap accumulated_seconds at that value. Without this cap, a slow
+  // network turns "click Pause, walk away" into "server thinks you kept
+  // working until the request finally arrived" — inflating accumulated.
+  const qs = clientElapsedSeconds !== undefined
+    ? `?client_elapsed_seconds=${Math.max(0, Math.floor(clientElapsedSeconds))}`
+    : "";
+  return apiFetch<StopwatchSessionRead>(`/stopwatch/${sessionId}/pause${qs}`, { method: "POST" });
 }
 
 export async function resumeStopwatch(sessionId: number): Promise<StopwatchSessionRead> {

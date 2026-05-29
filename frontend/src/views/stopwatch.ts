@@ -146,21 +146,51 @@ function parseDetail(error: unknown): string {
   return "Could not contact server.";
 }
 
+// Guards against the user double-clicking Start/Pause while the network
+// round-trip is in flight. Without this, two pause requests could fire,
+// or a fast double-click on Start could race two startStopwatch() calls.
+let inFlight = false;
+
 async function onStartClick(): Promise<void> {
+  if (inFlight) return;
+  inFlight = true;
+  startBtn.disabled = true;
   setMessage(messageEl, "", "neutral");
   try {
     if (active === null) {
       const s = await startStopwatch();
       setActive(s);
     } else if (active.is_running) {
-      const s = await pauseStopwatch(active.id);
+      // Optimistic pause: freeze the displayed seconds immediately so the
+      // UI feels responsive even if the server is slow. We fold the
+      // running segment into accumulated_seconds locally; the server's
+      // authoritative response then overwrites this.
+      const sessionId = active.id;
+      const frozen = Math.floor(currentElapsedSeconds());
+      // Server caps accumulated at this value, so a slow pause request
+      // won't credit time the user spent on break waiting for the network.
+      const runningSegment = Math.max(0, frozen - active.accumulated_seconds);
+      setActive({
+        ...active,
+        accumulated_seconds: frozen,
+        last_started_at: null,
+        is_running: false,
+        elapsed_seconds: frozen,
+      });
+      const s = await pauseStopwatch(sessionId, runningSegment);
       setActive(s);
     } else {
       const s = await resumeStopwatch(active.id);
       setActive(s);
     }
   } catch (e) {
+    // Roll back optimistic UI to server truth.
+    try { setActive(await getActive()); } catch { /* keep current state */ }
     setMessage(messageEl, parseDetail(e), "error");
+  } finally {
+    inFlight = false;
+    // render() inside setActive re-derives disabled from current state.
+    render();
   }
 }
 

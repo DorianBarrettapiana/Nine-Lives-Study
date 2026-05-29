@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -113,7 +114,20 @@ def start(
         accumulated_seconds=0,
     )
     db.add(s)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Partial unique index on (user_id) WHERE ended_at IS NULL fired.
+        # A concurrent /start request landed first and beat us through the
+        # TOCTOU window. Surface the existing session so the client picks
+        # it up instead of seeing a 500. Equivalent to a 409 the client
+        # already knows how to handle, but no data loss either way.
+        db.rollback()
+        existing = _get_active(current_user.id, db)
+        if existing is not None:
+            return _to_read(existing)
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="A stopwatch session is already active.")
     db.refresh(s)
     return _to_read(s)
 
@@ -121,6 +135,7 @@ def start(
 @router.post("/{session_id}/pause", response_model=StopwatchSessionRead)
 def pause(
     session_id: int,
+    client_elapsed_seconds: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> StopwatchSessionRead:
@@ -131,8 +146,18 @@ def pause(
         raise HTTPException(status_code=400, detail="Session already ended.")
     if s.last_started_at is None:
         return _to_read(s)  # already paused — idempotent
-    delta = _utc_now() - _ensure_aware(s.last_started_at)
-    s.accumulated_seconds += max(0, int(delta.total_seconds()))
+    server_delta = max(0, int((_utc_now() - _ensure_aware(s.last_started_at)).total_seconds()))
+    # Cap server-computed delta with the client's claim of the running
+    # segment length. Without this cap, network lag between the user's
+    # click and the server processing the request inflates accumulated:
+    # the user paused, walked away, and the server kept "counting" until
+    # the POST finally landed. We take the smaller value (favors the user
+    # and never credits more time than they actually saw on screen).
+    if client_elapsed_seconds is not None and client_elapsed_seconds >= 0:
+        delta_seconds = min(server_delta, client_elapsed_seconds)
+    else:
+        delta_seconds = server_delta
+    s.accumulated_seconds += delta_seconds
     s.last_started_at = None
     db.commit()
     db.refresh(s)
