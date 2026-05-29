@@ -1732,3 +1732,69 @@ h3 {
   color: #f59e0b;
   border: 1px solid rgba(245, 158, 11, 0.45);
 }
+
+/* --- AI summary card --------------------------------------------------- */
+
+.ai-summary-markdown {
+  font-size: 0.95rem;
+  line-height: 1.55;
+  margin-top: 0.5rem;
+}
+.ai-summary-markdown h3 {
+  font-size: 1rem;
+  margin: 1rem 0 0.3rem;
+  color: var(--text);
+}
+.ai-summary-markdown p {
+  margin: 0.4rem 0;
+}
+.ai-summary-markdown ul {
+  margin: 0.3rem 0 0.6rem 1.2rem;
+  padding: 0;
+}
+.ai-summary-markdown li {
+  margin: 0.2rem 0;
+}
+
+#ai-summary-meta {
+  margin-top: 0.6rem;
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+
+/* --- Generic modal (used by AI consent + future modals) --------------- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+.modal-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.3);
+}
+.modal-card h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1.1rem;
+}
+.modal-card p {
+  margin: 0.5rem 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.modal-actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}

@@ -5,6 +5,7 @@ pydantic==2.10.3
 psycopg2-binary==2.9.10
 python-multipart==0.0.20
 bcrypt==4.2.1
+anthropic==0.69.0
 
 # --- Dev / test only ---
 pytest==8.3.4

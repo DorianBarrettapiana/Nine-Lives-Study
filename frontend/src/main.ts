@@ -13,6 +13,7 @@ import { renderMoonIconSvg, renderSunIconSvg } from "./views/icons";
 import { setCurrentCatSkin } from "./views/user-state";
 import { showAuthScreen } from "./views/auth";
 import * as FeynmanView from "./views/feynman";
+import * as SummariesView from "./views/summaries";
 import * as MoodView from "./views/mood";
 import * as NotesView from "./views/notes";
 import * as PomodoroView from "./views/pomodoro";
@@ -210,6 +211,16 @@ const APP_HTML = `
         </div>
 
         <div id="stats-view" class="hidden">
+          <section class="card hidden" id="ai-summary-card">
+            <div class="section-header">
+              <h2>AI weekly recap</h2>
+              <button id="ai-summary-generate" type="button">Generate</button>
+            </div>
+            <p class="hint" id="ai-summary-hint">Synthesizes this week's work, mood, and reflections into a short narrative.</p>
+            <p class="message" id="ai-summary-message"></p>
+            <div id="ai-summary-content" class="ai-summary-markdown"></div>
+            <p class="hint" id="ai-summary-meta"></p>
+          </section>
           <section class="card hidden" id="weekly-summary-card">
             <h2>Weekly summary</h2>
             <p class="hint">Last 7 days vs the 7 days before that.</p>
@@ -506,6 +517,9 @@ function mountApp(user: UserRead): void {
   StatsView.init(() => StatsView.refresh());
   StopwatchView.init(user.cat_skin);
   FriendsView.init(() => FriendsView.refresh());
+  // AI panel lives inside the stats view. Fire-and-forget — config fetch
+  // determines whether the card reveals itself.
+  void SummariesView.init();
 
   document.querySelectorAll<HTMLButtonElement>(".feature-tab").forEach((tab) => {
     tab.addEventListener("click", () => {

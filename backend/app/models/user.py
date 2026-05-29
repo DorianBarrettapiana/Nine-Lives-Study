@@ -41,3 +41,9 @@ class User(Base):
     # Daily work-time goal in minutes (pomodoro + stopwatch combined).
     # Displayed as a progress meter under the XP card. Default 120 = 2h.
     daily_goal_minutes: Mapped[int] = mapped_column(Integer, default=120, nullable=False)
+
+    # True once the user has explicitly agreed to send their reflection /
+    # notes / session text to OpenAI for AI summary generation. The first
+    # time they click a "Generate" button we show a disclosure modal that
+    # flips this to True. Until then, AI routes refuse with 403.
+    ai_opt_in: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

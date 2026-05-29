@@ -21,6 +21,7 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     ("users", "cat_skin_changed_at",               "TIMESTAMP"),
     ("users", "cat_skin_free_changes",             "INTEGER NOT NULL DEFAULT 1"),
     ("users", "daily_goal_minutes",                "INTEGER NOT NULL DEFAULT 120"),
+    ("users", "ai_opt_in",                         "BOOLEAN NOT NULL DEFAULT 0"),
     ("daily_tasks", "sort_order",                  "REAL NOT NULL DEFAULT 0"),
 ]
 
