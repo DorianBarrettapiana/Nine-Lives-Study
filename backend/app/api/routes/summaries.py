@@ -33,9 +33,12 @@ from app.schemas.ai_summary import (
 
 router = APIRouter(prefix="/summaries", tags=["summaries"])
 
-# Daily cap per (user, kind). Cheap floor against runaway clicking; the
-# unique-index dedupe on period_key is the structural guarantee.
-_MANUAL_DAILY_CAP = 3
+# Daily cap per (user, kind). Each call to Claude bills regardless of whether
+# the row UPSERT-overwrites — so this cap is the only thing standing between a
+# trigger-happy user and a runaway bill. 1/day matches normal use (Sunday
+# ritual + the occasional ad-hoc reflection); raising it back to 3 was
+# previously a misjudgment that turned a $5 budget into a 2-3 week ceiling.
+_MANUAL_DAILY_CAP = 1
 
 
 def _utc_now() -> datetime:

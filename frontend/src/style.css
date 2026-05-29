@@ -1798,3 +1798,42 @@ h3 {
   gap: 0.6rem;
   justify-content: flex-end;
 }
+
+/* --- AI summary collapsible (default folded) --------------------------- */
+
+.ai-summary-details {
+  margin-top: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.ai-summary-details > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.9rem;
+  color: var(--text-soft);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  user-select: none;
+}
+.ai-summary-details > summary::-webkit-details-marker { display: none; }
+.ai-summary-details > summary::before {
+  content: "▸";
+  font-size: 0.7rem;
+  opacity: 0.6;
+  transition: transform 0.15s;
+}
+.ai-summary-details[open] > summary::before {
+  transform: rotate(90deg);
+}
+.ai-summary-details > summary:hover {
+  background: var(--card-hover, rgba(255,255,255,0.04));
+  border-radius: 7px 7px 0 0;
+}
+.ai-summary-details[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+.ai-summary-body {
+  padding: 0.6rem 0.9rem 0.9rem;
+}
