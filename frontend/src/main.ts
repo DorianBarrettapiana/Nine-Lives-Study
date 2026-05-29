@@ -4,6 +4,7 @@
 
 import "./style.css";
 import { ApiError, UnauthorizedError } from "./api/client";
+import { installErrorBoundary, withFallback } from "./errorBoundary";
 import { fmtMinutes } from "./utils";
 import { getMe, logout, updateMe, type UserRead } from "./api/users";
 import { applyTheme } from "./theme";
@@ -529,13 +530,18 @@ async function bootstrap(): Promise<void> {
     currentUser = null;
   }
 
-  if (currentUser) {
-    mountApp(currentUser);
-  } else {
-    const user = await showAuthScreen(app!);
-    currentUser = user;
-    mountApp(user);
-  }
+  // Wrap mountApp / auth flow in withFallback so a view's broken init()
+  // surfaces a visible banner instead of a silent blank page.
+  await withFallback(async () => {
+    if (currentUser) {
+      mountApp(currentUser);
+    } else {
+      const user = await showAuthScreen(app!);
+      currentUser = user;
+      mountApp(user);
+    }
+  });
 }
 
+installErrorBoundary();
 void bootstrap();
