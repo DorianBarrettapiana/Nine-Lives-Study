@@ -50,6 +50,15 @@ app = FastAPI(
 _cors_origins_env = os.environ.get("CORS_ORIGINS", "")
 _cors_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
 if not _cors_origins:
+    # Dev fallback. In production this would silently let an unrelated origin
+    # talk to a real cookie-auth backend if CORS_ORIGINS got misconfigured /
+    # dropped, so refuse to boot unless we're explicitly in a dev env.
+    _env = os.environ.get("APP_ENV", "dev").lower()
+    if _env not in {"dev", "development", "test", "testing"}:
+        raise RuntimeError(
+            "CORS_ORIGINS must be set in non-dev environments "
+            "(refusing to fall back to http://localhost:5173)."
+        )
     _cors_origins = ["http://localhost:5173"]
 
 app.add_middleware(
