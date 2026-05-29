@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -40,4 +40,20 @@ class PomodoroSession(Base):
     ended_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+
+    # Partial unique index: at most ONE in-progress work pomodoro per user.
+    # Same family of bug as the stopwatch race — without this, two concurrent
+    # POST /pomodoro requests could both pass the (currently absent) check and
+    # leave the user with multiple "in progress" work sessions, each granting
+    # 1 XP/min on Complete. Break sessions intentionally excluded: they're
+    # short, count no XP, and the auto-cycle UX benefits from leniency.
+    __table_args__ = (
+        Index(
+            "uq_pomodoro_one_active_work_per_user",
+            "user_id",
+            unique=True,
+            sqlite_where=text("is_completed = 0 AND session_type = 'work'"),
+            postgresql_where=text("is_completed = false AND session_type = 'work'"),
+        ),
     )
