@@ -16,6 +16,18 @@ if (-not $env:INVITE_CODE) {
     }
 }
 
+# ANTHROPIC_API_KEY: optional. Enables the AI summary routes (/summaries/*).
+# Same pattern as INVITE_CODE — Machine env var first, then a file in
+# C:\srv\backend\ as a non-git-tracked fallback. When absent, the AI features
+# silently hide themselves in the frontend (graceful 503 from
+# /summaries/config); the rest of the app works unchanged.
+if (-not $env:ANTHROPIC_API_KEY) {
+    $aiKeyFile = "C:\srv\backend\.anthropic-key"
+    if (Test-Path $aiKeyFile) {
+        $env:ANTHROPIC_API_KEY = (Get-Content $aiKeyFile -Raw).Trim()
+    }
+}
+
 $logDir = Split-Path $LogFile -Parent
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
 
