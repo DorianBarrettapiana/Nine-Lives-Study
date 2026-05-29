@@ -21,7 +21,7 @@ import {
   startStopwatch,
   type StopwatchSessionRead,
 } from "../api/stopwatch";
-import { flashMessage, fmtMinutes, parseApiDate, setMessage } from "../utils";
+import { flashMessage, fmtMinutes, setMessage } from "../utils";
 import { renderAnalogClockSvg } from "./clock";
 import { getTodayWorkMinutes } from "./stats";
 
@@ -33,6 +33,14 @@ let endBtn: HTMLButtonElement;
 let messageEl: HTMLParagraphElement;
 
 let active: StopwatchSessionRead | null = null;
+// Local clock baseline for the currently-active session. We anchor on the
+// server's `elapsed_seconds` at the moment we received the response, then
+// just add `(Date.now() - activeFetchedAt)` while running. This sidesteps
+// client-vs-server wall-clock skew, which previously caused a visible jump
+// on Resume when the client's clock differed from the server's by even a
+// few seconds. Null when no active session.
+let activeElapsedAtFetchSeconds = 0;
+let activeFetchedAtMs = 0;
 let tickIntervalId: ReturnType<typeof setInterval> | null = null;
 // True when a pomodoro is currently running locally; blocks Start.
 let pomodoroBlocking = false;
@@ -58,13 +66,13 @@ function fmtHMS(totalSeconds: number): string {
 
 function currentElapsedSeconds(): number {
   if (!active) return 0;
-  if (active.is_running && active.last_started_at) {
-    // SQLite drops timezone info → server timestamps are naive UTC. Use
-    // parseApiDate so JS doesn't interpret them as local time (which
-    // would cause a tz-offset-sized jump on Start, e.g. +2h in CEST).
-    const startedMs = parseApiDate(active.last_started_at).getTime();
-    const sinceResume = Math.max(0, (Date.now() - startedMs) / 1000);
-    return active.accumulated_seconds + sinceResume;
+  if (active.is_running) {
+    // Anchor on `elapsed_seconds` from the response (server's authoritative
+    // total at fetch time) + client-side delta since then. The previous
+    // implementation computed `accumulated + (Date.now() - last_started_at)`
+    // which baked in client-vs-server clock skew on every render.
+    const sinceFetch = Math.max(0, (Date.now() - activeFetchedAtMs) / 1000);
+    return activeElapsedAtFetchSeconds + sinceFetch;
   }
   return active.accumulated_seconds;
 }
@@ -126,6 +134,11 @@ function stopTicking(): void {
 
 function setActive(s: StopwatchSessionRead | null): void {
   active = s;
+  // Snapshot the server's authoritative elapsed total and the moment we
+  // observed it. The tick will extrapolate from this baseline rather than
+  // recomputing from `last_started_at` (which is server-clock relative).
+  activeElapsedAtFetchSeconds = s ? s.elapsed_seconds : 0;
+  activeFetchedAtMs = Date.now();
   if (s && s.is_running) startTicking();
   else stopTicking();
   // Tell the rest of the app (specifically pomodoro view) whether to
