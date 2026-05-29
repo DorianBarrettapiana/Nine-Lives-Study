@@ -15,7 +15,6 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.migrations import run_migrations
 
-
 # ---------------------------------------------------------------------------
 # 1. Concurrent start can never create two active rows
 # ---------------------------------------------------------------------------

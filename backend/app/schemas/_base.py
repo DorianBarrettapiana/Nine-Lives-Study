@@ -24,10 +24,11 @@ def _to_utc_iso(value: datetime | None) -> str | None:
     # Naive datetimes in this codebase are always UTC (SQLite stores naive,
     # writers always use `datetime.now(timezone.utc)`). Aware datetimes are
     # converted to UTC so the suffix is unconditionally `Z`.
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    else:
-        value = value.astimezone(timezone.utc)
+    value = (
+        value.replace(tzinfo=timezone.utc)
+        if value.tzinfo is None
+        else value.astimezone(timezone.utc)
+    )
     return value.isoformat().replace("+00:00", "Z")
 
 
