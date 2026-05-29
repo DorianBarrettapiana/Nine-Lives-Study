@@ -40,6 +40,26 @@ export async function listSummaries(kind: SummaryKind): Promise<AiSummaryRead[]>
   return apiFetch<AiSummaryRead[]>(`/summaries/${kind}`);
 }
 
+export interface WeeklyAvailability {
+  can_generate: boolean;
+  // Present when can_generate=true: human label of the current slot.
+  slot?: "Tuesday" | "Friday";
+  // Present in most responses: which (kind, period_key) this slot would write.
+  period_key?: string;
+  // "off_day" — today isn't Tue/Fri; `next_slot` names the next available day.
+  // "already_generated" — this slot's row already exists in the DB.
+  reason?: "off_day" | "already_generated";
+  next_slot?: "Tuesday" | "Friday";
+}
+
+export async function getWeeklyAvailability(
+  tzOffsetMinutes: number,
+): Promise<WeeklyAvailability> {
+  return apiFetch<WeeklyAvailability>(
+    `/summaries/weekly/availability?tz_offset=${tzOffsetMinutes}`,
+  );
+}
+
 export async function generateWeekly(tzOffsetMinutes: number): Promise<AiSummaryRead> {
   // The server anchors the week on the caller's local Monday — same
   // convention stats uses (minutes east of UTC, JS sign-flipped).
