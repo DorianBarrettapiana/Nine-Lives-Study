@@ -57,19 +57,27 @@ function broadcastPomodoroState(): void {
 
 // True if the stopwatch view has told us a session is running on the server.
 let stopwatchBlocking = false;
+
+function updateStartButtonLock(): void {
+  // Centralised disable rule. Called from both the stopwatch:state listener
+  // AND `render()` so the button state stays correct after local actions
+  // (Reset, onComplete, etc.) — not just after stopwatch events.
+  if (typeof pomodoroStartButton === "undefined" || !pomodoroStartButton) return;
+  // Lock only when we'd actually fire a server `startSession` on the next
+  // click: idle pomodoro (no in-progress session, not running) AND a
+  // stopwatch is active server-side. Pause / Resume of an existing session
+  // doesn't hit the mutex, so we leave the button alone in those states.
+  const wouldHitMutex = stopwatchBlocking && !pomodoroRunning && activeSessionId === null;
+  pomodoroStartButton.disabled = wouldHitMutex;
+  pomodoroStartButton.title = wouldHitMutex
+    ? "Stop the work timer first to start a pomodoro"
+    : "";
+}
+
 window.addEventListener("stopwatch:state", (e: Event) => {
   const ce = e as CustomEvent<{ active: boolean; running: boolean }>;
   stopwatchBlocking = !!(ce.detail?.active);
-  // Disable the Start button if stopwatch is locking us out and we're idle.
-  if (typeof pomodoroStartButton !== "undefined" && pomodoroStartButton) {
-    if (stopwatchBlocking && !pomodoroRunning && activeSessionId === null) {
-      pomodoroStartButton.disabled = true;
-      pomodoroStartButton.title = "Stop the work timer first to start a pomodoro";
-    } else {
-      pomodoroStartButton.disabled = false;
-      pomodoroStartButton.title = "";
-    }
-  }
+  updateStartButtonLock();
 });
 let pomodoroIntervalId: ReturnType<typeof setInterval> | null = null;
 let activeSessionId: number | null = null;
@@ -177,6 +185,10 @@ export function render(): void {
   pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
   pomodoroStartButton.textContent = pomodoroRunning ? "⏸ Pause" : "▶ Start";
   pomodoroStartButton.classList.toggle("pomo-running", pomodoroRunning);
+  // Re-evaluate the mutex lock on every render so Reset / Complete / etc.
+  // promptly reflect the current "would clicking Start hit the server?"
+  // answer without waiting for the next stopwatch:state event.
+  updateStartButtonLock();
   pomodoroModeBadge.textContent = modeLabel(pomodoroMode);
   pomodoroModeBadge.className = `tag ${pomodoroMode === "work" ? "" : "tag-break"}`;
 

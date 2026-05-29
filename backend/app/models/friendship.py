@@ -24,7 +24,7 @@ class Friendship(Base):
     # "pending" → request sent, not yet accepted; "accepted" → mutual friendship
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DateTime(),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )

@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas._base import BaseSchema, UtcDateTime
+
 
 class PomodoroSessionStart(BaseModel):
     """Payload to start a new Pomodoro session."""
@@ -18,10 +20,12 @@ class PomodoroSessionStart(BaseModel):
 class PomodoroSessionComplete(BaseModel):
     """Payload to mark a session as completed."""
 
+    # Input only — kept as plain `datetime` so callers can pass either a Z or
+    # naive value without coercion. Output schemas use `UtcDateTime`.
     ended_at: datetime | None = None
 
 
-class PomodoroSessionRead(BaseModel):
+class PomodoroSessionRead(BaseSchema):
     """Public representation of a Pomodoro session."""
 
     id: int
@@ -29,7 +33,5 @@ class PomodoroSessionRead(BaseModel):
     session_type: str
     duration_minutes: int
     is_completed: bool
-    started_at: datetime
-    ended_at: datetime | None
-
-    model_config = {"from_attributes": True}
+    started_at: UtcDateTime
+    ended_at: UtcDateTime | None

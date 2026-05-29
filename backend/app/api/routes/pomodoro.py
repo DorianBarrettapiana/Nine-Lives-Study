@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -71,7 +72,26 @@ def start_session(
         duration_minutes=payload.duration_minutes,
     )
     db.add(session)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        # Partial unique index fired: user already has an in-progress work
+        # session. Return the existing one so the client picks it up via
+        # resumeIfInProgress instead of getting a 500.
+        db.rollback()
+        existing = db.scalar(
+            select(PomodoroSession)
+            .where(PomodoroSession.user_id == current_user.id)
+            .where(PomodoroSession.is_completed.is_(False))
+            .where(PomodoroSession.session_type == "work")
+            .order_by(PomodoroSession.started_at.desc())
+        )
+        if existing is not None:
+            return existing
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A pomodoro work session is already active.",
+        ) from exc
     db.refresh(session)
     return session
 

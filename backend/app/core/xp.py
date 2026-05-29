@@ -106,10 +106,21 @@ def award_xp_event(
 
     try:
         db.flush()
-    except IntegrityError:
-        # Race condition: someone inserted the same event concurrently.
-        # Roll back this attempt; the prior insert already credited XP.
+    except IntegrityError as exc:
+        # Race condition: someone inserted the same event concurrently
+        # (UNIQUE on user_id+event_type+entity_type+entity_id). Roll back
+        # this attempt; the prior insert already credited XP. We only want
+        # to swallow that specific case — NOT NULL / FK / check-constraint
+        # failures are real bugs and must surface.
+        msg = str(exc.orig).lower() if exc.orig is not None else str(exc).lower()
+        is_unique_violation = (
+            "unique" in msg
+            or "duplicate" in msg
+            or getattr(exc.orig, "sqlite_errorname", "") == "SQLITE_CONSTRAINT_UNIQUE"
+        )
         db.rollback()
+        if not is_unique_violation:
+            raise
         return False
     return True
 

@@ -2,16 +2,16 @@
 
 from pydantic import BaseModel
 
+from app.schemas._base import BaseSchema, UtcDateTime
 
-class UserSearchResult(BaseModel):
+
+class UserSearchResult(BaseSchema):
     id: int
     username: str
     cat_skin: str = "tabby"
 
-    model_config = {"from_attributes": True}
 
-
-class FriendEntry(BaseModel):
+class FriendEntry(BaseSchema):
     user_id: int
     username: str
     cat_skin: str = "tabby"
@@ -19,15 +19,11 @@ class FriendEntry(BaseModel):
     # — i.e. the Cheer button is currently available.
     can_cheer: bool = True
 
-    model_config = {"from_attributes": True}
 
-
-class FriendRequestEntry(BaseModel):
+class FriendRequestEntry(BaseSchema):
     user_id: int
     username: str
     cat_skin: str = "tabby"
-
-    model_config = {"from_attributes": True}
 
 
 class DailyMinutes(BaseModel):
@@ -43,23 +39,25 @@ class FriendStudyStats(BaseModel):
     total_minutes: int
 
 
-class FeedItem(BaseModel):
+class FeedItem(BaseSchema):
     id: int
     user_id: int
     username: str
     cat_skin: str = "tabby"
     event_type: str
     amount: int
-    created_at: str
+    # Routes pass the raw `datetime` from the DB; BaseSchema serializes it
+    # as explicit-UTC ISO so the client doesn't need a tz fallback.
+    created_at: "UtcDateTime"  # forward-ref to keep import block minimal
     like_count: int
     liked_by_me: bool
 
 
-class NotificationItem(BaseModel):
+class NotificationItem(BaseSchema):
     liker_username: str
     liker_cat_skin: str = "tabby"
     event_type: str
-    created_at: str
+    created_at: "UtcDateTime"
 
 
 class NotificationsResponse(BaseModel):

@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas._base import BaseSchema
+
 # Keep in sync with frontend/src/views/avatar.ts CAT_SKINS.
 CatSkin = Literal[
     "tabby", "black", "white", "gray", "calico", "siamese",
@@ -38,7 +40,7 @@ class UserUpdate(BaseModel):
     daily_goal_minutes: int | None = Field(default=None, ge=15, le=720)
 
 
-class UserRead(BaseModel):
+class UserRead(BaseSchema):
     """Public representation of a user."""
 
     id: int
@@ -62,5 +64,3 @@ class UserRead(BaseModel):
 
     # Daily work-time goal — surfaced so the picker UI can read/write it.
     daily_goal_minutes: int = 120
-
-    model_config = {"from_attributes": True}

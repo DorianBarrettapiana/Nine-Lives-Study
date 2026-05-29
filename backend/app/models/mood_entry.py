@@ -22,5 +22,5 @@ class MoodEntry(Base):
     mood: Mapped[str] = mapped_column(String(20), nullable=False)
     reflection: Mapped[str] = mapped_column(Text, default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utc_now, nullable=False
+        DateTime(), default=utc_now, nullable=False
     )

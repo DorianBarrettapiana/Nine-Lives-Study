@@ -1,8 +1,10 @@
 """Pydantic schemas for the daily tracker."""
 
-from datetime import date, datetime
+from datetime import date
 
 from pydantic import BaseModel, Field
+
+from app.schemas._base import BaseSchema, UtcDateTime
 
 
 class DailyTaskCreate(BaseModel):
@@ -23,7 +25,7 @@ class DailyTaskUpdate(BaseModel):
     sort_order: float | None = None
 
 
-class DailyTaskRead(BaseModel):
+class DailyTaskRead(BaseSchema):
     """Public representation of a daily task."""
 
     id: int
@@ -32,10 +34,8 @@ class DailyTaskRead(BaseModel):
     text: str
     is_done: bool
     sort_order: float = 0
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
+    created_at: UtcDateTime
+    updated_at: UtcDateTime
 
 
 class DailyLogUpsert(BaseModel):
@@ -46,7 +46,7 @@ class DailyLogUpsert(BaseModel):
     reflection: str = ""
 
 
-class DailyLogRead(BaseModel):
+class DailyLogRead(BaseSchema):
     """Public representation of a daily log."""
 
     id: int
@@ -54,10 +54,8 @@ class DailyLogRead(BaseModel):
     log_date: date
     mood: str
     reflection: str
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
+    created_at: UtcDateTime
+    updated_at: UtcDateTime
 
 
 class DailyStateRead(BaseModel):

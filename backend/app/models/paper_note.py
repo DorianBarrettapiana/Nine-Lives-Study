@@ -35,12 +35,12 @@ class PaperNote(Base):
     tags: Mapped[str] = mapped_column(String(500), default="", nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DateTime(),
         default=utc_now,
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DateTime(),
         default=utc_now,
         onupdate=utc_now,
         nullable=False,

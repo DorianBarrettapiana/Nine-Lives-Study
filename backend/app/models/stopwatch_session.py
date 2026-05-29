@@ -40,11 +40,11 @@ class StopwatchSession(Base):
 
     # First Start.
     started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utc_now, nullable=False,
+        DateTime(), default=utc_now, nullable=False,
     )
     # Final End. NULL while still active (running or paused).
     ended_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(), nullable=True,
     )
     # Counted seconds from prior running segments. Does NOT include the
     # in-progress segment when running.
@@ -54,7 +54,7 @@ class StopwatchSession(Base):
     # When the current running segment started (initial Start or Resume).
     # NULL when the session is paused or ended.
     last_started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(), nullable=True,
     )
 
     # Partial unique index: at most ONE not-yet-ended row per user. Blocks the

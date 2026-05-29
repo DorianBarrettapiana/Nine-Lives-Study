@@ -334,7 +334,7 @@ def get_feed(
             cat_skin=skin,
             event_type=ev.event_type,
             amount=ev.amount,
-            created_at=ev.created_at.isoformat() if ev.created_at else "",
+            created_at=ev.created_at,
             like_count=like_counts.get(ev.id, 0),
             liked_by_me=ev.id in my_likes,
         )
@@ -467,7 +467,7 @@ def get_notifications(
             liker_username=uname,
             liker_cat_skin=skin,
             event_type=etype,
-            created_at=like.created_at.isoformat(),
+            created_at=like.created_at,
         )))
     for cheer, uname, skin in cheer_rows:
         if cheer.created_at is None:
@@ -476,7 +476,7 @@ def get_notifications(
             liker_username=uname,
             liker_cat_skin=skin,
             event_type="cheered_you",
-            created_at=cheer.created_at.isoformat(),
+            created_at=cheer.created_at,
         )))
 
     # Sort by recency and keep the top 20 across both kinds.

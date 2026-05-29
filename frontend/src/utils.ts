@@ -12,12 +12,13 @@ export function formatDate(value: string): string {
   return new Date(value).toLocaleString();
 }
 
-// SQLite returns naive datetime strings (no "Z"/"+00:00" suffix) even though
-// the values are always UTC. Without a suffix, JS treats the string as LOCAL
-// time, so UTC 10:30 would display as 10:30 instead of 12:30 in France (CEST).
-// This helper appends "Z" when no timezone info is present.
+// The server now always emits ISO-8601 datetimes with an explicit UTC suffix
+// (`...Z`) — see `app/schemas/_base.py`. This helper used to compensate for
+// the old naive-without-suffix format; today it's effectively `new Date(...)`
+// but we keep it as a single chokepoint so any future format change is
+// localized to one place.
 export function parseApiDate(value: string): Date {
-  return new Date(/[Z+]/.test(value) ? value : value + "Z");
+  return new Date(value);
 }
 
 export function formatTime(seconds: number): string {

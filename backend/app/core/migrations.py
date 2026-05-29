@@ -80,6 +80,41 @@ def run_migrations(engine: Engine) -> None:
             if "daily_tasks" in existing_tables:
                 conn.execute(_BACKFILL_TASKS)
 
+        # Pomodoro orphan cleanup + uniqueness guard. Same family of bug as
+        # the stopwatch one: previously nothing prevented two concurrent
+        # POST /pomodoro requests from both creating an in-progress work
+        # session. Each completion awarded XP independently. For each user,
+        # mark every duplicate in-progress work session EXCEPT the newest as
+        # completed-but-XP-less (ended_at=started_at, is_completed=true).
+        # We skip award_xp_event because these are ghost sessions the user
+        # never knowingly ran. Step 2 installs the partial unique index so
+        # the race can't recur.
+        if "pomodoro_sessions" in existing_tables:
+            conn.execute(text("""
+                UPDATE pomodoro_sessions
+                SET is_completed = 1,
+                    ended_at = started_at
+                WHERE is_completed = 0
+                  AND session_type = 'work'
+                  AND id NOT IN (
+                    SELECT id FROM (
+                        SELECT id,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY user_id
+                                   ORDER BY started_at DESC, id DESC
+                               ) AS rn
+                        FROM pomodoro_sessions
+                        WHERE is_completed = 0 AND session_type = 'work'
+                    ) ranked
+                    WHERE rn = 1
+                  )
+            """))
+            conn.execute(text("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_pomodoro_one_active_work_per_user
+                ON pomodoro_sessions (user_id)
+                WHERE is_completed = 0 AND session_type = 'work'
+            """))
+
         # Stopwatch orphan cleanup + uniqueness guard.
         # Background: POST /stopwatch/start had a TOCTOU race that could
         # leave a user with >1 sessions where ended_at IS NULL. Each ghost
