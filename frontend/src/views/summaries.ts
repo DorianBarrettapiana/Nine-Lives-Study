@@ -82,13 +82,22 @@ function applyInline(text: string): string {
 
 // --- UI state helpers -------------------------------------------------------
 
-function showSummary(s: AiSummaryRead): void {
+function showSummary(s: AiSummaryRead, { expanded = false }: { expanded?: boolean } = {}): void {
   if (!contentEl || !metaEl) return;
-  contentEl.innerHTML = renderMarkdown(s.content);
   const when = parseApiDate(s.generated_at).toLocaleString(undefined, {
     month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
   });
-  metaEl.textContent = `Generated ${when} · ${s.period_key} · ${s.model}`;
+  // Wrap in <details> so re-opening the Stats view shows a compact one-line
+  // summary instead of an unprompted wall of markdown. Just-generated
+  // summaries open expanded (the user clicked Generate seconds ago and wants
+  // to read the result without an extra click); historical ones stay folded.
+  contentEl.innerHTML = `
+    <details class="ai-summary-details" ${expanded ? "open" : ""}>
+      <summary>Recap for ${s.period_key} · generated ${when}</summary>
+      <div class="ai-summary-body">${renderMarkdown(s.content)}</div>
+    </details>
+  `;
+  metaEl.textContent = `${s.model}`;
 }
 
 function clearSummary(): void {
@@ -160,7 +169,8 @@ async function onGenerateClick(): Promise<void> {
   try {
     const tzOffset = -new Date().getTimezoneOffset();  // minutes east of UTC
     const summary = await generateWeekly(tzOffset);
-    showSummary(summary);
+    // Just-generated: auto-expand so the user reads it without another click.
+    showSummary(summary, { expanded: true });
     flashMessage(messageEl, "Recap ready.", "success");
   } catch (e) {
     setMessage(messageEl, parseError(e), "error");
