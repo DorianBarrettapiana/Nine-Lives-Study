@@ -37,12 +37,12 @@ class DailyTask(Base):
     sort_order: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DateTime(),
         default=utc_now,
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DateTime(),
         default=utc_now,
         onupdate=utc_now,
         nullable=False,
@@ -71,12 +71,12 @@ class DailyLog(Base):
     reflection: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DateTime(),
         default=utc_now,
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DateTime(),
         default=utc_now,
         onupdate=utc_now,
         nullable=False,

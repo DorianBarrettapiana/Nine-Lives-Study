@@ -33,12 +33,12 @@ class PomodoroSession(Base):
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DateTime(),
         default=utc_now,
         nullable=False,
     )
     ended_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
+        DateTime(),
         nullable=True,
     )
 

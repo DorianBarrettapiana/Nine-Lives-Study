@@ -1,8 +1,8 @@
 """Pydantic schemas for paper notes."""
 
-from datetime import datetime
-
 from pydantic import BaseModel, Field
+
+from app.schemas._base import BaseSchema, UtcDateTime
 
 
 class PaperNoteCreate(BaseModel):
@@ -27,7 +27,7 @@ class PaperNoteUpdate(BaseModel):
     tags: str | None = Field(default=None, max_length=500)
 
 
-class PaperNoteRead(BaseModel):
+class PaperNoteRead(BaseSchema):
     """Public representation of a paper note."""
 
     id: int
@@ -38,7 +38,5 @@ class PaperNoteRead(BaseModel):
     key_points: str
     questions: str
     tags: str
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
+    created_at: UtcDateTime
+    updated_at: UtcDateTime

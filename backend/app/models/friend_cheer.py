@@ -25,7 +25,7 @@ class FriendCheer(Base):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DateTime(),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )

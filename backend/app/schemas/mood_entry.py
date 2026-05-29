@@ -1,8 +1,8 @@
 """Pydantic schemas for mood entries."""
 
-from datetime import datetime
-
 from pydantic import BaseModel
+
+from app.schemas._base import BaseSchema, UtcDateTime
 
 
 class MoodEntryCreate(BaseModel):
@@ -10,11 +10,9 @@ class MoodEntryCreate(BaseModel):
     reflection: str = ""
 
 
-class MoodEntryRead(BaseModel):
+class MoodEntryRead(BaseSchema):
     id: int
     user_id: int
     mood: str
     reflection: str
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
+    created_at: UtcDateTime

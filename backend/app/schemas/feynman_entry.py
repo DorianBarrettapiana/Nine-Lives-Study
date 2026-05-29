@@ -1,8 +1,8 @@
 """Pydantic schemas for Feynman entries."""
 
-from datetime import datetime
-
 from pydantic import BaseModel, Field
+
+from app.schemas._base import BaseSchema, UtcDateTime
 
 
 class FeynmanEntryCreate(BaseModel):
@@ -23,7 +23,7 @@ class FeynmanEntryUpdate(BaseModel):
     analogy: str | None = None
 
 
-class FeynmanEntryRead(BaseModel):
+class FeynmanEntryRead(BaseSchema):
     """Public representation of a Feynman entry."""
 
     id: int
@@ -32,7 +32,5 @@ class FeynmanEntryRead(BaseModel):
     explanation: str
     gaps: str
     analogy: str
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
+    created_at: UtcDateTime
+    updated_at: UtcDateTime
