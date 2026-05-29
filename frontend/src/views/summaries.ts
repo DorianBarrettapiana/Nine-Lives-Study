@@ -260,10 +260,13 @@ async function refreshAvailability(): Promise<void> {
     generateBtn.title = `${avail.slot} slot · creates ${avail.period_key}`;
   } else if (avail.reason === "off_day") {
     generateBtn.disabled = true;
-    generateBtn.textContent = "Generate";
+    // Show the user WHY the button is dead in the button text itself, not
+    // just the tooltip — tooltips don't show on mobile, and a greyed-out
+    // "Generate" leaves the user wondering whether the feature is broken.
+    generateBtn.textContent = `Available ${avail.next_slot ?? "Tuesday"}`;
     generateBtn.title =
-      `Weekly recap is available Tuesdays and Fridays. ` +
-      `Next slot: ${avail.next_slot ?? "Tuesday"}.`;
+      `Weekly recap can only be generated on Tuesdays and Fridays. ` +
+      `Next available: ${avail.next_slot ?? "Tuesday"}.`;
   } else if (avail.reason === "already_generated") {
     generateBtn.disabled = true;
     generateBtn.textContent = "Already generated";

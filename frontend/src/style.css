@@ -80,8 +80,16 @@ button {
   cursor: pointer;
 }
 
-button:hover {
+button:hover:not(:disabled) {
   background: var(--accent-dark);
+}
+
+/* Universal disabled affordance. Without this, `button.disabled=true` from
+ * JS visually looks identical to the enabled state — the click silently
+ * does nothing, which reads as a broken UI. */
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 button.secondary {
