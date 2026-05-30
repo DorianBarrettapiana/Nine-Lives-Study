@@ -19,11 +19,13 @@ import {
   pauseStopwatch,
   resumeStopwatch,
   startStopwatch,
+  updateStopwatchTask,
   type StopwatchSessionRead,
 } from "../api/stopwatch";
 import { flashMessage, fmtMinutes, setMessage } from "../utils";
 import { renderAnalogClockSvg } from "./clock";
 import { getTodayWorkMinutes } from "./stats";
+import { renderTaskPicker } from "./taskPicker";
 
 let clockEl: HTMLDivElement;       // analog clock SVG container
 let displayEl: HTMLDivElement;     // digital readout below the clock
@@ -31,6 +33,12 @@ let todayEl: HTMLParagraphElement; // "Today: Xh Ym" hint line
 let startBtn: HTMLButtonElement;
 let endBtn: HTMLButtonElement;
 let messageEl: HTMLParagraphElement;
+let taskPickerEl: HTMLDivElement | null = null;
+
+// Holds the picker's "what should we start with" value until the user
+// clicks Start. Once a session is active, the source of truth is
+// `active.linked_task_id` and this variable is no longer consulted.
+let pendingTaskId: number | null = null;
 
 let active: StopwatchSessionRead | null = null;
 // Local clock baseline for the currently-active session. We anchor on the
@@ -141,6 +149,8 @@ function setActive(s: StopwatchSessionRead | null): void {
   activeFetchedAtMs = Date.now();
   if (s && s.is_running) startTicking();
   else stopTicking();
+  // Picker selection follows active.linked_task_id (or pending when idle).
+  void refreshTaskPickerUI();
   // Tell the rest of the app (specifically pomodoro view) whether to
   // disable its Start button.
   window.dispatchEvent(new CustomEvent("stopwatch:state", {
@@ -171,7 +181,7 @@ async function onStartClick(): Promise<void> {
   setMessage(messageEl, "", "neutral");
   try {
     if (active === null) {
-      const s = await startStopwatch();
+      const s = await startStopwatch(pendingTaskId);
       setActive(s);
     } else if (active.is_running) {
       // Optimistic pause: freeze the displayed seconds immediately so the
@@ -236,6 +246,31 @@ export async function refresh(): Promise<void> {
   }
 }
 
+async function refreshTaskPickerUI(): Promise<void> {
+  if (taskPickerEl === null) return;
+  // Two modes:
+  //  - No active session → picker writes to `pendingTaskId`, picked up on Start.
+  //  - Active session → picker PATCHes the running row mid-stream.
+  // We rebuild the whole picker on every refresh because the task list
+  // itself may have changed (user added/completed a task in tracker).
+  const selectedId = active !== null ? active.linked_task_id : pendingTaskId;
+  await renderTaskPicker({
+    container: taskPickerEl,
+    selectedTaskId: selectedId,
+    label: active !== null ? "Working on" : "Working on",
+    onChange: (taskId) => {
+      if (active === null) {
+        pendingTaskId = taskId;
+        return;
+      }
+      // Optimistic local update so the dropdown reflects the choice
+      // immediately even before the PATCH returns.
+      active = { ...active, linked_task_id: taskId };
+      void updateStopwatchTask(active.id, taskId).then(setActive);
+    },
+  });
+}
+
 export function init(initialCatSkin: string = "tabby"): void {
   catSkin = initialCatSkin;
   clockEl = document.querySelector<HTMLDivElement>("#stopwatch-clock")!;
@@ -244,10 +279,14 @@ export function init(initialCatSkin: string = "tabby"): void {
   startBtn = document.querySelector<HTMLButtonElement>("#stopwatch-start-btn")!;
   endBtn = document.querySelector<HTMLButtonElement>("#stopwatch-end-btn")!;
   messageEl = document.querySelector<HTMLParagraphElement>("#stopwatch-message")!;
+  taskPickerEl = document.querySelector<HTMLDivElement>("#stopwatch-task-picker");
 
   // The today-work line lives on a stale baseline until StatsView refreshes.
   // After each refresh, re-render so the line picks up the new value.
   window.addEventListener("progress:updated", () => render());
+
+  // Task list may have changed in the tracker view; re-fetch + re-render.
+  window.addEventListener("task-list:updated", () => void refreshTaskPickerUI());
 
   startBtn.addEventListener("click", () => void onStartClick());
   endBtn.addEventListener("click", () => void onEndClick());
@@ -260,4 +299,5 @@ export function init(initialCatSkin: string = "tabby"): void {
   });
 
   render();
+  void refreshTaskPickerUI();
 }

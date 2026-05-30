@@ -1845,3 +1845,41 @@ h3 {
 .ai-summary-body {
   padding: 0.6rem 0.9rem 0.9rem;
 }
+
+/* --- Task picker (stopwatch + pomodoro) --------------------------------- */
+
+.task-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  margin: 0.6rem 0;
+}
+.task-picker-label {
+  color: var(--text-soft);
+  flex-shrink: 0;
+}
+.task-picker-select {
+  flex: 1;
+  min-width: 0;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.task-picker-select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.task-picker-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.stopwatch-task-picker,
+.pomodoro-task-picker {
+  width: 100%;
+}

@@ -16,3 +16,7 @@ class StopwatchSessionRead(BaseSchema):
     is_running: bool
     # Convenience: total elapsed seconds (counted + current segment if running).
     elapsed_seconds: int
+    # Optional link to the daily task being worked on. Can be set at Start
+    # or PATCHed mid-session (stopwatch is open-ended; users often realize
+    # what they're doing only after a bit).
+    linked_task_id: int | None = None

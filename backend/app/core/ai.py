@@ -29,11 +29,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.streak import compute_streak
-from app.core.xp import EVENT_POMODORO, EVENT_STOPWATCH
+from app.core.xp import (
+    ENTITY_POMODORO,
+    ENTITY_STOPWATCH,
+    EVENT_POMODORO,
+    EVENT_STOPWATCH,
+)
 from app.models.daily_tracker import DailyLog, DailyTask
 from app.models.feynman_entry import FeynmanEntry
 from app.models.mood_entry import MoodEntry
 from app.models.paper_note import PaperNote
+from app.models.pomodoro_session import PomodoroSession
+from app.models.stopwatch_session import StopwatchSession
 from app.models.xp_event import XpEvent
 
 # --- SDK initialisation -----------------------------------------------------
@@ -165,11 +172,39 @@ def gather_weekly(user_id: int, week_start_utc: datetime, db: Session) -> dict:
 
     streak_days, _active_today = compute_streak(user_id, tz_offset_minutes=0, db=db)
 
+    # Work minutes grouped by the daily task the user linked to each session.
+    # JOIN XpEvent → session (pomodoro OR stopwatch) → DailyTask. Sessions
+    # without a linked_task_id bucket into "(unlabeled)". This is the single
+    # most important addition to the prompt — turns "you worked 12h" into
+    # "5h on chapter 2, 4h on lit review, 3h unlabeled".
+    time_per_task: Counter[str] = Counter()
+    for ev in work_events:
+        if ev.entity_type == ENTITY_POMODORO:
+            sess = db.get(PomodoroSession, ev.entity_id)
+        elif ev.entity_type == ENTITY_STOPWATCH:
+            sess = db.get(StopwatchSession, ev.entity_id)
+        else:
+            continue
+        if sess is None:
+            continue
+        task_label = "(unlabeled)"
+        if sess.linked_task_id is not None:
+            task = db.get(DailyTask, sess.linked_task_id)
+            if task is not None:
+                # First ~120 chars only — task text can be long and bulks up
+                # the prompt without adding signal.
+                task_label = (task.text or "(empty)")[:120]
+            # else: task was deleted post-session; label stays "(unlabeled)"
+        time_per_task[task_label] += ev.amount
+
     return {
         "week_start": week_start_utc.date().isoformat(),
         "week_end": (week_end_utc - timedelta(days=1)).date().isoformat(),
         "total_work_minutes": sum(minutes_by_day.values()),
         "work_minutes_per_day": dict(minutes_by_day),
+        # Sorted descending so the highest-investment task is first in the
+        # serialized JSON — keeps the prompt's natural narrative order.
+        "time_per_task_minutes": dict(time_per_task.most_common()),
         "tasks_done": tasks_done,
         "tasks_total": tasks_total,
         "moods": dict(mood_counter),
@@ -253,15 +288,27 @@ Tone: peer-to-peer, never corporate. Acknowledge real effort, flag
 patterns gently, and avoid empty validation. If a metric is low, say so —
 PhD students see through cheerleading.
 
+KEY DATA: `time_per_task_minutes` is a map of `{task_text: minutes}`
+showing how the week's work time split across the user's own daily-task
+labels. Use this as the spine of the recap — it's the difference between
+"you worked 12 hours" (useless) and "5h on chapter 2 vs 4h on lit
+review" (actionable). If "(unlabeled)" is a large share, gently note it
+so the user can start tagging more sessions. If the map is empty or all
+unlabeled, fall back to total hours and suggest the user try linking
+sessions to tasks for next week's recap to be more useful.
+
 Output format: Markdown. ~250 words total. Use these sections:
 - **This week in numbers** (1-2 lines: hours, sessions, streak)
-- **What stood out** (2-3 bullets — patterns, not raw stats)
-- **Worth noticing** (1-2 honest observations, including any dips)
+- **Where your time went** (2-3 bullets quoting the largest task labels
+  verbatim, with their hour counts)
+- **What stood out** (1-2 honest observations, including any dips)
 - **One thing to try next week** (a single concrete suggestion grounded
   in the data, not generic advice)
 
-Never invent data. If the input shows zero work or zero reflections,
-say that plainly and ask one curious question instead of padding.\
+Never invent data. Never invent task labels — quote them verbatim from
+`time_per_task_minutes` keys. If the input shows zero work or zero
+reflections, say that plainly and ask one curious question instead of
+padding.\
 """
 
 _SYSTEM_PAPER_NOTES = """\

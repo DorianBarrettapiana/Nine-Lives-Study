@@ -42,6 +42,17 @@ class PomodoroSession(Base):
         nullable=True,
     )
 
+    # Optional link to the daily task this pomodoro is working on. Set at
+    # Start (the dropdown defaults to the most recent unfinished daily
+    # task). Unlike stopwatch, pomodoros are short and goal-committed —
+    # we don't expose a mid-session edit endpoint; if you picked wrong
+    # you can fix the task via Reset → re-start.
+    linked_task_id: Mapped[int | None] = mapped_column(
+        ForeignKey("daily_tasks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Partial unique index: at most ONE in-progress work pomodoro per user.
     # Same family of bug as the stopwatch race — without this, two concurrent
     # POST /pomodoro requests could both pass the (currently absent) check and

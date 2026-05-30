@@ -63,6 +63,7 @@ const APP_HTML = `
           <div id="stopwatch-clock" class="stopwatch-clock"></div>
           <div id="stopwatch-display" class="stopwatch-display">00:00:00</div>
           <p id="stopwatch-today" class="hint stopwatch-today">Today: —</p>
+          <div id="stopwatch-task-picker" class="stopwatch-task-picker"></div>
           <div class="button-row stopwatch-buttons">
             <button id="stopwatch-start-btn" type="button">▶ Start</button>
             <button id="stopwatch-end-btn" type="button" class="secondary">End</button>
@@ -197,6 +198,7 @@ const APP_HTML = `
 
             <div class="pomodoro-timer">
               <div id="pomodoro-display" class="pomodoro-display">25:00</div>
+              <div id="pomodoro-task-picker" class="pomodoro-task-picker"></div>
               <div class="button-row">
                 <button id="pomodoro-start-button">Start</button>
                 <button id="pomodoro-reset-button" class="secondary">Reset</button>

@@ -12,6 +12,7 @@
  */
 
 import { completeSession, deleteSession, listSessions, startSession, type PomodoroSessionRead } from "../api/pomodoro";
+import { renderTaskPicker } from "./taskPicker";
 import { updateMe, type UserRead } from "../api/users";
 import { flashMessage, fmtMinutes, formatTime, parseApiDate, setMessage } from "../utils";
 import { renderEmptyStateWithCat } from "./icons";
@@ -53,10 +54,27 @@ function broadcastPomodoroState(): void {
   window.dispatchEvent(new CustomEvent("pomodoro:state", {
     detail: { active: pomodoroActive, running: pomodoroRunning },
   }));
+  // Picker enable/disable mirrors session-in-progress state; refresh
+  // is cheap (cached task list, no network).
+  void refreshTaskPickerUI();
 }
 
 // True if the stopwatch view has told us a session is running on the server.
 let stopwatchBlocking = false;
+
+async function refreshTaskPickerUI(): Promise<void> {
+  if (taskPickerEl === null) return;
+  // Disable picker while a session is in flight — pomodoro is commit-and-go,
+  // unlike stopwatch's "discover what I'm doing" model. To change tasks
+  // mid-pomodoro: Reset → pick → Start.
+  await renderTaskPicker({
+    container: taskPickerEl,
+    selectedTaskId: pendingTaskId,
+    label: "Focus",
+    disabled: activeSessionId !== null,
+    onChange: (taskId) => { pendingTaskId = taskId; },
+  });
+}
 
 function updateStartButtonLock(): void {
   // Centralised disable rule. Called from both the stopwatch:state listener
@@ -81,6 +99,12 @@ window.addEventListener("stopwatch:state", (e: Event) => {
 });
 let pomodoroIntervalId: ReturnType<typeof setInterval> | null = null;
 let activeSessionId: number | null = null;
+let taskPickerEl: HTMLDivElement | null = null;
+// Stages the user's task choice between picker change and Start click.
+// Once a work session is in progress, this is no longer the source of
+// truth — the server row's linked_task_id is. Pomodoro doesn't support
+// mid-session retag (unlike stopwatch); use Reset to redo.
+let pendingTaskId: number | null = null;
 
 // User preference, persisted in localStorage. Default ON so the cycle is
 // usable without configuration. Toggle in the settings panel.
@@ -334,7 +358,14 @@ function stopTimer(): void {
 async function startCurrentMode(): Promise<void> {
   if (activeSessionId === null) {
     try {
-      const s = await startSession(modeApiType(pomodoroMode), modeDurationSeconds(pomodoroMode) / 60);
+      // Only attach the task to a work session — break sessions are
+      // mode-switch markers, not actual work to attribute.
+      const linkedTask = pomodoroMode === "work" ? pendingTaskId : null;
+      const s = await startSession(
+        modeApiType(pomodoroMode),
+        modeDurationSeconds(pomodoroMode) / 60,
+        linkedTask,
+      );
       activeSessionId = s.id;
     } catch (error) {
       console.error(error);
@@ -419,6 +450,13 @@ export function init(onDataChanged: () => Promise<void>): void {
   settingsAutoStartInput   = document.querySelector<HTMLInputElement>("#pomodoro-setting-auto-start");
   settingsMessage          = document.querySelector<HTMLParagraphElement>("#pomodoro-settings-message")!;
   modeHintEl               = document.querySelector<HTMLParagraphElement>("#pomodoro-mode-hint")!;
+  taskPickerEl             = document.querySelector<HTMLDivElement>("#pomodoro-task-picker");
+
+  // Render the task picker so the user can pick before clicking Start.
+  // Pomodoro doesn't support mid-session retag — the picker disables
+  // once activeSessionId is non-null (i.e. a session is in flight).
+  void refreshTaskPickerUI();
+  window.addEventListener("task-list:updated", () => void refreshTaskPickerUI());
 
   // Today's-work-minutes line in the session list reads from the stats
   // module's cache; re-render when that cache is refreshed.
