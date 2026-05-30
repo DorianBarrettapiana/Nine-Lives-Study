@@ -9,6 +9,7 @@ in progress, and vice versa — this is enforced server-side here and in
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -57,6 +58,7 @@ def _to_read(s: StopwatchSession) -> StopwatchSessionRead:
         last_started_at=s.last_started_at,
         is_running=s.last_started_at is not None and s.ended_at is None,
         elapsed_seconds=_elapsed_seconds(s),
+        linked_task_id=s.linked_task_id,
     )
 
 
@@ -93,8 +95,16 @@ def get_active(
     return _to_read(s) if s is not None else None
 
 
+class StopwatchStartPayload(BaseModel):
+    """Optional body of POST /stopwatch/start. The whole body can be omitted
+    for the no-task case so legacy callers keep working."""
+
+    linked_task_id: int | None = None
+
+
 @router.post("/start", response_model=StopwatchSessionRead, status_code=201)
 def start(
+    payload: StopwatchStartPayload | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> StopwatchSessionRead:
@@ -112,6 +122,7 @@ def start(
         started_at=now,
         last_started_at=now,
         accumulated_seconds=0,
+        linked_task_id=payload.linked_task_id if payload else None,
     )
     db.add(s)
     try:
@@ -221,6 +232,37 @@ def end(
             db=db,
         )
         db.commit()
+    return _to_read(s)
+
+
+class StopwatchTaskUpdatePayload(BaseModel):
+    """Body of PATCH /stopwatch/{id}/task. Pass null to unlink."""
+
+    linked_task_id: int | None = None
+
+
+@router.patch("/{session_id}/task", response_model=StopwatchSessionRead)
+def update_task(
+    session_id: int,
+    payload: StopwatchTaskUpdatePayload,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StopwatchSessionRead:
+    """Re-tag the daily task for an in-progress stopwatch session.
+
+    Stopwatch work is open-ended: you start running, then realize what
+    you're actually doing. This lets you correct the label mid-session.
+    A future enhancement (segments table) could attribute time *before*
+    the switch to the OLD task; for now we just overwrite — simpler and
+    matches the "I'll just relabel it" mental model."""
+    s = db.get(StopwatchSession, session_id)
+    if s is None or s.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Not found.")
+    if s.ended_at is not None:
+        raise HTTPException(status_code=400, detail="Session already ended.")
+    s.linked_task_id = payload.linked_task_id
+    db.commit()
+    db.refresh(s)
     return _to_read(s)
 
 

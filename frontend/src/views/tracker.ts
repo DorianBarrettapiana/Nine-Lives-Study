@@ -336,6 +336,9 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
       taskInput.value = "";
       setMessage(trackerMessage, "Task created.", "success");
       await onRefreshNeeded();
+      // Let stopwatch/pomodoro task pickers know they should re-fetch the
+      // task list. Cheap event — fires zero work if no listener is attached.
+      window.dispatchEvent(new CustomEvent("task-list:updated"));
     } catch (error) {
       console.error(error);
       setMessage(trackerMessage, "Could not create task.", "error");
@@ -363,11 +366,13 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
       if (action === "toggle") {
         await updateDailyTask(task.id, { is_done: !task.is_done });
         await onRefreshNeeded();
+        window.dispatchEvent(new CustomEvent("task-list:updated"));
       }
       else if (action === "delete") {
         await deleteDailyTask(task.id);
         setMessage(trackerMessage, "Task deleted.", "success");
         await onRefreshNeeded();
+        window.dispatchEvent(new CustomEvent("task-list:updated"));
       }
     } catch (error) {
       console.error(error);

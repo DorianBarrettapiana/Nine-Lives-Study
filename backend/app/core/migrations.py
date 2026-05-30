@@ -23,6 +23,14 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     ("users", "daily_goal_minutes",                "INTEGER NOT NULL DEFAULT 120"),
     ("users", "ai_opt_in",                         "BOOLEAN NOT NULL DEFAULT 0"),
     ("daily_tasks", "sort_order",                  "REAL NOT NULL DEFAULT 0"),
+    # Task-session linking: open-ended work sessions and pomodoros can both
+    # be tagged with the daily task being worked on. NULL = no link.
+    # ON DELETE SET NULL is set in the model definition; SQLite enforces it
+    # when foreign_keys pragma is on (we don't currently turn it on, so the
+    # task being deleted just leaves a dangling id — harmless, the gather_*
+    # functions LEFT JOIN and treat missing rows as "(unlabeled)").
+    ("stopwatch_sessions", "linked_task_id",       "INTEGER"),
+    ("pomodoro_sessions", "linked_task_id",        "INTEGER"),
 ]
 
 # Backfill completed pomodoro work sessions into xp_events so that stats

@@ -57,6 +57,17 @@ class StopwatchSession(Base):
         DateTime(), nullable=True,
     )
 
+    # Optional link to the daily task the user is working on. Set at Start
+    # via the dropdown, updatable mid-session (PATCH /stopwatch/{id}/task)
+    # since stopwatch use is open-ended and users often realize what
+    # they're doing only partway in. ON DELETE SET NULL keeps historical
+    # time intact even if the task itself is deleted from the tracker.
+    linked_task_id: Mapped[int | None] = mapped_column(
+        ForeignKey("daily_tasks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Partial unique index: at most ONE not-yet-ended row per user. Blocks the
     # TOCTOU race in POST /stopwatch/start where two concurrent requests both
     # passed the "no active session" check and inserted, leaving the user with

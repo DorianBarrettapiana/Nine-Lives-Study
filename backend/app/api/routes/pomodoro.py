@@ -70,6 +70,7 @@ def start_session(
         user_id=current_user.id,
         session_type=payload.session_type,
         duration_minutes=payload.duration_minutes,
+        linked_task_id=payload.linked_task_id,
     )
     db.add(session)
     try:
