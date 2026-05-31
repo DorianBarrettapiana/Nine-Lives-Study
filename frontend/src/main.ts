@@ -98,6 +98,15 @@ const APP_HTML = `
             <p id="today-message" class="message"></p>
           </section>
 
+          <section class="card today-yesterday-card hidden" id="today-yesterday-card">
+            <div class="section-header">
+              <h2>↩️ Yesterday in review</h2>
+              <button id="today-yesterday-carry-all" class="link-btn hidden" type="button"
+                      title="Bring every unfinished task into today">Bring all to today</button>
+            </div>
+            <div id="today-yesterday-body"></div>
+          </section>
+
           <section class="card today-hero">
             <p class="eyebrow">🎯 Main goal</p>
             <div id="today-main-goal-picker"></div>

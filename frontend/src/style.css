@@ -2400,6 +2400,42 @@ h3 {
 }
 .today-mood-status { font-size: 0.82rem; }
 
+/* --- Yesterday review card ------------------------------------------- */
+.today-yesterday-card { border-left: 3px solid var(--accent); }
+.yesterday-reflection {
+  font-size: 0.9rem;
+  margin: 0.4rem 0;
+  color: var(--text-soft, inherit);
+  white-space: pre-wrap;
+}
+.yesterday-reflection-details > summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text-soft, inherit);
+  list-style: none;
+}
+.yesterday-reflection-details > summary::-webkit-details-marker { display: none; }
+.yesterday-main-goal-warn {
+  margin: 0.3rem 0 0.6rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--bg-item);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+.yesterday-main-goal-warn .link-btn { margin-left: 0.4rem; }
+.yesterday-unfinished { display: flex; flex-direction: column; gap: 0.35rem; }
+.yesterday-task-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg-item);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+.yesterday-task-text { flex: 1; min-width: 0; }
+
 @media (max-width: 600px) {
   .today-header-row { flex-direction: column; align-items: flex-start; }
   .task-form { flex-wrap: wrap; }
