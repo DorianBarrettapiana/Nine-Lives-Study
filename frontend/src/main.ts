@@ -264,7 +264,6 @@ const APP_HTML = `
             </div>
 
             <div class="pomodoro-timer">
-              <label>Current focus<input id="pomodoro-focus-input" type="text" maxlength="300" placeholder="What are you working on?" /></label>
               <div id="pomodoro-display" class="pomodoro-display">25:00</div>
               <div id="pomodoro-task-picker" class="pomodoro-task-picker"></div>
               <div class="button-row">

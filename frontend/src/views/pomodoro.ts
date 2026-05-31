@@ -36,7 +36,6 @@ let settingsBeforeLongInput: HTMLInputElement;
 let settingsAutoStartInput: HTMLInputElement | null;
 let settingsMessage: HTMLParagraphElement;
 let modeHintEl: HTMLParagraphElement;
-let focusInput: HTMLInputElement;
 
 let user: UserRead | null = null;
 let sessions: PomodoroSessionRead[] = [];
@@ -208,7 +207,6 @@ function celebrate(modeFinished: Mode, nextMode: Mode): void {
 // --- Render -----------------------------------------------------------------
 
 export function render(): void {
-  if (focusInput) focusInput.disabled = activeSessionId !== null;
   pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
   pomodoroStartButton.textContent = pomodoroRunning ? "⏸ Pause" : "▶ Start";
   pomodoroStartButton.classList.toggle("pomo-running", pomodoroRunning);
@@ -307,7 +305,6 @@ async function resumeIfInProgress(): Promise<void> {
 
   activeSessionId = active.id;
   pendingTaskId = active.linked_task_id;
-  if (active.work_label) focusInput.value = active.work_label;
   broadcastPomodoroState();
   if (active.session_type === "work") {
     pomodoroMode = "work";
@@ -366,7 +363,7 @@ async function startCurrentMode(): Promise<void> {
       const s = await startSession(
         modeApiType(pomodoroMode),
         modeDurationSeconds(pomodoroMode) / 60,
-        pomodoroMode === "work" ? focusInput.value.trim() : "",
+        "",
         pomodoroMode === "work" ? pendingTaskId : null,
       );
       activeSessionId = s.id;
@@ -387,13 +384,12 @@ async function startCurrentMode(): Promise<void> {
   render();
 }
 
-export async function startForFocus(taskId: number | null, label: string): Promise<boolean> {
+export async function startForFocus(taskId: number | null): Promise<boolean> {
   if (pomodoroRunning || activeSessionId !== null) {
     setMessage(pomodoroMessage, "A pomodoro is already in progress.", "error");
     return false;
   }
   pendingTaskId = taskId;
-  focusInput.value = label;
   await startCurrentMode();
   await onDataChangedCb?.();
   return activeSessionId !== null;
@@ -466,7 +462,6 @@ export function init(onDataChanged: () => Promise<void>): void {
   settingsAutoStartInput   = document.querySelector<HTMLInputElement>("#pomodoro-setting-auto-start");
   settingsMessage          = document.querySelector<HTMLParagraphElement>("#pomodoro-settings-message")!;
   modeHintEl               = document.querySelector<HTMLParagraphElement>("#pomodoro-mode-hint")!;
-  focusInput               = document.querySelector<HTMLInputElement>("#pomodoro-focus-input")!;
   taskPickerEl             = document.querySelector<HTMLDivElement>("#pomodoro-task-picker");
 
   // Render the task picker so the user can pick before clicking Start.
