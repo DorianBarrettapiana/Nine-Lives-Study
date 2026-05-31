@@ -25,6 +25,34 @@ export interface ProjectUpdate {
   is_archived?: boolean;
 }
 
+// --- Dashboard ----------------------------------------------------------
+
+import type { DailyTaskRead } from "./tracker";
+import type { PaperNoteRead } from "./notes";
+import type { FeynmanEntryRead } from "./feynman";
+
+export interface ReflectionMention {
+  log_date: string;
+  snippet: string;
+}
+
+export interface ProjectDashboardRead {
+  project: ProjectRead;
+  minutes_7d: number;
+  minutes_30d: number;
+  done_tasks_7d: number;
+  open_tasks_count: number;
+  last_activity_at: string | null;
+  open_tasks: DailyTaskRead[];
+  paper_notes: PaperNoteRead[];
+  feynman_entries: FeynmanEntryRead[];
+  recent_reflections: ReflectionMention[];
+}
+
+export async function getProjectDashboard(projectId: number): Promise<ProjectDashboardRead> {
+  return apiFetch<ProjectDashboardRead>(`/projects/${projectId}/dashboard`);
+}
+
 export async function listProjects(includeArchived = false): Promise<ProjectRead[]> {
   const qs = includeArchived ? "?include_archived=true" : "";
   return apiFetch<ProjectRead[]>(`/projects${qs}`);

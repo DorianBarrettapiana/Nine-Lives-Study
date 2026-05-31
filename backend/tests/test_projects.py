@@ -210,3 +210,79 @@ def test_stats_time_per_project_aggregates_via_linked_task(auth_client: TestClie
     assert by_name.get("(no project)", 0) == 25
     # "(no project)" sits at the tail of the sorted list.
     assert rows[-1]["name"] == "(no project)"
+
+
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+
+def test_dashboard_404_for_unknown_project(auth_client: TestClient):
+    r = auth_client.get("/projects/9999/dashboard")
+    assert r.status_code == 404
+
+
+def test_dashboard_basic_shape(auth_client: TestClient):
+    pid = _make_project(auth_client, "Diffusion")
+    r = auth_client.get(f"/projects/{pid}/dashboard")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["project"]["id"] == pid
+    assert body["minutes_7d"] == 0
+    assert body["minutes_30d"] == 0
+    assert body["open_tasks_count"] == 0
+    assert body["open_tasks"] == []
+    assert body["paper_notes"] == []
+    assert body["feynman_entries"] == []
+    assert body["recent_reflections"] == []
+
+
+def test_dashboard_aggregates_work_minutes_and_open_tasks(auth_client: TestClient):
+    pid = _make_project(auth_client, "Alpha")
+    other = _make_project(auth_client, "Beta")
+    task_a = auth_client.post("/daily/tasks", json={"text": "in alpha", "project_id": pid}).json()
+    task_b = auth_client.post("/daily/tasks", json={"text": "in beta", "project_id": other}).json()
+    # 25 minutes on each (default work session length).
+    for tid in (task_a["id"], task_b["id"]):
+        s = auth_client.post(
+            "/pomodoro",
+            json={"session_type": "work", "linked_task_id": tid},
+        ).json()
+        auth_client.patch(f"/pomodoro/{s['id']}/complete", json={})
+
+    body = auth_client.get(f"/projects/{pid}/dashboard").json()
+    assert body["minutes_7d"] == 25
+    assert body["minutes_30d"] == 25
+    assert body["open_tasks_count"] == 1
+    assert body["open_tasks"][0]["id"] == task_a["id"]
+    assert body["last_activity_at"] is not None
+
+
+def test_dashboard_reflection_mentions_substring_match(auth_client: TestClient):
+    pid = _make_project(auth_client, "Diffusion")
+    auth_client.put("/daily/log", json={
+        "mood": "🙂",
+        "reflection": "Today I read more about diffusion models and the score matching trick.",
+    })
+    body = auth_client.get(f"/projects/{pid}/dashboard").json()
+    mentions = body["recent_reflections"]
+    assert len(mentions) == 1
+    assert "diffusion" in mentions[0]["snippet"].lower()
+
+
+def test_dashboard_includes_paper_notes_and_feynman(auth_client: TestClient):
+    pid = _make_project(auth_client, "Survey")
+    auth_client.post("/notes", json={
+        "title": "Smith 2024", "authors": "Smith", "year": 2024,
+        "key_points": "", "questions": "", "tags": "",
+        "project_id": pid,
+    })
+    auth_client.post("/feynman", json={
+        "concept": "Backprop", "explanation": "", "gaps": "", "analogy": "",
+        "project_id": pid,
+    })
+    body = auth_client.get(f"/projects/{pid}/dashboard").json()
+    assert len(body["paper_notes"]) == 1
+    assert body["paper_notes"][0]["title"] == "Smith 2024"
+    assert len(body["feynman_entries"]) == 1
+    assert body["feynman_entries"][0]["concept"] == "Backprop"
