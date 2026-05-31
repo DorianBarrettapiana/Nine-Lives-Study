@@ -30,7 +30,6 @@ import { renderTaskPicker } from "./taskPicker";
 let clockEl: HTMLDivElement;       // analog clock SVG container
 let displayEl: HTMLDivElement;     // digital readout below the clock
 let todayEl: HTMLParagraphElement; // "Today: Xh Ym" hint line
-let focusInput: HTMLInputElement;
 let startBtn: HTMLButtonElement;
 let endBtn: HTMLButtonElement;
 let messageEl: HTMLParagraphElement;
@@ -40,6 +39,9 @@ let taskPickerEl: HTMLDivElement | null = null;
 // clicks Start. Once a session is active, the source of truth is
 // `active.linked_task_id` and this variable is no longer consulted.
 let pendingTaskId: number | null = null;
+// Kept only for Today-page quick starts. The sidebar itself deliberately
+// offers one source of truth: choose a task from the picker.
+let pendingWorkLabel = "";
 
 let active: StopwatchSessionRead | null = null;
 // Local clock baseline for the currently-active session. We anchor on the
@@ -106,8 +108,6 @@ function render(): void {
     const focus = active?.work_label ? ` · ${active.work_label}` : "";
     todayEl.textContent = `Today: ${fmtMinutes(getTodayWorkMinutes() + live)}${focus}`;
   }
-  if (focusInput) focusInput.disabled = !!active;
-
   if (!active) {
     startBtn.textContent = "▶ Start";
     startBtn.disabled = pomodoroBlocking;
@@ -184,7 +184,8 @@ async function onStartClick(): Promise<void> {
   setMessage(messageEl, "", "neutral");
   try {
     if (active === null) {
-      const s = await startStopwatch(focusInput.value.trim(), pendingTaskId);
+      const s = await startStopwatch(pendingWorkLabel, pendingTaskId);
+      pendingWorkLabel = "";
       setActive(s);
     } else if (active.is_running) {
       // Optimistic pause: freeze the displayed seconds immediately so the
@@ -226,7 +227,7 @@ export async function startForFocus(taskId: number | null, label: string): Promi
     return false;
   }
   pendingTaskId = taskId;
-  focusInput.value = label;
+  pendingWorkLabel = label;
   await onStartClick();
   return active !== null;
 }
@@ -275,6 +276,7 @@ async function refreshTaskPickerUI(): Promise<void> {
     onChange: (taskId) => {
       if (active === null) {
         pendingTaskId = taskId;
+        pendingWorkLabel = "";
         return;
       }
       // Optimistic local update so the dropdown reflects the choice
@@ -290,7 +292,6 @@ export function init(initialCatSkin: string = "tabby"): void {
   clockEl = document.querySelector<HTMLDivElement>("#stopwatch-clock")!;
   displayEl = document.querySelector<HTMLDivElement>("#stopwatch-display")!;
   todayEl = document.querySelector<HTMLParagraphElement>("#stopwatch-today")!;
-  focusInput = document.querySelector<HTMLInputElement>("#stopwatch-focus-input")!;
   startBtn = document.querySelector<HTMLButtonElement>("#stopwatch-start-btn")!;
   endBtn = document.querySelector<HTMLButtonElement>("#stopwatch-end-btn")!;
   messageEl = document.querySelector<HTMLParagraphElement>("#stopwatch-message")!;
