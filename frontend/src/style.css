@@ -1819,7 +1819,9 @@ h3 {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1827,7 +1829,10 @@ h3 {
   padding: 1rem;
 }
 .modal-card {
-  background: var(--card);
+  /* Solid surface — the project's var is --bg-card, not --card. Using the
+   * wrong name silently degrades to `transparent`, which is how this bug
+   * went unnoticed until the Zotero modal made it obvious. */
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1.25rem 1.5rem;
@@ -1906,7 +1911,7 @@ h3 {
 .task-picker-select {
   flex: 1;
   min-width: 0;
-  background: var(--card);
+  background: var(--bg-input);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1993,7 +1998,7 @@ h3 {
   padding: 0.1rem 0.45rem;
   margin-left: 0.4rem;
   border-radius: 999px;
-  background: var(--bg-soft, rgba(127, 127, 127, 0.15));
+  background: var(--bg-muted);
   color: var(--text-soft);
   vertical-align: middle;
   white-space: nowrap;
