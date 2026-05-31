@@ -1819,7 +1819,9 @@ h3 {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1827,7 +1829,14 @@ h3 {
   padding: 1rem;
 }
 .modal-card {
-  background: var(--card);
+  /* Solid surface — the project's var is --bg-card, not --card. Using the
+   * wrong name silently degrades to `transparent`, which is how this bug
+   * went unnoticed until the Zotero modal made it obvious. */
+  background: var(--bg-card);
+  /* Explicit text color: modal-card lives outside .app-shell (it's
+   * appended to <body>) so we don't want to depend on inherited color
+   * accidentally being overridden somewhere up the chain. */
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1.25rem 1.5rem;
@@ -1843,6 +1852,7 @@ h3 {
   margin: 0.5rem 0;
   font-size: 0.92rem;
   line-height: 1.45;
+  color: var(--text);
 }
 .modal-actions {
   margin-top: 1rem;
@@ -1906,7 +1916,7 @@ h3 {
 .task-picker-select {
   flex: 1;
   min-width: 0;
-  background: var(--card);
+  background: var(--bg-input);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1993,7 +2003,7 @@ h3 {
   padding: 0.1rem 0.45rem;
   margin-left: 0.4rem;
   border-radius: 999px;
-  background: var(--bg-soft, rgba(127, 127, 127, 0.15));
+  background: var(--bg-muted);
   color: var(--text-soft);
   vertical-align: middle;
   white-space: nowrap;
@@ -2086,13 +2096,17 @@ h3 {
   flex: 1;
 }
 .zotero-item-title {
-  font-weight: 500;
+  /* Explicit colour + heavier weight: inheriting from the parent <label>'s
+   * --text-soft was rendering too pale against the white modal surface in
+   * light mode. The title is the row's primary content — make it pop. */
+  color: var(--text);
+  font-weight: 600;
   font-size: 0.92rem;
   line-height: 1.35;
 }
 .zotero-item-meta {
   font-size: 0.78rem;
-  color: var(--text-soft);
+  color: var(--text-muted);
 }
 
 .zotero-import-footer {
