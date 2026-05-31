@@ -30,9 +30,7 @@ import {
 } from "../api/notes";
 import { ApiError } from "../api/client";
 import { listFeynmanEntries, type FeynmanEntryRead } from "../api/feynman";
-import { generatePaperNoteThemes } from "../api/summaries";
 import { escapeHtml, setMessage } from "../utils";
-import { aiErrorMessage, ensureAiConsent, isAiEnabled, renderAiMarkdown } from "./ai-tools";
 import { renderEmptyStateWithCat } from "./icons";
 import { projectChipHtml, renderProjectPicker } from "./project-picker";
 
@@ -51,8 +49,6 @@ let noteFeynmanLink: HTMLSelectElement;
 let noteReadingStatus: HTMLSelectElement;
 let noteSearchInput: HTMLInputElement;
 let noteTagFilterInput: HTMLInputElement;
-let noteAiThemesButton: HTMLButtonElement;
-let noteAiOutput: HTMLDivElement;
 let noteSubmitButton: HTMLButtonElement;
 let noteCancelButton: HTMLButtonElement;
 let noteMessage: HTMLParagraphElement;
@@ -209,7 +205,6 @@ export async function refresh(): Promise<void> {
     noteFeynmanLink.innerHTML = `<option value="">None</option>` + feynmanEntries.map((entry) =>
       `<option value="${entry.id}">${escapeHtml(entry.concept)}</option>`
     ).join("");
-    noteAiThemesButton.classList.toggle("hidden", !(await isAiEnabled()));
     render();
   } catch (error) {
     console.error(error);
@@ -246,8 +241,6 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
   noteReadingStatus = document.querySelector<HTMLSelectElement>("#note-reading-status")!;
   noteSearchInput = document.querySelector<HTMLInputElement>("#note-search")!;
   noteTagFilterInput = document.querySelector<HTMLInputElement>("#note-tag-filter")!;
-  noteAiThemesButton = document.querySelector<HTMLButtonElement>("#note-ai-themes")!;
-  noteAiOutput = document.querySelector<HTMLDivElement>("#note-ai-output")!;
   noteSubmitButton = document.querySelector<HTMLButtonElement>("#note-submit-button")!;
   noteCancelButton = document.querySelector<HTMLButtonElement>("#note-cancel-button")!;
   noteMessage = document.querySelector<HTMLParagraphElement>("#note-message")!;
@@ -362,20 +355,6 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
 
   noteSearchInput.addEventListener("input", () => render());
   noteTagFilterInput.addEventListener("input", () => render());
-  noteAiThemesButton.addEventListener("click", async () => {
-    try {
-      if (!await ensureAiConsent("Your paper-note titles, tags, key ideas, and questions")) return;
-      noteAiThemesButton.disabled = true;
-      noteAiThemesButton.textContent = "Finding themes...";
-      const summary = await generatePaperNoteThemes();
-      noteAiOutput.innerHTML = `<div class="ai-summary-body">${renderAiMarkdown(summary.content)}</div>`;
-    } catch (error) {
-      setMessage(noteMessage, aiErrorMessage(error), "error");
-    } finally {
-      noteAiThemesButton.disabled = false;
-      noteAiThemesButton.textContent = "Find AI themes";
-    }
-  });
 
   zoteroSettingsButton.addEventListener("click", () => {
     void showZoteroSettingsModal(onRefreshNeeded);

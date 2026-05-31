@@ -9,7 +9,7 @@
 
 import { apiFetch } from "./client";
 
-export type SummaryKind = "weekly" | "monthly" | "stage" | "paper_notes" | "feynman_review" | "reflections";
+export type SummaryKind = "weekly" | "monthly" | "stage" | "feynman_review" | "reflections";
 export type ProgressSummaryKind = "monthly" | "stage";
 
 export interface AiSummaryRead {
@@ -88,13 +88,6 @@ export async function generateProgressRecap(
 
 export async function generateFeynmanReview(entryId: number): Promise<AiSummaryRead> {
   return apiFetch<AiSummaryRead>(`/summaries/feynman/${entryId}/generate`, {
-    method: "POST",
-    timeoutMs: 60_000,
-  });
-}
-
-export async function generatePaperNoteThemes(days = 30): Promise<AiSummaryRead> {
-  return apiFetch<AiSummaryRead>(`/summaries/paper-notes/generate?days=${days}`, {
     method: "POST",
     timeoutMs: 60_000,
   });
