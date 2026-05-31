@@ -208,6 +208,7 @@ const APP_HTML = `
             <div class="feynman-editor">
               <h3 id="feynman-step-title"></h3>
               <p id="feynman-step-description" class="hint"></p>
+              <div id="feynman-source-note" class="feynman-source-note hidden"></div>
               <label><span id="feynman-field-label"></span><textarea id="feynman-input"></textarea></label>
               <div class="button-row">
                 <button type="button" id="feynman-prev-button" class="secondary">Previous</button>
