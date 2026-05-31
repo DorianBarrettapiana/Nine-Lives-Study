@@ -20,10 +20,11 @@ from app.core.xp import (
     EVENT_STOPWATCH,
     award_xp_event,
 )
+from app.models.daily_tracker import DailyTask
 from app.models.pomodoro_session import PomodoroSession
 from app.models.stopwatch_session import StopwatchSession
 from app.models.user import User
-from app.schemas.stopwatch_session import StopwatchSessionRead
+from app.schemas.stopwatch_session import StopwatchSessionRead, StopwatchSessionStart
 
 router = APIRouter(prefix="/stopwatch", tags=["stopwatch"])
 
@@ -57,6 +58,8 @@ def _to_read(s: StopwatchSession) -> StopwatchSessionRead:
         last_started_at=s.last_started_at,
         is_running=s.last_started_at is not None and s.ended_at is None,
         elapsed_seconds=_elapsed_seconds(s),
+        work_label=s.work_label,
+        task_id=s.task_id,
     )
 
 
@@ -80,6 +83,18 @@ def _has_active_pomodoro(user_id: int, db: Session) -> bool:
     return row is not None
 
 
+def _resolve_focus(
+    task_id: int | None, work_label: str, current_user: User, db: Session,
+) -> tuple[int | None, str]:
+    label = work_label.strip()
+    if task_id is None:
+        return None, label
+    task = db.get(DailyTask, task_id)
+    if task is None or task.user_id != current_user.id:
+        raise HTTPException(status_code=400, detail="Daily task not found.")
+    return task.id, label or task.text
+
+
 # --- Routes ----------------------------------------------------------------
 
 
@@ -95,6 +110,7 @@ def get_active(
 
 @router.post("/start", response_model=StopwatchSessionRead, status_code=201)
 def start(
+    payload: StopwatchSessionStart = StopwatchSessionStart(),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> StopwatchSessionRead:
@@ -106,12 +122,15 @@ def start(
     if _has_active_pomodoro(current_user.id, db):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                             detail="A pomodoro is already in progress.")
+    task_id, work_label = _resolve_focus(payload.task_id, payload.work_label, current_user, db)
     now = _utc_now()
     s = StopwatchSession(
         user_id=current_user.id,
         started_at=now,
         last_started_at=now,
         accumulated_seconds=0,
+        task_id=task_id,
+        work_label=work_label,
     )
     db.add(s)
     try:

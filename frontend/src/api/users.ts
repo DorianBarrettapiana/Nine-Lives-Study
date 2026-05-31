@@ -19,6 +19,10 @@ export interface UserRead {
   cat_skin: string;
   cat_skin_minutes_accumulated: number;
   cat_skin_minutes_required: number;
+  cat_skin_free_changes: number;
+  daily_goal_minutes: number;
+  share_study_time: boolean;
+  share_activity: boolean;
 }
 
 export interface RegisterPayload {
@@ -46,6 +50,8 @@ export interface UserUpdate {
   cat_skin?: string;
 
   daily_goal_minutes?: number;
+  share_study_time?: boolean;
+  share_activity?: boolean;
 }
 
 export async function register(payload: RegisterPayload): Promise<UserRead> {

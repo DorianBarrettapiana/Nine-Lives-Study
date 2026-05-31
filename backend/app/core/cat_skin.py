@@ -43,7 +43,7 @@ def accumulated_work_minutes_since(user_id: int, since: datetime | None, db: Ses
 
 def user_read_with_skin_status(user: User, db: Session) -> UserRead:
     """Serialize a User to UserRead, filling in the cat-skin lock fields."""
-    if user.cat_skin_changed_at is None:
+    if user.cat_skin_free_changes > 0 or user.cat_skin_changed_at is None:
         # First explicit pick is free; report accumulated = required so the
         # frontend treats it as "unlocked".
         accumulated = CAT_SKIN_REQUIRED_MINUTES

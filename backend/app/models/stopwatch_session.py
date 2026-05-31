@@ -18,7 +18,7 @@ when running.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -56,6 +56,8 @@ class StopwatchSession(Base):
     last_started_at: Mapped[datetime | None] = mapped_column(
         DateTime(), nullable=True,
     )
+    work_label: Mapped[str] = mapped_column(String(300), default="", server_default="", nullable=False)
+    task_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Partial unique index: at most ONE not-yet-ended row per user. Blocks the
     # TOCTOU race in POST /stopwatch/start where two concurrent requests both

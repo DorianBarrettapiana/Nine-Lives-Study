@@ -12,14 +12,22 @@ export interface StopwatchSessionRead {
   last_started_at: string | null;
   is_running: boolean;
   elapsed_seconds: number;
+  work_label: string;
+  task_id: number | null;
 }
 
 export async function getActive(): Promise<StopwatchSessionRead | null> {
   return apiFetch<StopwatchSessionRead | null>("/stopwatch/active");
 }
 
-export async function startStopwatch(): Promise<StopwatchSessionRead> {
-  return apiFetch<StopwatchSessionRead>("/stopwatch/start", { method: "POST" });
+export async function startStopwatch(
+  workLabel = "",
+  taskId: number | null = null,
+): Promise<StopwatchSessionRead> {
+  return apiFetch<StopwatchSessionRead>("/stopwatch/start", {
+    method: "POST",
+    body: JSON.stringify({ work_label: workLabel, task_id: taskId }),
+  });
 }
 
 export async function pauseStopwatch(

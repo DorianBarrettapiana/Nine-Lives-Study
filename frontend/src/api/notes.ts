@@ -13,6 +13,9 @@ export interface PaperNoteRead {
   key_points: string;
   questions: string;
   tags: string;
+  doi: string;
+  url: string;
+  feynman_entry_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -24,6 +27,9 @@ export interface PaperNoteCreate {
   key_points: string;
   questions: string;
   tags: string;
+  doi: string;
+  url: string;
+  feynman_entry_id: number | null;
 }
 
 export interface PaperNoteUpdate {
@@ -33,6 +39,9 @@ export interface PaperNoteUpdate {
   key_points?: string;
   questions?: string;
   tags?: string;
+  doi?: string;
+  url?: string;
+  feynman_entry_id?: number | null;
 }
 
 export async function listNotes(): Promise<PaperNoteRead[]> {

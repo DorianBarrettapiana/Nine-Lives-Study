@@ -6,7 +6,9 @@ import {
   createFeynmanEntry, deleteFeynmanEntry, listFeynmanEntries,
   updateFeynmanEntry, type FeynmanEntryRead,
 } from "../api/feynman";
+import { generateFeynmanReview, listSummaries, type AiSummaryRead } from "../api/summaries";
 import { escapeHtml, formatDate, setMessage } from "../utils";
+import { aiErrorMessage, ensureAiConsent, isAiEnabled, renderAiMarkdown } from "./ai-tools";
 import { renderEmptyStateWithCat } from "./icons";
 
 const FEYNMAN_STEPS = [
@@ -31,6 +33,8 @@ let feynmanEntries: FeynmanEntryRead[] = [];
 let feynmanStep = 0;
 let feynmanDraft = ["", "", "", ""];
 let editedFeynmanId: number | null = null;
+let aiEnabled = false;
+const aiReviews = new Map<number, AiSummaryRead>();
 
 function renderStep(): void {
   const step = FEYNMAN_STEPS[feynmanStep];
@@ -71,18 +75,29 @@ export function render(): void {
         </div>
         <div class="note-actions">
           <button class="secondary" data-feynman-action="edit" data-id="${entry.id}">Edit</button>
+          ${aiEnabled ? `<button class="secondary" data-feynman-action="review" data-id="${entry.id}">AI critique</button>` : ""}
           <button class="danger" data-feynman-action="delete" data-id="${entry.id}">Delete</button>
         </div>
       </div>
       ${entry.explanation ? `<p class="note-text"><strong>Simple explanation:</strong> ${escapeHtml(entry.explanation)}</p>` : ""}
       ${entry.gaps ? `<p class="note-text"><strong>Gaps:</strong> ${escapeHtml(entry.gaps)}</p>` : ""}
       ${entry.analogy ? `<p class="note-text"><strong>Analogy:</strong> ${escapeHtml(entry.analogy)}</p>` : ""}
+      ${aiReviews.has(entry.id) ? `<div class="ai-summary-body">${renderAiMarkdown(aiReviews.get(entry.id)!.content)}</div>` : ""}
     </article>`).join("");
 }
 
 export async function refresh(): Promise<void> {
   try {
     feynmanEntries = await listFeynmanEntries();
+    aiEnabled = await isAiEnabled();
+    if (aiEnabled) {
+      const summaries = await listSummaries("feynman_review");
+      aiReviews.clear();
+      for (const summary of summaries) {
+        const match = summary.period_key.match(/^feynman:(\d+)$/);
+        if (match && !aiReviews.has(Number(match[1]))) aiReviews.set(Number(match[1]), summary);
+      }
+    }
     render();
   } catch (error) {
     console.error(error);
@@ -118,7 +133,7 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
     try {
       if (editedFeynmanId === null) {
         await createFeynmanEntry(payload);
-        setMessage(feynmanMessage, "Feynman record created. +15 XP", "success");
+        setMessage(feynmanMessage, "Feynman record created. +10 XP", "success");
       } else {
         await updateFeynmanEntry(editedFeynmanId, payload);
         setMessage(feynmanMessage, "Feynman record updated.", "success");
@@ -143,6 +158,16 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
       editedFeynmanId = entry.id; feynmanStep = 0;
       feynmanDraft = [entry.concept, entry.explanation, entry.gaps, entry.analogy];
       switchToView("feynman"); renderStep(); window.scrollTo({ top: 0, behavior: "smooth" });
+    } else if (action === "review") {
+      try {
+        if (!await ensureAiConsent("This Feynman explanation, your listed gaps, and analogy")) return;
+        target.textContent = "Reviewing...";
+        const summary = await generateFeynmanReview(entry.id);
+        aiReviews.set(entry.id, summary);
+        render();
+      } catch (error) {
+        setMessage(feynmanMessage, aiErrorMessage(error), "error");
+      }
     } else if (action === "delete") {
       if (!window.confirm(`Delete Feynman record "${entry.concept}"?`)) return;
       try {

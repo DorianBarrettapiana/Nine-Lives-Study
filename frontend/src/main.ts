@@ -21,8 +21,9 @@ import * as StatsView from "./views/stats";
 import * as StopwatchView from "./views/stopwatch";
 import * as FriendsView from "./views/friends";
 import * as TrackerView from "./views/tracker";
+import * as TodayView from "./views/today";
 
-type AppView = "notes" | "feynman" | "tracker" | "pomodoro" | "stats" | "mood" | "friends";
+type AppView = "today" | "notes" | "feynman" | "tracker" | "pomodoro" | "stats" | "mood" | "friends";
 
 const APP_HTML = `
   <div class="app-shell">
@@ -62,6 +63,7 @@ const APP_HTML = `
           <h2>Work timer</h2>
           <div id="stopwatch-clock" class="stopwatch-clock"></div>
           <div id="stopwatch-display" class="stopwatch-display">00:00:00</div>
+          <input id="stopwatch-focus-input" type="text" maxlength="300" placeholder="What are you working on?" />
           <p id="stopwatch-today" class="hint stopwatch-today">Today: —</p>
           <div class="button-row stopwatch-buttons">
             <button id="stopwatch-start-btn" type="button">▶ Start</button>
@@ -73,7 +75,8 @@ const APP_HTML = `
 
       <section class="content">
         <nav class="feature-tabs">
-          <button class="feature-tab active" data-view="notes">Paper notes</button>
+          <button class="feature-tab active" data-view="today">Today</button>
+          <button class="feature-tab" data-view="notes">Paper notes</button>
           <button class="feature-tab" data-view="feynman">Feynman</button>
           <button class="feature-tab" data-view="tracker">Daily tracker</button>
           <button class="feature-tab" data-view="pomodoro">Pomodoro</button>
@@ -82,7 +85,39 @@ const APP_HTML = `
           <button class="feature-tab" data-view="friends">Friends</button>
         </nav>
 
-        <div id="notes-view">
+        <div id="today-view">
+          <section class="card today-hero">
+            <p class="eyebrow">Today</p>
+            <h2>Make the next block count</h2>
+            <label>Main goal<input id="today-main-goal" type="text" maxlength="500" placeholder="One outcome that would make today meaningful" /></label>
+            <div class="button-row"><button id="today-save-goal" type="button">Save main goal</button></div>
+          </section>
+          <section class="card">
+            <h2>Start now</h2>
+            <input id="today-focus-input" type="text" maxlength="300" placeholder="Temporary focus, or start from a task below" />
+            <div class="button-row">
+              <button id="today-start-stopwatch" type="button">Start stopwatch</button>
+              <button id="today-start-pomodoro" class="secondary" type="button">Start pomodoro</button>
+            </div>
+          </section>
+          <section class="card">
+            <div class="section-header"><h2>Today's tasks</h2><strong id="today-progress-label">0 / 0</strong></div>
+            <div class="progress-bar"><div id="today-progress-fill" class="progress-fill"></div></div>
+            <div id="today-task-list" class="task-list"></div>
+          </section>
+          <section class="card">
+            <h2>Quick mood</h2>
+            <div id="today-mood-row" class="mood-row"></div>
+            <p id="today-message" class="message"></p>
+          </section>
+          <section class="card">
+            <h2>Evening reflection</h2>
+            <textarea id="today-reflection" placeholder="What moved forward? What should tomorrow inherit?"></textarea>
+            <div class="button-row"><button id="today-save-reflection" type="button">Save reflection</button></div>
+          </section>
+        </div>
+
+        <div id="notes-view" class="hidden">
           <section class="card">
             <h2>Paper notes</h2>
             <p class="hint">Literature notes.</p>
@@ -95,6 +130,11 @@ const APP_HTML = `
               <label>Key ideas &amp; method<textarea id="note-key-points" placeholder="Main idea, method, assumptions..."></textarea></label>
               <label>Questions &amp; thoughts<textarea id="note-questions" placeholder="Open questions, limitations, links with your work..."></textarea></label>
               <label>Tags<input id="note-tags" type="text" placeholder="key-words" /></label>
+              <div class="two-cols">
+                <label>DOI<input id="note-doi" type="text" placeholder="10.1000/xyz123" /></label>
+                <label>URL<input id="note-url" type="url" placeholder="https://..." /></label>
+              </div>
+              <label>Linked Feynman record<select id="note-feynman-link"><option value="">None</option></select></label>
               <div class="button-row">
                 <button type="submit" id="note-submit-button">Add note</button>
                 <button type="button" id="note-cancel-button" class="secondary hidden">Cancel edit</button>
@@ -103,7 +143,12 @@ const APP_HTML = `
             <p id="note-message" class="message"></p>
           </section>
           <section class="card">
-            <h2>Saved notes</h2>
+            <div class="section-header"><h2>Saved notes</h2><button id="note-ai-themes" class="secondary hidden" type="button">Find AI themes</button></div>
+            <div class="two-cols">
+              <input id="note-search" type="search" placeholder="Search title, author, DOI, text..." />
+              <input id="note-tag-filter" type="search" placeholder="Filter tags..." />
+            </div>
+            <div id="note-ai-output" class="ai-summary-markdown"></div>
             <div id="notes-list" class="notes-list"></div>
           </section>
         </div>
@@ -196,6 +241,7 @@ const APP_HTML = `
             </div>
 
             <div class="pomodoro-timer">
+              <label>Current focus<input id="pomodoro-focus-input" type="text" maxlength="300" placeholder="What are you working on?" /></label>
               <div id="pomodoro-display" class="pomodoro-display">25:00</div>
               <div class="button-row">
                 <button id="pomodoro-start-button">Start</button>
@@ -246,6 +292,10 @@ const APP_HTML = `
             <div id="stats-pomodoro-chart" class="stats-chart"></div>
           </section>
           <section class="card">
+            <h2>Work by focus</h2>
+            <div id="stats-focus-chart" class="stats-chart"></div>
+          </section>
+          <section class="card">
             <h2 id="stats-mood-title">Last 7 days — mood</h2>
             <div id="stats-mood-chart" class="mood-history"></div>
           </section>
@@ -273,6 +323,14 @@ const APP_HTML = `
         </div>
 
         <div id="friends-view" class="hidden">
+          <section class="card">
+            <h2>Privacy</h2>
+            <p class="hint">Friends remain optional. Choose what accepted friends can see.</p>
+            <label class="checkbox-row"><input id="share-study-time" type="checkbox" /> Share study duration</label>
+            <label class="checkbox-row"><input id="share-activity" type="checkbox" /> Share activity types in the feed</label>
+            <div class="button-row"><button id="save-friend-privacy" type="button">Save privacy</button></div>
+            <p id="friend-privacy-message" class="message"></p>
+          </section>
           <section class="card collapsible" id="friend-search-card">
             <h2 class="collapsible-header">Find friends <span class="collapse-arrow">&#9656;</span></h2>
             <div class="collapsible-body hidden">
@@ -308,7 +366,7 @@ const APP_HTML = `
 `;
 
 let currentUser: UserRead | null = null;
-let currentView: AppView = "notes";
+let currentView: AppView = "today";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Could not find #app root element.");
@@ -335,6 +393,7 @@ async function refreshAll(): Promise<void> {
   try {
     await Promise.all([
       NotesView.refresh(),
+      TodayView.refresh(),
       FeynmanView.refresh(),
       TrackerView.refresh(),
       PomodoroView.refresh(),
@@ -492,6 +551,7 @@ function mountApp(user: UserRead): void {
   });
 
   const views: Record<AppView, HTMLElement> = {
+    today:    app!.querySelector<HTMLDivElement>("#today-view")!,
     notes:    app!.querySelector<HTMLDivElement>("#notes-view")!,
     feynman:  app!.querySelector<HTMLDivElement>("#feynman-view")!,
     tracker:  app!.querySelector<HTMLDivElement>("#tracker-view")!,
@@ -517,6 +577,9 @@ function mountApp(user: UserRead): void {
   StatsView.init(() => StatsView.refresh());
   StopwatchView.init(user.cat_skin);
   FriendsView.init(() => FriendsView.refresh());
+  TodayView.init(() => Promise.all([
+    TodayView.refresh(), TrackerView.refresh(), StatsView.refresh(), PomodoroView.refresh(),
+  ]).then());
   // AI panel lives inside the stats view. Fire-and-forget — config fetch
   // determines whether the card reveals itself.
   void SummariesView.init();

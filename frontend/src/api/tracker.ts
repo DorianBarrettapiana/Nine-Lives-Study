@@ -19,6 +19,7 @@ export interface DailyLogRead {
   id: number;
   user_id: number;
   log_date: string;
+  main_goal: string;
   mood: string;
   reflection: string;
   created_at: string;
@@ -47,6 +48,7 @@ export interface DailyTaskUpdate {
 
 export interface DailyLogUpsert {
   log_date?: string | null;
+  main_goal?: string | null;
   mood: string;
   reflection: string;
 }
@@ -76,6 +78,12 @@ export async function updateDailyTask(
 export async function deleteDailyTask(taskId: number): Promise<void> {
   await apiFetch<void>(`/daily/tasks/${taskId}`, {
     method: "DELETE",
+  });
+}
+
+export async function carryDailyTask(taskId: number): Promise<DailyTaskRead> {
+  return apiFetch<DailyTaskRead>(`/daily/tasks/${taskId}/carry-forward`, {
+    method: "POST",
   });
 }
 

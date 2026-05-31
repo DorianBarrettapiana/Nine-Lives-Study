@@ -17,6 +17,7 @@ let weeklyCard: HTMLElement | null;
 let weeklyGrid: HTMLDivElement | null;
 let statsTasksChart: HTMLDivElement;
 let statsPomodoroChart: HTMLDivElement;
+let statsFocusChart: HTMLDivElement;
 let statsMoodChart: HTMLDivElement;
 let statsTasksTitle: HTMLHeadingElement;
 let statsPomodoroTitle: HTMLHeadingElement;
@@ -347,6 +348,21 @@ function renderWorkSection(): void {
     ${svgHtml}`;
 }
 
+function renderFocusSection(): void {
+  const labels = userStats?.work_labels ?? [];
+  if (labels.length === 0) {
+    statsFocusChart.innerHTML = `<div class="empty-state">Bind a task or focus description when starting a timer to see where your time goes.</div>`;
+    return;
+  }
+  const max = Math.max(...labels.map((item) => item.minutes), 1);
+  statsFocusChart.innerHTML = labels.map((item) => `
+    <div class="focus-stat-row">
+      <div class="focus-stat-label"><span>${escapeHtml(item.label)}</span><strong>${fmtMinutes(item.minutes)}</strong></div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(item.minutes / max * 100)}%"></div></div>
+    </div>
+  `).join("");
+}
+
 // --- Mood ---
 // Color per mood emoji — kept in the same order as the picker for visual
 // consistency between recording and review.
@@ -485,6 +501,7 @@ export function render(): void {
   renderTotals();
   renderTaskDayList();
   renderWorkSection();
+  renderFocusSection();
   renderMoodChart();
 }
 
@@ -515,6 +532,7 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
   weeklyGrid = document.querySelector<HTMLDivElement>("#weekly-summary-grid");
   statsTasksChart = document.querySelector<HTMLDivElement>("#stats-tasks-chart")!;
   statsPomodoroChart = document.querySelector<HTMLDivElement>("#stats-pomodoro-chart")!;
+  statsFocusChart = document.querySelector<HTMLDivElement>("#stats-focus-chart")!;
   statsMoodChart = document.querySelector<HTMLDivElement>("#stats-mood-chart")!;
   statsTasksTitle = document.querySelector<HTMLHeadingElement>("#stats-tasks-title")!;
   statsPomodoroTitle = document.querySelector<HTMLHeadingElement>("#stats-pomodoro-title")!;

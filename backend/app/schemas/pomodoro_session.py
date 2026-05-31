@@ -15,6 +15,8 @@ class PomodoroSessionStart(BaseModel):
     # Upper bound matches the per-user work-minutes cap in UserUpdate so a
     # user who configures a long work block (e.g. 90+ min) can actually start it.
     duration_minutes: int = Field(default=25, ge=1, le=240)
+    work_label: str = Field(default="", max_length=300)
+    task_id: int | None = None
 
 
 class PomodoroSessionComplete(BaseModel):
@@ -33,5 +35,7 @@ class PomodoroSessionRead(BaseSchema):
     session_type: str
     duration_minutes: int
     is_completed: bool
+    work_label: str
+    task_id: int | None
     started_at: UtcDateTime
     ended_at: UtcDateTime | None

@@ -73,3 +73,17 @@ export async function generateWeekly(tzOffsetMinutes: number): Promise<AiSummary
     },
   );
 }
+
+export async function generateFeynmanReview(entryId: number): Promise<AiSummaryRead> {
+  return apiFetch<AiSummaryRead>(`/summaries/feynman/${entryId}/generate`, {
+    method: "POST",
+    timeoutMs: 60_000,
+  });
+}
+
+export async function generatePaperNoteThemes(days = 30): Promise<AiSummaryRead> {
+  return apiFetch<AiSummaryRead>(`/summaries/paper-notes/generate?days=${days}`, {
+    method: "POST",
+    timeoutMs: 60_000,
+  });
+}

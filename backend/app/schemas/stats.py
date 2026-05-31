@@ -23,6 +23,13 @@ class DailyWorkStat(BaseModel):
     minutes: int
 
 
+class WorkLabelStat(BaseModel):
+    """Minutes grouped by the focus attached to work sessions."""
+
+    label: str
+    minutes: int
+
+
 class WeeklySummaryCounts(BaseModel):
     work_minutes: int = 0
     tasks_done: int = 0
@@ -43,6 +50,7 @@ class UserStatsRead(BaseModel):
     daily_tasks: list[DailyTaskStat]
     daily_moods: list[DailyMoodStat]
     daily_work_minutes: list[DailyWorkStat]
+    work_labels: list[WorkLabelStat]
     total_tasks_done: int
     total_work_minutes: int
     total_notes: int

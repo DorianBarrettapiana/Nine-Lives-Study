@@ -25,6 +25,7 @@ import {
   type NotificationItem,
 } from "../api/friends";
 import { escapeHtml, fmtMinutes, parseApiDate, setMessage } from "../utils";
+import { getMe, updateMe } from "../api/users";
 import { renderAvatarSvg } from "./avatar";
 import { renderBeerIconSvg, renderEmptyStateWithCat, renderFlowerIconSvg } from "./icons";
 
@@ -43,6 +44,9 @@ let friendSearchCard: HTMLElement;
 let friendRequestsCard: HTMLElement;
 let friendRequestsBadge: HTMLSpanElement;
 let friendFeed: HTMLDivElement;
+let shareStudyTimeInput: HTMLInputElement;
+let shareActivityInput: HTMLInputElement;
+let privacyMessage: HTMLParagraphElement;
 
 let friends: FriendEntry[] = [];
 let requests: FriendRequestEntry[] = [];
@@ -475,8 +479,8 @@ async function handleSearch(): Promise<void> {
 
 export async function refresh(): Promise<void> {
   try {
-    const [f, r, feed, notifs] = await Promise.all([
-      listFriends(), listFriendRequests(), getFeed(), getNotifications(),
+    const [f, r, feed, notifs, me] = await Promise.all([
+      listFriends(), listFriendRequests(), getFeed(), getNotifications(), getMe(),
     ]);
     friends = f;
     requests = r;
@@ -484,6 +488,8 @@ export async function refresh(): Promise<void> {
     renderFriends();
     renderFeed(feed, notifs.items);
     updateNotifBadge(notifs.unread_count);
+    shareStudyTimeInput.checked = me.share_study_time;
+    shareActivityInput.checked = me.share_activity;
   } catch (e) {
     console.error(e);
   }
@@ -542,6 +548,9 @@ export function init(_onRefreshNeeded: () => Promise<void>): void {
   friendSearchCard    = document.querySelector<HTMLElement>("#friend-search-card")!;
   friendRequestsCard  = document.querySelector<HTMLElement>("#friend-requests-card")!;
   friendRequestsBadge = document.querySelector<HTMLSpanElement>("#friend-requests-badge")!;
+  shareStudyTimeInput  = document.querySelector<HTMLInputElement>("#share-study-time")!;
+  shareActivityInput   = document.querySelector<HTMLInputElement>("#share-activity")!;
+  privacyMessage       = document.querySelector<HTMLParagraphElement>("#friend-privacy-message")!;
 
   setupCollapsible(friendSearchCard);
   setupCollapsible(friendRequestsCard);
@@ -549,5 +558,17 @@ export function init(_onRefreshNeeded: () => Promise<void>): void {
   friendSearchButton.addEventListener("click", handleSearch);
   friendSearchInput.addEventListener("keydown", e => {
     if (e.key === "Enter") void handleSearch();
+  });
+  document.querySelector<HTMLButtonElement>("#save-friend-privacy")!.addEventListener("click", async () => {
+    try {
+      await updateMe({
+        share_study_time: shareStudyTimeInput.checked,
+        share_activity: shareActivityInput.checked,
+      });
+      setMessage(privacyMessage, "Privacy settings saved.", "success");
+    } catch (error) {
+      console.error(error);
+      setMessage(privacyMessage, "Could not save privacy settings.", "error");
+    }
   });
 }

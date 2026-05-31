@@ -1,6 +1,15 @@
 """Pydantic schemas for stopwatch sessions."""
 
+from pydantic import BaseModel, Field
+
 from app.schemas._base import BaseSchema, UtcDateTime
+
+
+class StopwatchSessionStart(BaseModel):
+    """Optional focus attached when starting a stopwatch."""
+
+    work_label: str = Field(default="", max_length=300)
+    task_id: int | None = None
 
 
 class StopwatchSessionRead(BaseSchema):
@@ -16,3 +25,5 @@ class StopwatchSessionRead(BaseSchema):
     is_running: bool
     # Convenience: total elapsed seconds (counted + current segment if running).
     elapsed_seconds: int
+    work_label: str
+    task_id: int | None

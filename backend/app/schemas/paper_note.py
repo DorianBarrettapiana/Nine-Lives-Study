@@ -14,6 +14,9 @@ class PaperNoteCreate(BaseModel):
     key_points: str = ""
     questions: str = ""
     tags: str = Field(default="", max_length=500)
+    doi: str = Field(default="", max_length=300)
+    url: str = Field(default="", max_length=1000)
+    feynman_entry_id: int | None = None
 
 
 class PaperNoteUpdate(BaseModel):
@@ -25,6 +28,9 @@ class PaperNoteUpdate(BaseModel):
     key_points: str | None = None
     questions: str | None = None
     tags: str | None = Field(default=None, max_length=500)
+    doi: str | None = Field(default=None, max_length=300)
+    url: str | None = Field(default=None, max_length=1000)
+    feynman_entry_id: int | None = None
 
 
 class PaperNoteRead(BaseSchema):
@@ -38,5 +44,8 @@ class PaperNoteRead(BaseSchema):
     key_points: str
     questions: str
     tags: str
+    doi: str
+    url: str
+    feynman_entry_id: int | None
     created_at: UtcDateTime
     updated_at: UtcDateTime

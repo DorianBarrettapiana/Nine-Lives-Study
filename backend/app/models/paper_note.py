@@ -33,6 +33,9 @@ class PaperNote(Base):
     key_points: Mapped[str] = mapped_column(Text, default="", nullable=False)
     questions: Mapped[str] = mapped_column(Text, default="", nullable=False)
     tags: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    doi: Mapped[str] = mapped_column(String(300), default="", server_default="", nullable=False)
+    url: Mapped[str] = mapped_column(String(1000), default="", server_default="", nullable=False)
+    feynman_entry_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(),

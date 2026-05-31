@@ -47,3 +47,8 @@ class User(Base):
     # time they click a "Generate" button we show a disclosure modal that
     # flips this to True. Until then, AI routes refuse with 403.
     ai_opt_in: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Social sharing stays optional. Defaults preserve the existing friend
+    # experience for current users while making both controls explicit.
+    share_study_time: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
+    share_activity: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)

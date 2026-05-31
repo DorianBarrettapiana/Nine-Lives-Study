@@ -12,6 +12,8 @@ export interface PomodoroSessionRead {
   is_completed: boolean;
   started_at: string;
   ended_at: string | null;
+  work_label: string;
+  task_id: number | null;
 }
 
 export async function listSessions(): Promise<PomodoroSessionRead[]> {
@@ -21,10 +23,17 @@ export async function listSessions(): Promise<PomodoroSessionRead[]> {
 export async function startSession(
   sessionType: "work" | "break",
   durationMinutes: number,
+  workLabel = "",
+  taskId: number | null = null,
 ): Promise<PomodoroSessionRead> {
   return apiFetch<PomodoroSessionRead>("/pomodoro", {
     method: "POST",
-    body: JSON.stringify({ session_type: sessionType, duration_minutes: durationMinutes }),
+    body: JSON.stringify({
+      session_type: sessionType,
+      duration_minutes: durationMinutes,
+      work_label: workLabel,
+      task_id: taskId,
+    }),
   });
 }
 
