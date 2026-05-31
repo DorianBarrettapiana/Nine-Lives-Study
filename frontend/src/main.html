@@ -66,8 +66,14 @@
 
         <div id="notes-view">
           <section class="card">
-            <h2>Paper notes</h2>
-            <p class="hint">Literature notes.</p>
+            <div class="card-header-row">
+              <h2>Paper notes</h2>
+              <div class="card-header-actions">
+                <button type="button" id="zotero-import-button" class="secondary hidden">📚 Import from Zotero</button>
+                <button type="button" id="zotero-settings-button" class="link-btn">Zotero settings</button>
+              </div>
+            </div>
+            <p class="hint">Literature notes. Connect Zotero to pull in references in one click.</p>
             <form id="note-form" class="note-form">
               <label>Paper title *<input id="note-title" type="text" placeholder="Enter paper title..." required /></label>
               <div class="two-cols">
@@ -77,6 +83,12 @@
               <label>Key ideas &amp; method<textarea id="note-key-points" placeholder="Main idea, method, assumptions..."></textarea></label>
               <label>Questions &amp; thoughts<textarea id="note-questions" placeholder="Open questions, limitations, links with your work..."></textarea></label>
               <label>Tags<input id="note-tags" type="text" placeholder="key-words" /></label>
+              <details class="note-extras">
+                <summary>More fields (URL, DOI, abstract)</summary>
+                <label>URL<input id="note-url" type="url" placeholder="https://..." /></label>
+                <label>DOI<input id="note-doi" type="text" placeholder="10.xxxx/..." /></label>
+                <label>Abstract<textarea id="note-abstract" placeholder="Paper abstract..."></textarea></label>
+              </details>
               <div class="button-row">
                 <button type="submit" id="note-submit-button">Add note</button>
                 <button type="button" id="note-cancel-button" class="secondary hidden">Cancel edit</button>

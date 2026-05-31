@@ -22,6 +22,16 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     ("users", "cat_skin_free_changes",             "INTEGER NOT NULL DEFAULT 1"),
     ("users", "daily_goal_minutes",                "INTEGER NOT NULL DEFAULT 120"),
     ("users", "ai_opt_in",                         "BOOLEAN NOT NULL DEFAULT 0"),
+    ("users", "zotero_user_id",                    "VARCHAR(50)"),
+    ("users", "zotero_api_key_enc",                "VARCHAR(500)"),
+    # Zotero-synced paper notes: see app/models/paper_note.py for semantics.
+    ("paper_notes", "zotero_key",                  "VARCHAR(20)"),
+    ("paper_notes", "zotero_version",              "INTEGER"),
+    ("paper_notes", "item_type",                   "VARCHAR(40)"),
+    ("paper_notes", "url",                         "VARCHAR(500)"),
+    ("paper_notes", "doi",                         "VARCHAR(200)"),
+    ("paper_notes", "abstract",                    "TEXT"),
+    ("paper_notes", "source",                      "VARCHAR(20) NOT NULL DEFAULT 'manual'"),
     ("daily_tasks", "sort_order",                  "REAL NOT NULL DEFAULT 0"),
     # Task-session linking: open-ended work sessions and pomodoros can both
     # be tagged with the daily task being worked on. NULL = no link.
@@ -122,6 +132,18 @@ def run_migrations(engine: Engine) -> None:
                 CREATE UNIQUE INDEX IF NOT EXISTS uq_pomodoro_one_active_work_per_user
                 ON pomodoro_sessions (user_id)
                 WHERE is_completed = 0 AND session_type = 'work'
+            """))
+
+        # Zotero dedupe guard: one PaperNote per (user, Zotero item key).
+        # Re-importing the same item updates the existing row in place
+        # rather than duplicating it. NULL keys (manual notes) are not
+        # subject to the constraint — SQLite treats NULLs as distinct in
+        # unique indexes by default.
+        if "paper_notes" in existing_tables:
+            conn.execute(text("""
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_paper_notes_user_zotero_key
+                ON paper_notes (user_id, zotero_key)
+                WHERE zotero_key IS NOT NULL
             """))
 
         # Stopwatch orphan cleanup + uniqueness guard.
