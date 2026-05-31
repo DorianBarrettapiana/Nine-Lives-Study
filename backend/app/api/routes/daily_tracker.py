@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.core.mood import record_mood_entry
 from app.core.xp import (
     ENTITY_DAILY_LOG,
     ENTITY_DAILY_TASK,
@@ -215,6 +216,7 @@ def upsert_daily_log(
         .where(DailyLog.log_date == day)
     )
     log = db.scalar(statement)
+    previous_mood = log.mood if log is not None else ""
 
     if log is None:
         log = DailyLog(
@@ -230,6 +232,9 @@ def upsert_daily_log(
             log.main_goal = payload.main_goal
         log.mood = payload.mood
         log.reflection = payload.reflection
+
+    if day == date.today() and payload.mood and payload.mood != previous_mood:
+        record_mood_entry(current_user.id, payload.mood, "", db)
 
     db.flush()  # populate log.id
 

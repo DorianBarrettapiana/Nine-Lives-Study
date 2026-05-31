@@ -1,7 +1,7 @@
 """Mood entry routes (scoped to current user)."""
 
 import datetime as dt
-from datetime import timezone
+from datetime import date, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
-from app.core.xp import ENTITY_MOOD, EVENT_MOOD, XP_MOOD_LOG, award_xp_event
+from app.core.mood import record_mood_entry, sync_daily_log_mood
 from app.models.mood_entry import MoodEntry
 from app.models.user import User
 from app.schemas.mood_entry import MoodEntryCreate, MoodEntryRead
@@ -39,17 +39,13 @@ def create_mood_entry(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MoodEntry:
-    entry = MoodEntry(user_id=current_user.id, mood=payload.mood, reflection=payload.reflection)
-    db.add(entry)
-    db.flush()
-    award_xp_event(
-        user_id=current_user.id,
-        event_type=EVENT_MOOD,
-        entity_type=ENTITY_MOOD,
-        entity_id=entry.id,
-        amount=XP_MOOD_LOG,
+    entry = record_mood_entry(
+        current_user.id,
+        payload.mood,
+        payload.reflection,
         db=db,
     )
+    sync_daily_log_mood(current_user.id, payload.mood, date.today(), db)
     db.commit()
     db.refresh(entry)
     return entry
