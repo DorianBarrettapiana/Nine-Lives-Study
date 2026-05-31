@@ -13,7 +13,6 @@ from app.core import zotero as zotero_module
 from app.core.crypto import decrypt_str, encrypt_str
 from app.core.zotero import ZoteroError, ZoteroItem, _extract_year, _parse_item
 
-
 # ---------------------------------------------------------------------------
 # Pure-function units
 # ---------------------------------------------------------------------------
