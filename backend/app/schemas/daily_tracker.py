@@ -18,6 +18,7 @@ class DailyTaskCreate(BaseModel):
     planned_date: date | None = None
     due_date: date | None = None
     project_id: int | None = None
+    paper_note_id: int | None = None
 
 
 class DailyTaskUpdate(BaseModel):
@@ -51,6 +52,7 @@ class DailyTaskRead(BaseSchema):
     is_done: bool
     sort_order: float = 0
     project_id: int | None = None
+    paper_note_id: int | None = None
     created_at: UtcDateTime
     updated_at: UtcDateTime
 

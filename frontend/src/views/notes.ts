@@ -13,6 +13,7 @@
  */
 
 import {
+  addNoteToToday,
   createNote,
   deleteNote,
   disconnectZotero,
@@ -23,6 +24,7 @@ import {
   setZoteroConfig,
   updateNote,
   type PaperNoteRead,
+  type PaperReadingStatus,
   type ZoteroConfig,
   type ZoteroItem,
 } from "../api/notes";
@@ -46,6 +48,7 @@ let noteUrlInput: HTMLInputElement;
 let noteDoiInput: HTMLInputElement;
 let noteAbstractInput: HTMLTextAreaElement;
 let noteFeynmanLink: HTMLSelectElement;
+let noteReadingStatus: HTMLSelectElement;
 let noteSearchInput: HTMLInputElement;
 let noteTagFilterInput: HTMLInputElement;
 let noteAiThemesButton: HTMLButtonElement;
@@ -78,6 +81,7 @@ function clearNoteForm(): void {
   noteDoiInput.value = "";
   noteAbstractInput.value = "";
   noteFeynmanLink.value = "";
+  noteReadingStatus.value = "inbox";
   // Don't reset pendingProjectId here — sticky across saves so the user
   // can add a string of notes against one project without re-picking.
   void rerenderNoteProjectPicker();
@@ -124,6 +128,7 @@ export function render(): void {
     const sourceBadge = note.source === "zotero"
       ? `<span class="source-badge zotero-badge" title="Imported from Zotero">📚 Zotero</span>`
       : "";
+    const readingStatus = humanReadingStatus(note.reading_status);
     const externalLinks: string[] = [];
     if (note.doi) {
       externalLinks.push(
@@ -154,11 +159,21 @@ export function render(): void {
             <p class="note-meta">${escapeHtml(note.authors || "Unknown authors")}${note.year ? ` (${note.year})` : ""}${note.item_type ? ` · ${escapeHtml(humanItemType(note.item_type))}` : ""}</p>
           </div>
           <div class="note-actions">
+            <button class="secondary" data-action="read-today" data-id="${note.id}">+ Read today</button>
             <button class="secondary" data-action="edit" data-id="${note.id}">Edit</button>
             <button class="danger" data-action="delete" data-id="${note.id}">Delete</button>
           </div>
         </div>
         ${linksHtml}
+        <div class="note-workflow-row">
+          <span class="source-badge reading-status-${note.reading_status}">${escapeHtml(readingStatus)}</span>
+          <span class="note-meta">${note.reading_minutes} min focused reading</span>
+          <label class="note-status-control">Move to
+            <select data-note-status="${note.id}">
+              ${readingStatusOptions(note.reading_status)}
+            </select>
+          </label>
+        </div>
         ${note.key_points ? `<p class="note-text"><strong>Key ideas:</strong> ${escapeHtml(note.key_points)}</p>` : ""}
         ${note.questions ? `<p class="note-text"><strong>Questions:</strong> ${escapeHtml(note.questions)}</p>` : ""}
         ${note.feynman_entry_id ? `<p class="note-meta"><strong>Feynman link:</strong> ${escapeHtml(feynmanEntries.find((entry) => entry.id === note.feynman_entry_id)?.concept ?? "Linked record")}</p>` : ""}
@@ -166,6 +181,21 @@ export function render(): void {
         ${tags ? `<div class="tags">${tags}</div>` : ""}
       </article>`;
   }).join("");
+}
+
+function humanReadingStatus(status: PaperReadingStatus): string {
+  return {
+    inbox: "Inbox",
+    reading: "Reading",
+    summarized: "Summarized",
+    revisit: "Revisit",
+  }[status];
+}
+
+function readingStatusOptions(selected: PaperReadingStatus): string {
+  return (["inbox", "reading", "summarized", "revisit"] as const)
+    .map((status) => `<option value="${status}" ${status === selected ? "selected" : ""}>${humanReadingStatus(status)}</option>`)
+    .join("");
 }
 
 function humanItemType(itemType: string): string {
@@ -213,6 +243,7 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
   noteDoiInput = document.querySelector<HTMLInputElement>("#note-doi")!;
   noteAbstractInput = document.querySelector<HTMLTextAreaElement>("#note-abstract")!;
   noteFeynmanLink = document.querySelector<HTMLSelectElement>("#note-feynman-link")!;
+  noteReadingStatus = document.querySelector<HTMLSelectElement>("#note-reading-status")!;
   noteSearchInput = document.querySelector<HTMLInputElement>("#note-search")!;
   noteTagFilterInput = document.querySelector<HTMLInputElement>("#note-tag-filter")!;
   noteAiThemesButton = document.querySelector<HTMLButtonElement>("#note-ai-themes")!;
@@ -243,6 +274,7 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
       abstract: noteAbstractInput.value.trim() || null,
       feynman_entry_id: noteFeynmanLink.value ? Number(noteFeynmanLink.value) : null,
       project_id: pendingProjectId,
+      reading_status: noteReadingStatus.value as PaperReadingStatus,
     };
     try {
       if (editedNoteId === null) {
@@ -284,10 +316,21 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
       noteFeynmanLink.value = note.feynman_entry_id === null ? "" : String(note.feynman_entry_id);
       pendingProjectId = note.project_id;
       void rerenderNoteProjectPicker();
+      noteReadingStatus.value = note.reading_status;
       noteSubmitButton.textContent = "Update note";
       noteCancelButton.classList.remove("hidden");
       switchToView("notes");
       window.scrollTo({ top: 0, behavior: "smooth" });
+    } else if (action === "read-today") {
+      try {
+        await addNoteToToday(note.id);
+        setMessage(noteMessage, `"${note.title}" added to today's tasks.`, "success");
+        window.dispatchEvent(new CustomEvent("task-list:updated"));
+        await onRefreshNeeded();
+      } catch (error) {
+        console.error(error);
+        setMessage(noteMessage, "Could not add reading task.", "error");
+      }
     } else if (action === "delete") {
       const extra = note.source === "zotero"
         ? "\n(The item stays in your Zotero library — only this local note is removed.)"
@@ -301,6 +344,19 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
         console.error(error);
         setMessage(noteMessage, "Could not delete note.", "error");
       }
+    }
+  });
+
+  notesList.addEventListener("change", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement) || !target.dataset.noteStatus) return;
+    const noteId = Number(target.dataset.noteStatus);
+    try {
+      await updateNote(noteId, { reading_status: target.value as PaperReadingStatus });
+      await onRefreshNeeded();
+    } catch (error) {
+      console.error(error);
+      setMessage(noteMessage, "Could not update reading status.", "error");
     }
   });
 

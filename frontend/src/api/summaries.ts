@@ -9,7 +9,8 @@
 
 import { apiFetch } from "./client";
 
-export type SummaryKind = "weekly" | "paper_notes" | "feynman_review" | "reflections";
+export type SummaryKind = "weekly" | "monthly" | "stage" | "paper_notes" | "feynman_review" | "reflections";
+export type ProgressSummaryKind = "monthly" | "stage";
 
 export interface AiSummaryRead {
   id: number;
@@ -71,6 +72,17 @@ export async function generateWeekly(tzOffsetMinutes: number): Promise<AiSummary
       // Typical generation takes 5-15s; give 60s headroom for cold paths.
       timeoutMs: 60_000,
     },
+  );
+}
+
+export async function generateProgressRecap(
+  period: ProgressSummaryKind,
+  tzOffsetMinutes: number,
+  days = 90,
+): Promise<AiSummaryRead> {
+  return apiFetch<AiSummaryRead>(
+    `/summaries/progress/${period}/generate?tz_offset=${tzOffsetMinutes}&days=${days}`,
+    { method: "POST", timeoutMs: 60_000 },
   );
 }
 

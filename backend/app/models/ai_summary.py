@@ -24,7 +24,7 @@ def utc_now() -> datetime:
 
 # The set of summary kinds we support. Keep in sync with frontend
 # `SummaryKind` + the prompt-table in `app/core/ai.py`.
-SUMMARY_KINDS = ("weekly", "paper_notes", "feynman_review", "reflections")
+SUMMARY_KINDS = ("weekly", "monthly", "stage", "paper_notes", "feynman_review", "reflections")
 
 
 class AiSummary(Base):

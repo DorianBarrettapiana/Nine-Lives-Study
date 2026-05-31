@@ -34,6 +34,9 @@ class PaperNote(Base):
     questions: Mapped[str] = mapped_column(Text, default="", nullable=False)
     tags: Mapped[str] = mapped_column(String(500), default="", nullable=False)
     feynman_entry_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reading_status: Mapped[str] = mapped_column(
+        String(20), default="inbox", server_default="inbox", nullable=False,
+    )
 
     # Reference metadata. Populated automatically on Zotero import; editable
     # by the user for manual notes. All optional.

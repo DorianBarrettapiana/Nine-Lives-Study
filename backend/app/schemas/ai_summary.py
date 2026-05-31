@@ -4,7 +4,7 @@ from typing import Literal
 
 from app.schemas._base import BaseSchema, UtcDateTime
 
-SummaryKind = Literal["weekly", "paper_notes", "feynman_review", "reflections"]
+SummaryKind = Literal["weekly", "monthly", "stage", "paper_notes", "feynman_review", "reflections"]
 
 
 class AiSummaryRead(BaseSchema):

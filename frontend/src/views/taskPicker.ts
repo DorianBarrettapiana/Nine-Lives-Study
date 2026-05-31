@@ -65,7 +65,8 @@ export async function renderTaskPicker(opts: RenderOptions): Promise<void> {
   // un-done than something already finished), then completed ones in a
   // separate optgroup so the selected-but-now-done task still shows up
   // instead of mysteriously vanishing from the list.
-  const open = tasks.filter((t) => !t.is_done);
+  const reading = tasks.filter((t) => !t.is_done && t.paper_note_id !== null);
+  const open = tasks.filter((t) => !t.is_done && t.paper_note_id === null);
   const done = tasks.filter((t) => t.is_done);
 
   const label = opts.label ?? "Working on";
@@ -79,6 +80,7 @@ export async function renderTaskPicker(opts: RenderOptions): Promise<void> {
       <span class="task-picker-label">${escapeHtml(label)}:</span>
       <select class="task-picker-select" ${opts.disabled ? "disabled" : ""}>
         <option value="0" ${selected === 0 ? "selected" : ""}>(no task)</option>
+        ${reading.length > 0 ? `<optgroup label="Reading">${reading.map(opt).join("")}</optgroup>` : ""}
         ${open.length > 0 ? `<optgroup label="Open">${open.map(opt).join("")}</optgroup>` : ""}
         ${done.length > 0 ? `<optgroup label="Done">${done.map(opt).join("")}</optgroup>` : ""}
       </select>

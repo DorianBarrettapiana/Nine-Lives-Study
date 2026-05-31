@@ -38,7 +38,9 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     ("paper_notes", "doi",                         "VARCHAR(200)"),
     ("paper_notes", "abstract",                    "TEXT"),
     ("paper_notes", "source",                      "VARCHAR(20) NOT NULL DEFAULT 'manual'"),
+    ("paper_notes", "reading_status",              "VARCHAR(20) NOT NULL DEFAULT 'inbox'"),
     ("daily_tasks", "sort_order",                  "REAL NOT NULL DEFAULT 0"),
+    ("daily_tasks", "paper_note_id",               "INTEGER"),
     # Task-session linking: open-ended work sessions and pomodoros can both
     # be tagged with the daily task being worked on. NULL = no link.
     # ON DELETE SET NULL is set in the model definition; SQLite enforces it

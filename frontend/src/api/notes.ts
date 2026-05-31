@@ -4,6 +4,8 @@
 
 import { apiFetch } from "./client";
 
+export type PaperReadingStatus = "inbox" | "reading" | "summarized" | "revisit";
+
 export interface PaperNoteRead {
   id: number;
   user_id: number;
@@ -22,6 +24,8 @@ export interface PaperNoteRead {
   source: string;
   feynman_entry_id: number | null;
   project_id: number | null;
+  reading_status: PaperReadingStatus;
+  reading_minutes: number;
   created_at: string;
   updated_at: string;
 }
@@ -39,6 +43,7 @@ export interface PaperNoteCreate {
   abstract?: string | null;
   feynman_entry_id?: number | null;
   project_id?: number | null;
+  reading_status?: PaperReadingStatus;
 }
 
 export type PaperNoteUpdate = Partial<PaperNoteCreate>;
@@ -68,6 +73,10 @@ export async function deleteNote(noteId: number): Promise<void> {
   await apiFetch<void>(`/notes/${noteId}`, {
     method: "DELETE",
   });
+}
+
+export async function addNoteToToday(noteId: number): Promise<void> {
+  await apiFetch(`/notes/${noteId}/add-to-today`, { method: "POST" });
 }
 
 // --- Zotero ----------------------------------------------------------------
