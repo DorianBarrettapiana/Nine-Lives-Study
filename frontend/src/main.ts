@@ -22,10 +22,9 @@ import { refreshProjects } from "./views/project-state";
 import * as StatsView from "./views/stats";
 import * as StopwatchView from "./views/stopwatch";
 import * as FriendsView from "./views/friends";
-import * as TrackerView from "./views/tracker";
 import * as TodayView from "./views/today";
 
-type AppView = "today" | "notes" | "feynman" | "tracker" | "pomodoro" | "stats" | "mood" | "projects" | "friends";
+type AppView = "today" | "notes" | "feynman" | "pomodoro" | "stats" | "mood" | "projects" | "friends";
 
 const APP_HTML = `
   <div class="app-shell">
@@ -81,7 +80,6 @@ const APP_HTML = `
           <button class="feature-tab active" data-view="today">Today</button>
           <button class="feature-tab" data-view="notes">Paper notes</button>
           <button class="feature-tab" data-view="feynman">Feynman</button>
-          <button class="feature-tab" data-view="tracker">Daily tracker</button>
           <button class="feature-tab" data-view="pomodoro">Pomodoro</button>
           <button class="feature-tab" data-view="mood">Mood</button>
           <button class="feature-tab" data-view="projects">Projects</button>
@@ -90,32 +88,53 @@ const APP_HTML = `
         </nav>
 
         <div id="today-view">
-          <section class="card today-hero">
-            <p class="eyebrow">Today</p>
-            <h2>Make the next block count</h2>
-            <label>Main goal<input id="today-main-goal" type="text" maxlength="500" placeholder="One outcome that would make today meaningful" /></label>
-            <div class="button-row"><button id="today-save-goal" type="button">Save main goal</button></div>
-          </section>
-          <section class="card">
-            <h2>Start now</h2>
-            <input id="today-focus-input" type="text" maxlength="300" placeholder="Temporary focus, or start from a task below" />
-            <div class="button-row">
-              <button id="today-start-stopwatch" type="button">Start stopwatch</button>
-              <button id="today-start-pomodoro" class="secondary" type="button">Start pomodoro</button>
+          <section class="card today-card">
+            <div class="today-header-row">
+              <div id="today-date-bar" class="today-date-bar"></div>
+              <div class="today-filter-row">
+                <span class="today-filter-label">Filter:</span>
+                <div id="today-project-filter" class="today-project-filter"></div>
+              </div>
             </div>
-          </section>
-          <section class="card">
-            <div class="section-header"><h2>Today's tasks</h2><strong id="today-progress-label">0 / 0</strong></div>
-            <div class="progress-bar"><div id="today-progress-fill" class="progress-fill"></div></div>
-            <div id="today-task-list" class="task-list"></div>
-          </section>
-          <section class="card">
-            <h2>Quick mood</h2>
-            <div id="today-mood-row" class="mood-row"></div>
             <p id="today-message" class="message"></p>
           </section>
+
+          <section class="card today-hero">
+            <p class="eyebrow">🎯 Main goal</p>
+            <div id="today-main-goal-picker"></div>
+          </section>
+
           <section class="card">
-            <h2>Evening reflection</h2>
+            <div class="section-header">
+              <h2>Tasks</h2>
+              <strong id="today-progress-label">0 / 0</strong>
+            </div>
+            <div class="progress-bar"><div id="today-progress-fill" class="progress-fill"></div></div>
+            <p id="today-project-breakdown" class="hint today-project-breakdown"></p>
+            <div id="today-task-list" class="task-list"></div>
+            <form id="today-task-form" class="task-form">
+              <input id="today-task-input" type="text" placeholder="Add a task for this day..." />
+              <input id="today-task-due" type="date" title="Optional deadline" />
+              <div id="today-task-project-picker" class="task-project-picker"></div>
+              <button type="submit">Add task</button>
+            </form>
+          </section>
+
+          <section class="card" id="today-upcoming-card">
+            <h2>Up next</h2>
+            <div id="today-upcoming-list" class="upcoming-list"></div>
+          </section>
+
+          <section class="card">
+            <h2>Quick mood</h2>
+            <div class="quick-mood-row">
+              <div id="today-mood-row" class="mood-row"></div>
+              <span id="today-mood-status" class="hint today-mood-status"></span>
+            </div>
+          </section>
+
+          <section class="card">
+            <h2>Reflection</h2>
             <textarea id="today-reflection" placeholder="What moved forward? What should tomorrow inherit?"></textarea>
             <div class="button-row"><button id="today-save-reflection" type="button">Save reflection</button></div>
           </section>
@@ -189,32 +208,6 @@ const APP_HTML = `
           </section>
         </div>
 
-        <div id="tracker-view" class="hidden">
-          <section class="card">
-            <div>
-              <h2>Daily tracker</h2>
-              <p class="hint">Tasks, mood and daily reflection.</p>
-            </div>
-            <div id="tracker-date-bar" class="tracker-date-bar"></div>
-            <div class="tracker-progress">
-              <div class="progress-header"><span>Today progress</span><strong id="tracker-percent">0%</strong></div>
-              <div class="progress-bar"><div id="tracker-progress-fill" class="progress-fill"></div></div>
-              <p id="tracker-count" class="hint">0 / 0 tasks done</p>
-            </div>
-            <form id="task-form" class="task-form">
-              <input id="task-input" type="text" placeholder="Add a task for today..." />
-              <div id="task-project-picker" class="task-project-picker"></div>
-              <button type="submit">Add task</button>
-            </form>
-            <div id="task-list" class="task-list"></div>
-            <div class="divider"></div>
-            <h3>How do you feel today?</h3>
-            <div id="mood-row" class="mood-row"></div>
-            <label>Daily reflection<textarea id="reflection-input" placeholder="What did you do, learn, unblock or struggle with today?"></textarea></label>
-            <div class="button-row"><button id="save-log-button" type="button">Save daily log</button></div>
-            <p id="tracker-message" class="message"></p>
-          </section>
-        </div>
 
         <div id="pomodoro-view" class="hidden">
           <section class="card">
@@ -434,7 +427,6 @@ async function refreshAll(): Promise<void> {
       NotesView.refresh(),
       TodayView.refresh(),
       FeynmanView.refresh(),
-      TrackerView.refresh(),
       PomodoroView.refresh(),
       MoodView.refresh(),
       ProjectsView.refresh(),
@@ -594,7 +586,6 @@ function mountApp(user: UserRead): void {
     today:    app!.querySelector<HTMLDivElement>("#today-view")!,
     notes:    app!.querySelector<HTMLDivElement>("#notes-view")!,
     feynman:  app!.querySelector<HTMLDivElement>("#feynman-view")!,
-    tracker:  app!.querySelector<HTMLDivElement>("#tracker-view")!,
     pomodoro: app!.querySelector<HTMLDivElement>("#pomodoro-view")!,
     mood:     app!.querySelector<HTMLDivElement>("#mood-view")!,
     projects: app!.querySelector<HTMLDivElement>("#projects-view")!,
@@ -611,14 +602,15 @@ function mountApp(user: UserRead): void {
     async () => { await FeynmanView.refresh(); await StatsView.refresh(); },
     (v) => switchView(views, v as AppView),
   );
-  TrackerView.init(() => Promise.all([TrackerView.refresh(), StatsView.refresh()]).then());
   PomodoroView.init(() => Promise.all([PomodoroView.refresh(), StatsView.refresh()]).then());
   PomodoroView.setUser(user);  // pass settings (work/break durations etc.) to the timer
-  MoodView.init(() => Promise.all([MoodView.refresh(), StatsView.refresh()]).then());
+  MoodView.init(() => Promise.all([
+    MoodView.refresh(), TodayView.refresh(), StatsView.refresh(),
+  ]).then());
   // Projects: refresh stats too so the "Time per project" card reflects
   // renames/archives immediately rather than next stats refresh.
   ProjectsView.init(async () => {
-    await Promise.all([StatsView.refresh(), NotesView.refresh(), TrackerView.refresh(), FeynmanView.refresh()]);
+    await Promise.all([StatsView.refresh(), NotesView.refresh(), TodayView.refresh(), FeynmanView.refresh()]);
   });
   // Warm the projects cache at boot so pickers in other views can render
   // their dropdowns without a per-view fetch.
@@ -627,7 +619,7 @@ function mountApp(user: UserRead): void {
   StopwatchView.init(user.cat_skin);
   FriendsView.init(() => FriendsView.refresh());
   TodayView.init(() => Promise.all([
-    TodayView.refresh(), TrackerView.refresh(), StatsView.refresh(), PomodoroView.refresh(),
+    TodayView.refresh(), StatsView.refresh(), PomodoroView.refresh(),
   ]).then());
   // AI panel lives inside the stats view. Fire-and-forget — config fetch
   // determines whether the card reveals itself.
