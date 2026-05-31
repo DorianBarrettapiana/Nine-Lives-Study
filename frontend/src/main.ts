@@ -65,6 +65,7 @@ const APP_HTML = `
           <div id="stopwatch-display" class="stopwatch-display">00:00:00</div>
           <input id="stopwatch-focus-input" type="text" maxlength="300" placeholder="What are you working on?" />
           <p id="stopwatch-today" class="hint stopwatch-today">Today: —</p>
+          <div id="stopwatch-task-picker" class="stopwatch-task-picker"></div>
           <div class="button-row stopwatch-buttons">
             <button id="stopwatch-start-btn" type="button">▶ Start</button>
             <button id="stopwatch-end-btn" type="button" class="secondary">End</button>
@@ -119,8 +120,14 @@ const APP_HTML = `
 
         <div id="notes-view" class="hidden">
           <section class="card">
-            <h2>Paper notes</h2>
-            <p class="hint">Literature notes.</p>
+            <div class="card-header-row">
+              <h2>Paper notes</h2>
+              <div class="card-header-actions">
+                <button type="button" id="zotero-import-button" class="secondary hidden">📚 Import from Zotero</button>
+                <button type="button" id="zotero-settings-button" class="link-btn">Zotero settings</button>
+              </div>
+            </div>
+            <p class="hint">Literature notes. Connect Zotero to pull in references in one click.</p>
             <form id="note-form" class="note-form">
               <label>Paper title *<input id="note-title" type="text" placeholder="Enter paper title..." required /></label>
               <div class="two-cols">
@@ -130,10 +137,12 @@ const APP_HTML = `
               <label>Key ideas &amp; method<textarea id="note-key-points" placeholder="Main idea, method, assumptions..."></textarea></label>
               <label>Questions &amp; thoughts<textarea id="note-questions" placeholder="Open questions, limitations, links with your work..."></textarea></label>
               <label>Tags<input id="note-tags" type="text" placeholder="key-words" /></label>
-              <div class="two-cols">
-                <label>DOI<input id="note-doi" type="text" placeholder="10.1000/xyz123" /></label>
+              <details class="note-extras">
+                <summary>More fields (URL, DOI, abstract)</summary>
                 <label>URL<input id="note-url" type="url" placeholder="https://..." /></label>
-              </div>
+                <label>DOI<input id="note-doi" type="text" placeholder="10.xxxx/..." /></label>
+                <label>Abstract<textarea id="note-abstract" placeholder="Paper abstract..."></textarea></label>
+              </details>
               <label>Linked Feynman record<select id="note-feynman-link"><option value="">None</option></select></label>
               <div class="button-row">
                 <button type="submit" id="note-submit-button">Add note</button>
@@ -243,6 +252,7 @@ const APP_HTML = `
             <div class="pomodoro-timer">
               <label>Current focus<input id="pomodoro-focus-input" type="text" maxlength="300" placeholder="What are you working on?" /></label>
               <div id="pomodoro-display" class="pomodoro-display">25:00</div>
+              <div id="pomodoro-task-picker" class="pomodoro-task-picker"></div>
               <div class="button-row">
                 <button id="pomodoro-start-button">Start</button>
                 <button id="pomodoro-reset-button" class="secondary">Reset</button>

@@ -232,8 +232,7 @@ def weekly_availability(
             "reason": "off_day",
             "next_slot": _SLOT_LABEL.get(_next_slot_letter(weekday)),
         }
-    week_start = _local_monday_utc(tz_offset)
-    period_key = f"{_iso_week_key(week_start)}-{slot}"
+    period_key = _period_key_for_slot(slot, tz_offset)
     existing = db.scalar(
         select(AiSummary.id)
         .where(AiSummary.user_id == current_user.id)
@@ -251,6 +250,22 @@ def weekly_availability(
         "slot": _SLOT_LABEL[slot],
         "period_key": period_key,
     }
+
+
+def _period_key_for_slot(slot: str, tz_offset_minutes: int) -> str:
+    """Period key the given slot would write right now.
+
+    Tuesday's period_key reflects the PREVIOUS week (the one being
+    retrospected on). Friday's reflects the CURRENT week (the one being
+    pulse-checked). This keeps each slot self-consistent — "Recap for
+    2026-W21" on Tuesday is genuinely about W21, not "the recap I made
+    in W22 about W21".
+    """
+    this_monday = _local_monday_utc(tz_offset_minutes)
+    # Tuesday → previous week's Monday (the retrospected week).
+    # Friday  → current week's Monday (the week being pulse-checked).
+    anchor = this_monday - timedelta(days=7) if slot == "T" else this_monday
+    return f"{_iso_week_key(anchor)}-{slot}"
 
 
 def _next_slot_letter(today_weekday: int) -> str:
@@ -286,11 +301,18 @@ def generate_weekly(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Weekly recap can only be generated on Tuesdays and Fridays.",
         )
-    week_start = _local_monday_utc(tz_offset)
-    period_key = f"{_iso_week_key(week_start)}-{slot}"
+    period_key = _period_key_for_slot(slot, tz_offset)
     _check_period_not_yet_generated(current_user.id, "weekly", period_key, db)
+    this_monday = _local_monday_utc(tz_offset)
     try:
-        result = ai.summarise_weekly(current_user.id, week_start, db)
+        if slot == "T":
+            # Tuesday: retrospective on last week (Mon-Sun, now closed).
+            result = ai.summarise_weekly_retrospective(
+                current_user.id, this_monday - timedelta(days=7), db,
+            )
+        else:  # "F"
+            # Friday: pulse on current week so far (Mon-now).
+            result = ai.summarise_weekly_pulse(current_user.id, this_monday, db)
     except Exception as exc:  # noqa: BLE001 — surface SDK errors as 502
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

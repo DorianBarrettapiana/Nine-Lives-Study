@@ -33,7 +33,7 @@ def test_pomodoro_focus_appears_in_stats(auth_client: TestClient):
     task = auth_client.post("/daily/tasks", json={"text": "Read diffusion paper"}).json()
     session = auth_client.post(
         "/pomodoro",
-        json={"session_type": "work", "duration_minutes": 25, "task_id": task["id"]},
+        json={"session_type": "work", "duration_minutes": 25, "linked_task_id": task["id"]},
     ).json()
     auth_client.patch(f"/pomodoro/{session['id']}/complete", json={})
 
@@ -49,7 +49,7 @@ def test_stopwatch_accepts_temporary_focus(auth_client: TestClient):
 
     assert response.status_code == 201
     assert response.json()["work_label"] == "Sketch experiment design"
-    assert response.json()["task_id"] is None
+    assert response.json()["linked_task_id"] is None
 
 
 def test_paper_note_supports_metadata_and_feynman_link(auth_client: TestClient):

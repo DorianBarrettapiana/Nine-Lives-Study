@@ -35,12 +35,12 @@ def _get_owned_session(session_id: int, current_user: User, db: Session) -> Pomo
 
 
 def _resolve_focus(
-    task_id: int | None, work_label: str, current_user: User, db: Session,
+    linked_task_id: int | None, work_label: str, current_user: User, db: Session,
 ) -> tuple[int | None, str]:
     label = work_label.strip()
-    if task_id is None:
+    if linked_task_id is None:
         return None, label
-    task = db.get(DailyTask, task_id)
+    task = db.get(DailyTask, linked_task_id)
     if task is None or task.user_id != current_user.id:
         raise HTTPException(status_code=400, detail="Daily task not found.")
     return task.id, label or task.text
@@ -79,15 +79,15 @@ def start_session(
                 detail="A stopwatch session is already active. End it first.",
             )
 
-    task_id, work_label = _resolve_focus(
-        payload.task_id, payload.work_label, current_user, db,
+    linked_task_id, work_label = _resolve_focus(
+        payload.linked_task_id, payload.work_label, current_user, db,
     )
     session = PomodoroSession(
         user_id=current_user.id,
         session_type=payload.session_type,
         duration_minutes=payload.duration_minutes,
-        task_id=task_id if payload.session_type == "work" else None,
         work_label=work_label if payload.session_type == "work" else "",
+        linked_task_id=linked_task_id if payload.session_type == "work" else None,
     )
     db.add(session)
     try:

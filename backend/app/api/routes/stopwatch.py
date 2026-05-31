@@ -9,6 +9,7 @@ in progress, and vice versa — this is enforced server-side here and in
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -59,7 +60,7 @@ def _to_read(s: StopwatchSession) -> StopwatchSessionRead:
         is_running=s.last_started_at is not None and s.ended_at is None,
         elapsed_seconds=_elapsed_seconds(s),
         work_label=s.work_label,
-        task_id=s.task_id,
+        linked_task_id=s.linked_task_id,
     )
 
 
@@ -84,12 +85,12 @@ def _has_active_pomodoro(user_id: int, db: Session) -> bool:
 
 
 def _resolve_focus(
-    task_id: int | None, work_label: str, current_user: User, db: Session,
+    linked_task_id: int | None, work_label: str, current_user: User, db: Session,
 ) -> tuple[int | None, str]:
     label = work_label.strip()
-    if task_id is None:
+    if linked_task_id is None:
         return None, label
-    task = db.get(DailyTask, task_id)
+    task = db.get(DailyTask, linked_task_id)
     if task is None or task.user_id != current_user.id:
         raise HTTPException(status_code=400, detail="Daily task not found.")
     return task.id, label or task.text
@@ -110,7 +111,7 @@ def get_active(
 
 @router.post("/start", response_model=StopwatchSessionRead, status_code=201)
 def start(
-    payload: StopwatchSessionStart = StopwatchSessionStart(),
+    payload: StopwatchSessionStart | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> StopwatchSessionRead:
@@ -122,15 +123,18 @@ def start(
     if _has_active_pomodoro(current_user.id, db):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                             detail="A pomodoro is already in progress.")
-    task_id, work_label = _resolve_focus(payload.task_id, payload.work_label, current_user, db)
+    payload = payload or StopwatchSessionStart()
+    linked_task_id, work_label = _resolve_focus(
+        payload.linked_task_id, payload.work_label, current_user, db,
+    )
     now = _utc_now()
     s = StopwatchSession(
         user_id=current_user.id,
         started_at=now,
         last_started_at=now,
         accumulated_seconds=0,
-        task_id=task_id,
         work_label=work_label,
+        linked_task_id=linked_task_id,
     )
     db.add(s)
     try:
@@ -240,6 +244,42 @@ def end(
             db=db,
         )
         db.commit()
+    return _to_read(s)
+
+
+class StopwatchTaskUpdatePayload(BaseModel):
+    """Body of PATCH /stopwatch/{id}/task. Pass null to unlink."""
+
+    linked_task_id: int | None = None
+
+
+@router.patch("/{session_id}/task", response_model=StopwatchSessionRead)
+def update_task(
+    session_id: int,
+    payload: StopwatchTaskUpdatePayload,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> StopwatchSessionRead:
+    """Re-tag the daily task for an in-progress stopwatch session.
+
+    Stopwatch work is open-ended: you start running, then realize what
+    you're actually doing. This lets you correct the label mid-session.
+    A future enhancement (segments table) could attribute time *before*
+    the switch to the OLD task; for now we just overwrite — simpler and
+    matches the "I'll just relabel it" mental model."""
+    s = db.get(StopwatchSession, session_id)
+    if s is None or s.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Not found.")
+    if s.ended_at is not None:
+        raise HTTPException(status_code=400, detail="Session already ended.")
+    linked_task_id, fallback_label = _resolve_focus(
+        payload.linked_task_id, "", current_user, db,
+    )
+    s.linked_task_id = linked_task_id
+    if linked_task_id is not None and not s.work_label:
+        s.work_label = fallback_label
+    db.commit()
+    db.refresh(s)
     return _to_read(s)
 
 

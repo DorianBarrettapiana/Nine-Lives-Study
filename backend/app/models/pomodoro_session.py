@@ -32,7 +32,6 @@ class PomodoroSession(Base):
     duration_minutes: Mapped[int] = mapped_column(Integer, default=25, nullable=False)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     work_label: Mapped[str] = mapped_column(String(300), default="", server_default="", nullable=False)
-    task_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     started_at: Mapped[datetime] = mapped_column(
         DateTime(),
@@ -42,6 +41,17 @@ class PomodoroSession(Base):
     ended_at: Mapped[datetime | None] = mapped_column(
         DateTime(),
         nullable=True,
+    )
+
+    # Optional link to the daily task this pomodoro is working on. Set at
+    # Start (the dropdown defaults to the most recent unfinished daily
+    # task). Unlike stopwatch, pomodoros are short and goal-committed —
+    # we don't expose a mid-session edit endpoint; if you picked wrong
+    # you can fix the task via Reset → re-start.
+    linked_task_id: Mapped[int | None] = mapped_column(
+        ForeignKey("daily_tasks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
 
     # Partial unique index: at most ONE in-progress work pomodoro per user.

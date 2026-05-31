@@ -13,7 +13,7 @@ export interface StopwatchSessionRead {
   is_running: boolean;
   elapsed_seconds: number;
   work_label: string;
-  task_id: number | null;
+  linked_task_id: number | null;
 }
 
 export async function getActive(): Promise<StopwatchSessionRead | null> {
@@ -22,11 +22,22 @@ export async function getActive(): Promise<StopwatchSessionRead | null> {
 
 export async function startStopwatch(
   workLabel = "",
-  taskId: number | null = null,
+  linkedTaskId: number | null = null,
 ): Promise<StopwatchSessionRead> {
   return apiFetch<StopwatchSessionRead>("/stopwatch/start", {
     method: "POST",
-    body: JSON.stringify({ work_label: workLabel, task_id: taskId }),
+    body: JSON.stringify({ work_label: workLabel, linked_task_id: linkedTaskId }),
+  });
+}
+
+/** Mid-session task switch. Pass null to unlink. */
+export async function updateStopwatchTask(
+  sessionId: number,
+  linkedTaskId: number | null,
+): Promise<StopwatchSessionRead> {
+  return apiFetch<StopwatchSessionRead>(`/stopwatch/${sessionId}/task`, {
+    method: "PATCH",
+    body: JSON.stringify({ linked_task_id: linkedTaskId }),
   });
 }
 

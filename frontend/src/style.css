@@ -1889,3 +1889,217 @@ h3 {
 .ai-summary-body {
   padding: 0.6rem 0.9rem 0.9rem;
 }
+
+/* --- Task picker (stopwatch + pomodoro) --------------------------------- */
+
+.task-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  margin: 0.6rem 0;
+}
+.task-picker-label {
+  color: var(--text-soft);
+  flex-shrink: 0;
+}
+.task-picker-select {
+  flex: 1;
+  min-width: 0;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.task-picker-select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.task-picker-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.stopwatch-task-picker,
+.pomodoro-task-picker {
+  width: 100%;
+}
+
+/* --- AI recap "Next step" action block --------------------------------- */
+
+.ai-next-step {
+  margin-top: 1rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.ai-next-step-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+.ai-next-step-text {
+  font-size: 0.95rem;
+  line-height: 1.45;
+  margin-bottom: 0.6rem;
+}
+.ai-next-step-btn {
+  font-size: 0.85rem;
+  padding: 0.4rem 0.8rem;
+}
+
+/* --- Paper notes: Zotero integration ----------------------------------- */
+
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.card-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.note-extras {
+  margin-top: 0.25rem;
+  border-top: 1px dashed var(--border);
+  padding-top: 0.5rem;
+}
+.note-extras > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-soft);
+  user-select: none;
+  padding: 0.2rem 0;
+}
+.note-extras label {
+  display: block;
+  margin-top: 0.5rem;
+}
+
+.source-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.45rem;
+  margin-left: 0.4rem;
+  border-radius: 999px;
+  background: var(--bg-soft, rgba(127, 127, 127, 0.15));
+  color: var(--text-soft);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.zotero-badge {
+  background: rgba(204, 41, 54, 0.15);
+  color: #cc2936;
+}
+
+.note-links {
+  font-size: 0.82rem;
+  margin: 0.25rem 0 0.4rem;
+  color: var(--text-soft);
+}
+.note-links a {
+  margin-right: 0.4rem;
+}
+
+.note-abstract {
+  margin: 0.5rem 0;
+  font-size: 0.88rem;
+}
+.note-abstract > summary {
+  cursor: pointer;
+  color: var(--text-soft);
+  font-size: 0.85rem;
+}
+.note-abstract p {
+  margin: 0.4rem 0 0;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+/* --- Zotero modals ----------------------------------------------------- */
+
+.modal-wide { max-width: 640px; }
+.modal-tall { display: flex; flex-direction: column; max-height: 85vh; }
+
+.modal-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.4rem;
+}
+
+.zotero-howto {
+  font-size: 0.85rem;
+  color: var(--text-soft);
+  margin: 0.5rem 0 0.8rem 1.1rem;
+  padding-left: 0;
+}
+.zotero-howto li { margin: 0.2rem 0; }
+
+.zotero-search-row {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+.zotero-search-row input[type="search"] {
+  flex: 1;
+}
+
+.zotero-import-list {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem;
+  min-height: 200px;
+  max-height: 50vh;
+}
+
+.zotero-item {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.5rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  align-items: flex-start;
+}
+.zotero-item:last-child { border-bottom: none; }
+.zotero-item:hover { background: rgba(127, 127, 127, 0.06); }
+.zotero-item.is-imported { opacity: 0.75; }
+
+.zotero-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+.zotero-item-title {
+  font-weight: 500;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+.zotero-item-meta {
+  font-size: 0.78rem;
+  color: var(--text-soft);
+}
+
+.zotero-import-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+  flex-wrap: wrap;
+}

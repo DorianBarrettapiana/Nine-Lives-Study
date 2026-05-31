@@ -52,3 +52,11 @@ class User(Base):
     # experience for current users while making both controls explicit.
     share_study_time: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
     share_activity: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
+
+    # --- Zotero integration (per-user, optional) ----------------------------
+    # `zotero_user_id` is the public numeric ID the user copies from their
+    # Zotero profile URL (zotero.org/<username>; the integer is on Settings →
+    # Feeds/API). `zotero_api_key_enc` is a Fernet-encrypted personal API
+    # key — see app.core.crypto. Both NULL = not connected.
+    zotero_user_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    zotero_api_key_enc: Mapped[str | None] = mapped_column(String(500), nullable=True)

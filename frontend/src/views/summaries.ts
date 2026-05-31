@@ -24,6 +24,7 @@ import {
   type WeeklyAvailability,
 } from "../api/summaries";
 import { ApiError } from "../api/client";
+import { createDailyTask } from "../api/tracker";
 import { escapeHtml, flashMessage, parseApiDate, setMessage } from "../utils";
 
 let cardEl: HTMLElement | null = null;
@@ -84,11 +85,25 @@ function applyInline(text: string): string {
 
 // --- UI state helpers -------------------------------------------------------
 
+// Match the trailing `**Next step:** <action>` line the prompt asks Claude
+// to emit. Group 1 is the action text (max ~80 chars per the prompt). We
+// strip that line from the body and render it as an action button below
+// the markdown — turns a passive recap into a one-click follow-through.
+const NEXT_STEP_RE = /\*\*Next step:\*\*\s*(.+?)\s*$/m;
+
+function extractNextStep(md: string): { body: string; nextStep: string | null } {
+  const match = md.match(NEXT_STEP_RE);
+  if (match === null) return { body: md, nextStep: null };
+  const body = md.replace(NEXT_STEP_RE, "").trimEnd();
+  return { body, nextStep: match[1].trim() };
+}
+
 function showSummary(s: AiSummaryRead, { expanded = false }: { expanded?: boolean } = {}): void {
   if (!contentEl || !metaEl) return;
   const when = parseApiDate(s.generated_at).toLocaleString(undefined, {
     month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
   });
+  const { body, nextStep } = extractNextStep(s.content);
   // Wrap in <details> so re-opening the Stats view shows a compact one-line
   // summary instead of an unprompted wall of markdown. Just-generated
   // summaries open expanded (the user clicked Generate seconds ago and wants
@@ -96,10 +111,53 @@ function showSummary(s: AiSummaryRead, { expanded = false }: { expanded?: boolea
   contentEl.innerHTML = `
     <details class="ai-summary-details" ${expanded ? "open" : ""}>
       <summary>Recap for ${s.period_key} · generated ${when}</summary>
-      <div class="ai-summary-body">${renderMarkdown(s.content)}</div>
+      <div class="ai-summary-body">${renderMarkdown(body)}</div>
+      ${nextStep !== null ? renderNextStepAction(nextStep) : ""}
     </details>
   `;
+  if (nextStep !== null) wireNextStepButton(nextStep);
   metaEl.textContent = `${s.model}`;
+}
+
+function renderNextStepAction(nextStep: string): string {
+  // Render the suggestion as a quote-styled block with an inline action.
+  // No state-tracking for "already added" — the button is one-shot per
+  // page load; multiple clicks create duplicate tasks, but the user
+  // would notice immediately in the tracker view.
+  return `
+    <div class="ai-next-step">
+      <div class="ai-next-step-label">Next step</div>
+      <div class="ai-next-step-text">${escapeHtml(nextStep)}</div>
+      <button type="button" class="ai-next-step-btn" data-ai-action="add-task">
+        + Add to today's tasks
+      </button>
+    </div>
+  `;
+}
+
+function wireNextStepButton(nextStep: string): void {
+  if (contentEl === null) return;
+  const btn = contentEl.querySelector<HTMLButtonElement>('[data-ai-action="add-task"]');
+  if (btn === null) return;
+  btn.addEventListener("click", () => {
+    void onAddNextStepAsTask(nextStep, btn);
+  });
+}
+
+async function onAddNextStepAsTask(text: string, btn: HTMLButtonElement): Promise<void> {
+  btn.disabled = true;
+  btn.textContent = "Adding…";
+  try {
+    await createDailyTask({ text });
+    btn.textContent = "✓ Added";
+    // Other open task pickers (stopwatch/pomodoro) refresh themselves
+    // when this fires — keeps the new task visible without a reload.
+    window.dispatchEvent(new CustomEvent("task-list:updated"));
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = "+ Add to today's tasks";
+    if (messageEl !== null) setMessage(messageEl, parseError(e), "error");
+  }
 }
 
 function clearSummary(): void {
@@ -256,7 +314,11 @@ async function refreshAvailability(): Promise<void> {
   }
   if (avail.can_generate) {
     generateBtn.disabled = false;
-    generateBtn.textContent = `Generate (${avail.slot})`;
+    // Surface the slot's framing so the user knows what they'll get:
+    // Tuesday produces a retrospective on last week, Friday a pulse on
+    // this week so far.
+    const flavor = avail.slot === "Tuesday" ? "last week recap" : "this week pulse";
+    generateBtn.textContent = `Generate ${flavor}`;
     generateBtn.title = `${avail.slot} slot · creates ${avail.period_key}`;
   } else if (avail.reason === "off_day") {
     generateBtn.disabled = true;

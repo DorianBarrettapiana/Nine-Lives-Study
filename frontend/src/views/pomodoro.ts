@@ -12,6 +12,7 @@
  */
 
 import { completeSession, deleteSession, listSessions, startSession, type PomodoroSessionRead } from "../api/pomodoro";
+import { renderTaskPicker } from "./taskPicker";
 import { updateMe, type UserRead } from "../api/users";
 import { escapeHtml, flashMessage, fmtMinutes, formatTime, parseApiDate, setMessage } from "../utils";
 import { renderEmptyStateWithCat } from "./icons";
@@ -54,10 +55,27 @@ function broadcastPomodoroState(): void {
   window.dispatchEvent(new CustomEvent("pomodoro:state", {
     detail: { active: pomodoroActive, running: pomodoroRunning },
   }));
+  // Picker enable/disable mirrors session-in-progress state; refresh
+  // is cheap (cached task list, no network).
+  void refreshTaskPickerUI();
 }
 
 // True if the stopwatch view has told us a session is running on the server.
 let stopwatchBlocking = false;
+
+async function refreshTaskPickerUI(): Promise<void> {
+  if (taskPickerEl === null) return;
+  // Disable picker while a session is in flight — pomodoro is commit-and-go,
+  // unlike stopwatch's "discover what I'm doing" model. To change tasks
+  // mid-pomodoro: Reset → pick → Start.
+  await renderTaskPicker({
+    container: taskPickerEl,
+    selectedTaskId: pendingTaskId,
+    label: "Focus",
+    disabled: activeSessionId !== null,
+    onChange: (taskId) => { pendingTaskId = taskId; },
+  });
+}
 
 function updateStartButtonLock(): void {
   // Centralised disable rule. Called from both the stopwatch:state listener
@@ -82,8 +100,13 @@ window.addEventListener("stopwatch:state", (e: Event) => {
 });
 let pomodoroIntervalId: ReturnType<typeof setInterval> | null = null;
 let activeSessionId: number | null = null;
-let selectedTaskId: number | null = null;
 let onDataChangedCb: (() => Promise<void>) | null = null;
+let taskPickerEl: HTMLDivElement | null = null;
+// Stages the user's task choice between picker change and Start click.
+// Once a work session is in progress, this is no longer the source of
+// truth — the server row's linked_task_id is. Pomodoro doesn't support
+// mid-session retag (unlike stopwatch); use Reset to redo.
+let pendingTaskId: number | null = null;
 
 // User preference, persisted in localStorage. Default ON so the cycle is
 // usable without configuration. Toggle in the settings panel.
@@ -283,7 +306,7 @@ async function resumeIfInProgress(): Promise<void> {
   }
 
   activeSessionId = active.id;
-  selectedTaskId = active.task_id;
+  pendingTaskId = active.linked_task_id;
   if (active.work_label) focusInput.value = active.work_label;
   broadcastPomodoroState();
   if (active.session_type === "work") {
@@ -344,7 +367,7 @@ async function startCurrentMode(): Promise<void> {
         modeApiType(pomodoroMode),
         modeDurationSeconds(pomodoroMode) / 60,
         pomodoroMode === "work" ? focusInput.value.trim() : "",
-        pomodoroMode === "work" ? selectedTaskId : null,
+        pomodoroMode === "work" ? pendingTaskId : null,
       );
       activeSessionId = s.id;
     } catch (error) {
@@ -369,7 +392,7 @@ export async function startForFocus(taskId: number | null, label: string): Promi
     setMessage(pomodoroMessage, "A pomodoro is already in progress.", "error");
     return false;
   }
-  selectedTaskId = taskId;
+  pendingTaskId = taskId;
   focusInput.value = label;
   await startCurrentMode();
   await onDataChangedCb?.();
@@ -444,13 +467,19 @@ export function init(onDataChanged: () => Promise<void>): void {
   settingsMessage          = document.querySelector<HTMLParagraphElement>("#pomodoro-settings-message")!;
   modeHintEl               = document.querySelector<HTMLParagraphElement>("#pomodoro-mode-hint")!;
   focusInput               = document.querySelector<HTMLInputElement>("#pomodoro-focus-input")!;
+  taskPickerEl             = document.querySelector<HTMLDivElement>("#pomodoro-task-picker");
+
+  // Render the task picker so the user can pick before clicking Start.
+  // Pomodoro doesn't support mid-session retag — the picker disables
+  // once activeSessionId is non-null (i.e. a session is in flight).
+  void refreshTaskPickerUI();
+  window.addEventListener("task-list:updated", () => void refreshTaskPickerUI());
 
   // Today's-work-minutes line in the session list reads from the stats
   // module's cache; re-render when that cache is refreshed.
   window.addEventListener("progress:updated", () => render());
   // Sleeping-cat empty state needs to re-tint on skin change.
   window.addEventListener("cat:skin-changed", () => render());
-  focusInput.addEventListener("input", () => { selectedTaskId = null; });
 
   pomodoroStartButton.addEventListener("click", async () => {
     if (pomodoroRunning) { stopTimer(); render(); return; }
