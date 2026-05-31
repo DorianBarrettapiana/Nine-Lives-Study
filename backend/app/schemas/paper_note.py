@@ -14,6 +14,13 @@ class PaperNoteCreate(BaseModel):
     key_points: str = ""
     questions: str = ""
     tags: str = Field(default="", max_length=500)
+    # Optional reference metadata — surfaced as collapsible "More fields"
+    # in the UI so the manual-entry form stays uncluttered for users who
+    # only want title + key ideas.
+    item_type: str | None = Field(default=None, max_length=40)
+    url: str | None = Field(default=None, max_length=500)
+    doi: str | None = Field(default=None, max_length=200)
+    abstract: str | None = None
 
 
 class PaperNoteUpdate(BaseModel):
@@ -25,6 +32,10 @@ class PaperNoteUpdate(BaseModel):
     key_points: str | None = None
     questions: str | None = None
     tags: str | None = Field(default=None, max_length=500)
+    item_type: str | None = Field(default=None, max_length=40)
+    url: str | None = Field(default=None, max_length=500)
+    doi: str | None = Field(default=None, max_length=200)
+    abstract: str | None = None
 
 
 class PaperNoteRead(BaseSchema):
@@ -38,5 +49,15 @@ class PaperNoteRead(BaseSchema):
     key_points: str
     questions: str
     tags: str
+    item_type: str | None = None
+    url: str | None = None
+    doi: str | None = None
+    abstract: str | None = None
+    # Zotero linkage — null for manually-created notes. The frontend uses
+    # `source` for a "Synced from Zotero" badge, and `zotero_key` to deep-link
+    # back into the user's Zotero library.
+    zotero_key: str | None = None
+    zotero_version: int | None = None
+    source: str = "manual"
     created_at: UtcDateTime
     updated_at: UtcDateTime

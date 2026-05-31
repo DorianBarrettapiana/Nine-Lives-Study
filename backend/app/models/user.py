@@ -47,3 +47,11 @@ class User(Base):
     # time they click a "Generate" button we show a disclosure modal that
     # flips this to True. Until then, AI routes refuse with 403.
     ai_opt_in: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # --- Zotero integration (per-user, optional) ----------------------------
+    # `zotero_user_id` is the public numeric ID the user copies from their
+    # Zotero profile URL (zotero.org/<username>; the integer is on Settings →
+    # Feeds/API). `zotero_api_key_enc` is a Fernet-encrypted personal API
+    # key — see app.core.crypto. Both NULL = not connected.
+    zotero_user_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    zotero_api_key_enc: Mapped[str | None] = mapped_column(String(500), nullable=True)
