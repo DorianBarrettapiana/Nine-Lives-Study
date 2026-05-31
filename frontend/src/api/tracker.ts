@@ -8,6 +8,10 @@ export interface DailyTaskRead {
   id: number;
   user_id: number;
   task_date: string;
+  // New scheduling fields. `planned_date` mirrors `task_date` for legacy
+  // rows; the UI should migrate to reading planned_date in a follow-up PR.
+  planned_date: string | null;
+  due_date: string | null;
   text: string;
   is_done: boolean;
   sort_order: number;
@@ -21,6 +25,7 @@ export interface DailyLogRead {
   user_id: number;
   log_date: string;
   main_goal: string;
+  main_goal_task_id: number | null;
   mood: string;
   reflection: string;
   created_at: string;
@@ -39,6 +44,8 @@ export interface DailyStateRead {
 export interface DailyTaskCreate {
   text: string;
   task_date?: string | null;
+  planned_date?: string | null;
+  due_date?: string | null;
   project_id?: number | null;
 }
 
@@ -46,14 +53,29 @@ export interface DailyTaskUpdate {
   text?: string;
   is_done?: boolean;
   sort_order?: number;
+  planned_date?: string | null;
+  due_date?: string | null;
   project_id?: number | null;
 }
 
 export interface DailyLogUpsert {
   log_date?: string | null;
   main_goal?: string | null;
+  // Pass an id to set, or 0 to unassign. Omit to leave unchanged.
+  main_goal_task_id?: number | null;
   mood: string;
   reflection: string;
+}
+
+export async function listUpcomingTasks(opts: {
+  horizon_days?: number;
+  include_overdue?: boolean;
+} = {}): Promise<DailyTaskRead[]> {
+  const params = new URLSearchParams();
+  if (opts.horizon_days !== undefined) params.set("horizon_days", String(opts.horizon_days));
+  if (opts.include_overdue !== undefined) params.set("include_overdue", String(opts.include_overdue));
+  const qs = params.toString();
+  return apiFetch<DailyTaskRead[]>(`/daily/tasks/upcoming${qs ? `?${qs}` : ""}`);
 }
 
 export async function getDailyState(date?: string): Promise<DailyStateRead> {

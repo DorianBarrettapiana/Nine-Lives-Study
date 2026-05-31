@@ -27,6 +27,14 @@ class DailyTask(Base):
     )
 
     task_date: Mapped[date] = mapped_column(Date, index=True, nullable=False)
+    # New scheduling fields (PR1 of the Today/Daily-tracker unification):
+    # `planned_date` is "the day the user intends to work on this". For
+    # legacy rows it's backfilled to equal task_date; for new rows the
+    # route layer dual-writes both columns so the UI can switch over to
+    # planned_date in a follow-up PR without breaking historical data.
+    # `due_date` is the hard deadline (nullable — most tasks don't have one).
+    planned_date: Mapped[date | None] = mapped_column(Date, index=True, nullable=True)
+    due_date: Mapped[date | None] = mapped_column(Date, index=True, nullable=True)
     text: Mapped[str] = mapped_column(String(500), nullable=False)
     is_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # User-controlled ordering within a day. Lower sorts first; ties break
@@ -74,6 +82,15 @@ class DailyLog(Base):
 
     log_date: Mapped[date] = mapped_column(Date, index=True, nullable=False)
     main_goal: Mapped[str] = mapped_column(String(500), default="", server_default="", nullable=False)
+    # Preferred way to pin "today's most important thing": a reference to a
+    # daily task rather than a free-text string. The free-text `main_goal`
+    # column stays for backward compatibility but the UI will move to this.
+    # Validated against the user's own tasks on write.
+    main_goal_task_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    # `mood` is deprecated as a per-day storage location. Mood is being
+    # consolidated into the mood_entries table (one stream, multiple per
+    # day). The column stays so legacy reads + the dual-write transition
+    # don't break, but new UI should target /mood instead of /daily/log.
     mood: Mapped[str] = mapped_column(String(20), default="", nullable=False)
     reflection: Mapped[str] = mapped_column(Text, default="", nullable=False)
 

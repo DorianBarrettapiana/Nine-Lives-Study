@@ -237,6 +237,29 @@ def gather_weekly(
                 project_id = task.project_id
         time_per_project[_project_name(project_id)] += ev.amount
 
+    # Looming deadlines (next 14 days, not yet done). Capped at 5 entries
+    # so the prompt doesn't bloat for users with long task lists. The
+    # recap prompt uses these to surface a "what's pressing next week"
+    # line, separate from the retrospective.
+    today_d = (week_end_utc.date() if window_end_utc is None else datetime.now(timezone.utc).date())
+    upcoming_rows = db.scalars(
+        select(DailyTask)
+        .where(DailyTask.user_id == user_id)
+        .where(DailyTask.is_done == False)  # noqa: E712
+        .where(DailyTask.due_date.is_not(None))
+        .where(DailyTask.due_date <= today_d + timedelta(days=14))
+        .order_by(DailyTask.due_date.asc())
+        .limit(5)
+    ).all()
+    upcoming = [
+        {
+            "text": (t.text or "")[:120],
+            "due_date": t.due_date.isoformat() if t.due_date else None,
+            "overdue": t.due_date is not None and t.due_date < today_d,
+        }
+        for t in upcoming_rows
+    ]
+
     return {
         "week_start": week_start_utc.date().isoformat(),
         "week_end": (week_end_utc - timedelta(days=1)).date().isoformat(),
@@ -253,6 +276,7 @@ def gather_weekly(
         "feynman_entries_created": 1 if feynman_count else 0,  # presence-only
         "paper_notes_created": 1 if paper_notes_count else 0,
         "streak_days": streak_days,
+        "upcoming_deadlines": upcoming,
     }
 
 
@@ -339,6 +363,12 @@ KEY DATA — two complementary breakdowns:
 If "(no project)" or "(unlabeled)" is a large share, gently note it
 so the user can start tagging more work. Never invent project or task
 labels — quote them verbatim from the keys.
+
+`upcoming_deadlines` lists tasks the user marked with a due date in
+the next two weeks. Any entry with `overdue: true` is already late.
+Surface these in a short "what's pressing next" sentence — it's the
+single most useful forward-looking item we can give a PhD student.
+If the list is empty, don't fabricate urgency.
 
 ALWAYS finish the recap with one line in exactly this format (verbatim,
 including the asterisks, on its own line):
