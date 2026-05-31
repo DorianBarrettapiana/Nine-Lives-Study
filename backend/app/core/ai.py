@@ -100,13 +100,24 @@ def _aware(dt: datetime | None) -> datetime | None:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def gather_weekly(user_id: int, week_start_utc: datetime, db: Session) -> dict:
-    """Pull a week's worth of activity for the weekly-recap prompt.
+def gather_weekly(
+    user_id: int,
+    window_start_utc: datetime,
+    db: Session,
+    window_end_utc: datetime | None = None,
+) -> dict:
+    """Pull activity data for the weekly-recap prompt.
 
-    `week_start_utc` is the inclusive lower bound (typically a Monday 00:00
-    in the user's local TZ, converted to UTC by the route).
+    `window_start_utc` is the inclusive lower bound (a Monday 00:00 in the
+    user's local TZ, converted to UTC by the route). `window_end_utc` is
+    exclusive — defaults to start + 7 days for the classic "completed
+    week" Tuesday-slot view; the Friday slot passes "now" to get a
+    Mon-through-now pulse instead.
     """
-    week_end_utc = week_start_utc + timedelta(days=7)
+    week_end_utc = window_end_utc if window_end_utc is not None else (
+        window_start_utc + timedelta(days=7)
+    )
+    week_start_utc = window_start_utc
 
     # Work minutes per day from XP events (the same source the stats view uses,
     # so the numbers reconcile with what the user already sees).
@@ -279,36 +290,70 @@ def gather_reflections(user_id: int, since_utc: datetime, db: Session) -> dict:
 # cheerleader) and bound output length so the markdown stays scannable.
 
 
-_SYSTEM_WEEKLY = """\
-You are a thoughtful study coach for a PhD student. The user shares one
-week of activity data and you produce a short, warm, honest recap they
-can both share with their advisor and reflect on themselves.
-
-Tone: peer-to-peer, never corporate. Acknowledge real effort, flag
-patterns gently, and avoid empty validation. If a metric is low, say so —
-PhD students see through cheerleading.
+# Shared advice that applies to both slots — peer tone, no invention,
+# anti-cheerleading. Each slot prompt below appends slot-specific framing.
+_SHARED_RECAP_TONE = """\
+You are a thoughtful study coach for a PhD student. Tone: peer-to-peer,
+never corporate. Acknowledge real effort, flag patterns gently, and
+avoid empty validation. If a metric is low, say so — PhD students see
+through cheerleading.
 
 KEY DATA: `time_per_task_minutes` is a map of `{task_text: minutes}`
-showing how the week's work time split across the user's own daily-task
-labels. Use this as the spine of the recap — it's the difference between
+showing how work time split across the user's own daily-task labels.
+Use this as the spine of every observation — it's the difference between
 "you worked 12 hours" (useless) and "5h on chapter 2 vs 4h on lit
 review" (actionable). If "(unlabeled)" is a large share, gently note it
-so the user can start tagging more sessions. If the map is empty or all
-unlabeled, fall back to total hours and suggest the user try linking
-sessions to tasks for next week's recap to be more useful.
+so the user can start tagging more sessions. Never invent task labels —
+quote them verbatim from `time_per_task_minutes` keys.
 
-Output format: Markdown. ~250 words total. Use these sections:
-- **This week in numbers** (1-2 lines: hours, sessions, streak)
+ALWAYS finish the recap with one line in exactly this format (verbatim,
+including the asterisks, on its own line):
+
+**Next step:** <one short, concrete action, max 80 chars>
+
+This line is parsed by the frontend to offer a one-click "add to today's
+tasks" button — so make it imperative and specific (e.g. "Re-read paper
+A's section 3 and note 2 questions") rather than vague ("focus more").\
+"""
+
+# Tuesday slot: retrospective. Looks at the previous ISO week (Mon-Sun,
+# already complete). Past tense; closure framing.
+_SYSTEM_WEEKLY_RETROSPECTIVE = _SHARED_RECAP_TONE + """
+
+This is a RETROSPECTIVE on the **previous full week** (Mon-Sun, now
+closed). Use past tense throughout. The recap should help the user close
+the loop on what just finished.
+
+Output format: Markdown. ~250 words total. Sections:
+- **Last week in numbers** (1-2 lines: hours, sessions, streak)
 - **Where your time went** (2-3 bullets quoting the largest task labels
   verbatim, with their hour counts)
 - **What stood out** (1-2 honest observations, including any dips)
-- **One thing to try next week** (a single concrete suggestion grounded
-  in the data, not generic advice)
+- **One thing to carry into next week** (grounded in the data above)
 
-Never invent data. Never invent task labels — quote them verbatim from
-`time_per_task_minutes` keys. If the input shows zero work or zero
-reflections, say that plainly and ask one curious question instead of
-padding.\
+Then the **Next step:** line (see KEY DATA above).
+"""
+
+# Friday slot: mid-week pulse. Looks at current ISO week so far (Mon-now).
+# Present tense; momentum framing; the week isn't done so don't write a
+# eulogy for it.
+_SYSTEM_WEEKLY_PULSE = _SHARED_RECAP_TONE + """
+
+This is a MID-WEEK PULSE on the **current week so far** (Mon through
+now). The week isn't over — write in present tense, with a "where are
+we, what's left" frame rather than a retrospective.
+
+Output format: Markdown. ~200 words total (shorter than the Tuesday
+retrospective — the user is mid-flow and shouldn't lose 15 minutes
+reading). Sections:
+- **This week so far** (1 line: hours, sessions, streak)
+- **What's getting your attention** (2 bullets quoting task labels
+  verbatim, with hour counts)
+- **What's worth adjusting before Sunday** (1-2 short observations —
+  things still actionable in the remaining days)
+
+Then the **Next step:** line (see KEY DATA above). For Friday pulse,
+this should be doable Sat-Sun.
 """
 
 _SYSTEM_PAPER_NOTES = """\
@@ -385,9 +430,35 @@ def _summarise(system_prompt: str, user_payload: dict, max_tokens: int) -> Summa
 # --- Public entry points ----------------------------------------------------
 
 
-def summarise_weekly(user_id: int, week_start_utc: datetime, db: Session) -> SummaryResult:
-    data = gather_weekly(user_id, week_start_utc, db)
-    return _summarise(_SYSTEM_WEEKLY, data, max_tokens=1500)
+def summarise_weekly_retrospective(
+    user_id: int, last_week_start_utc: datetime, db: Session,
+) -> SummaryResult:
+    """Tuesday slot — recap of the previous full ISO week (Mon-Sun, closed)."""
+    data = gather_weekly(
+        user_id,
+        last_week_start_utc,
+        db,
+        window_end_utc=last_week_start_utc + timedelta(days=7),
+    )
+    data["window_label"] = "previous full week (Mon-Sun)"
+    return _summarise(_SYSTEM_WEEKLY_RETROSPECTIVE, data, max_tokens=1500)
+
+
+def summarise_weekly_pulse(
+    user_id: int, this_week_start_utc: datetime, db: Session,
+) -> SummaryResult:
+    """Friday slot — pulse on current ISO week so far (Mon-now)."""
+    now_utc = datetime.now(timezone.utc)
+    data = gather_weekly(
+        user_id,
+        this_week_start_utc,
+        db,
+        window_end_utc=now_utc,
+    )
+    data["window_label"] = "current week so far (Mon-now)"
+    # Shorter max_tokens than retrospective — prompt asks for ~200 words
+    # vs ~250; cap reflects that.
+    return _summarise(_SYSTEM_WEEKLY_PULSE, data, max_tokens=1200)
 
 
 def summarise_paper_notes(user_id: int, since_utc: datetime, db: Session) -> SummaryResult:
