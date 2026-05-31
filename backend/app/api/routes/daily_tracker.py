@@ -111,7 +111,12 @@ def create_daily_task(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DailyTask:
-    day = resolve_target_date(payload.task_date)
+    # Dual-write date semantics: the canonical "when do I work on this"
+    # is `planned_date`. Old clients still send `task_date`; new clients
+    # can send either / both. Resolution order:
+    #   explicit planned_date  >  explicit task_date  >  today
+    # Both columns are written so legacy queries keep functioning.
+    day = payload.planned_date or resolve_target_date(payload.task_date)
     # New tasks land at the bottom of the day's list. Compute as
     # (current max sort_order for the day) + 1, defaulting to 1.0 for the
     # very first task.
@@ -127,6 +132,8 @@ def create_daily_task(
     task = DailyTask(
         user_id=current_user.id,
         task_date=day,
+        planned_date=day,
+        due_date=payload.due_date,
         text=payload.text,
         is_done=False,
         sort_order=next_so,
@@ -151,6 +158,11 @@ def update_daily_task(
     data = payload.model_dump(exclude_unset=True)
     if "project_id" in data:
         _validate_project_id(data["project_id"], current_user, db)
+    # Keep the legacy `task_date` in sync when the client sets `planned_date`.
+    # If the client explicitly sends both (rare), planned_date wins because
+    # it's the canonical column going forward.
+    if "planned_date" in data and data["planned_date"] is not None:
+        data["task_date"] = data["planned_date"]
     for field_name, field_value in data.items():
         setattr(task, field_name, field_value)
 
@@ -182,6 +194,37 @@ def delete_daily_task(
     task = _get_owned_task(task_id, current_user, db)
     db.delete(task)
     db.commit()
+
+
+@router.get("/tasks/upcoming", response_model=list[DailyTaskRead])
+def list_upcoming_tasks(
+    horizon_days: int = 14,
+    include_overdue: bool = True,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[DailyTask]:
+    """Tasks with a due_date inside [today, today+horizon_days], not done.
+
+    Sorted by due_date ascending so the most pressing item is first.
+    `include_overdue=True` extends the lower bound back to the dawn of time
+    so the user is reminded of items that have already slipped (which is
+    arguably more useful than a strictly-future "Upcoming"). Defaults to
+    a 2-week horizon — long enough for typical PhD planning, short enough
+    that the list stays scannable.
+    """
+    horizon = max(1, min(60, horizon_days))
+    today = date.today()
+    stmt = (
+        select(DailyTask)
+        .where(DailyTask.user_id == current_user.id)
+        .where(DailyTask.is_done == False)  # noqa: E712
+        .where(DailyTask.due_date.is_not(None))
+        .where(DailyTask.due_date <= today + timedelta(days=horizon))
+        .order_by(DailyTask.due_date.asc(), DailyTask.created_at.asc())
+    )
+    if not include_overdue:
+        stmt = stmt.where(DailyTask.due_date >= today)
+    return list(db.scalars(stmt).all())
 
 
 @router.post("/tasks/{task_id}/carry-forward", response_model=DailyTaskRead, status_code=201)
@@ -232,6 +275,18 @@ def upsert_daily_log(
 ) -> DailyLog:
     day = resolve_target_date(payload.log_date)
 
+    # Validate main_goal_task_id (if supplied) belongs to the same user.
+    # Doesn't have to match today's date — the user might pick a backlog
+    # task as their main goal then start working on it today.
+    # `0` is the explicit-unassign sentinel and skips validation.
+    if payload.main_goal_task_id not in (None, 0):
+        task = db.get(DailyTask, payload.main_goal_task_id)
+        if task is None or task.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unknown main_goal task.",
+            )
+
     statement = (
         select(DailyLog)
         .where(DailyLog.user_id == current_user.id)
@@ -245,6 +300,12 @@ def upsert_daily_log(
             user_id=current_user.id,
             log_date=day,
             main_goal=payload.main_goal or "",
+            # Normalise the 0-sentinel to NULL on create too.
+            main_goal_task_id=(
+                payload.main_goal_task_id
+                if payload.main_goal_task_id not in (None, 0)
+                else None
+            ),
             mood=payload.mood,
             reflection=payload.reflection,
         )
@@ -252,6 +313,18 @@ def upsert_daily_log(
     else:
         if payload.main_goal is not None:
             log.main_goal = payload.main_goal
+        # Use exclude_unset would be cleaner, but DailyLogUpsert isn't a
+        # plain PATCH — `mood` and `reflection` always overwrite by design.
+        # Treat main_goal_task_id specially: a payload value of None means
+        # "leave unchanged" rather than "unassign" so callers that don't
+        # send the field don't accidentally clear it. Explicit unassign is
+        # done by sending main_goal_task_id=0 — picked because 0 is never
+        # a valid row id but stays a plain JSON number (no need for
+        # exclude_unset gymnastics).
+        if payload.main_goal_task_id is not None:
+            log.main_goal_task_id = (
+                payload.main_goal_task_id if payload.main_goal_task_id != 0 else None
+            )
         log.mood = payload.mood
         log.reflection = payload.reflection
 

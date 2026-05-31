@@ -57,6 +57,11 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     ("daily_tasks",     "project_id",              "INTEGER"),
     ("paper_notes",     "project_id",              "INTEGER"),
     ("feynman_entries", "project_id",              "INTEGER"),
+    # PR1 of the Today/Daily-tracker unification — see app/models/
+    # daily_tracker.py for semantics. All nullable; routes dual-write.
+    ("daily_tasks",     "planned_date",            "DATE"),
+    ("daily_tasks",     "due_date",                "DATE"),
+    ("daily_logs",      "main_goal_task_id",       "INTEGER"),
 ]
 
 # Backfill completed pomodoro work sessions into xp_events so that stats
@@ -114,6 +119,37 @@ def run_migrations(engine: Engine) -> None:
                 conn.execute(_BACKFILL_POMODORO)
             if "daily_tasks" in existing_tables:
                 conn.execute(_BACKFILL_TASKS)
+
+        # PR1 unification backfills. Both are idempotent — safe to re-run.
+        if "daily_tasks" in existing_tables:
+            # Set planned_date = task_date for any row that doesn't have
+            # it yet. After this, every legacy task is visible to "today"
+            # queries written against planned_date.
+            conn.execute(text("""
+                UPDATE daily_tasks
+                SET planned_date = task_date
+                WHERE planned_date IS NULL
+            """))
+        if "daily_logs" in existing_tables and "mood_entries" in existing_tables:
+            # Collapse the historical daily_logs.mood column into the
+            # mood_entries stream. One entry per (user, day). We synthesise
+            # a created_at of `log_date 12:00 UTC` to keep the row stable
+            # across re-runs (so the WHERE NOT EXISTS guard works) without
+            # colliding with same-day real-time mood entries the user may
+            # have logged on top.
+            conn.execute(text("""
+                INSERT INTO mood_entries (user_id, mood, reflection, created_at)
+                SELECT user_id, mood, '',
+                       datetime(log_date || ' 12:00:00')
+                FROM daily_logs d
+                WHERE mood IS NOT NULL AND mood != ''
+                  AND NOT EXISTS (
+                      SELECT 1 FROM mood_entries m
+                      WHERE m.user_id = d.user_id
+                        AND m.mood = d.mood
+                        AND m.created_at = datetime(d.log_date || ' 12:00:00')
+                  )
+            """))
 
         # Pomodoro orphan cleanup + uniqueness guard. Same family of bug as
         # the stopwatch one: previously nothing prevented two concurrent

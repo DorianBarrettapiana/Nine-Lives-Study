@@ -12,6 +12,11 @@ class DailyTaskCreate(BaseModel):
 
     text: str = Field(..., min_length=1, max_length=500)
     task_date: date | None = None
+    # PR1 unification fields. Either `task_date` or `planned_date` may be
+    # passed; the route mirrors them into both columns so old clients keep
+    # working while new clients can use the more accurate "planned" name.
+    planned_date: date | None = None
+    due_date: date | None = None
     project_id: int | None = None
 
 
@@ -29,6 +34,8 @@ class DailyTaskUpdate(BaseModel):
     # "unassign". Pydantic's exclude_unset distinguishes these two cases
     # in the route handler.
     project_id: int | None = None
+    planned_date: date | None = None
+    due_date: date | None = None
 
 
 class DailyTaskRead(BaseSchema):
@@ -37,6 +44,9 @@ class DailyTaskRead(BaseSchema):
     id: int
     user_id: int
     task_date: date
+    # Mirrors task_date for legacy rows; new rows can set this independently.
+    planned_date: date | None = None
+    due_date: date | None = None
     text: str
     is_done: bool
     sort_order: float = 0
@@ -50,6 +60,11 @@ class DailyLogUpsert(BaseModel):
 
     log_date: date | None = None
     main_goal: str | None = Field(default=None, max_length=500)
+    # Preferred over `main_goal` text — points at the user's own task.
+    # Validated server-side. None = leave unchanged on update; explicit
+    # JSON null in payload = unassign (PUT semantics here treat absence
+    # the same as None, since this endpoint is upsert-style).
+    main_goal_task_id: int | None = None
     mood: str = Field(default="", max_length=20)
     reflection: str = ""
 
@@ -61,6 +76,7 @@ class DailyLogRead(BaseSchema):
     user_id: int
     log_date: date
     main_goal: str
+    main_goal_task_id: int | None = None
     mood: str
     reflection: str
     created_at: UtcDateTime
