@@ -12,6 +12,7 @@ class DailyTaskCreate(BaseModel):
 
     text: str = Field(..., min_length=1, max_length=500)
     task_date: date | None = None
+    project_id: int | None = None
 
 
 class DailyTaskUpdate(BaseModel):
@@ -23,6 +24,11 @@ class DailyTaskUpdate(BaseModel):
     # accepts a float so the frontend can compute "between neighbors" via
     # the midpoint trick without ever touching other rows.
     sort_order: float | None = None
+    # Re-assign or unassign the task's project. `None` in the payload (i.e.
+    # field omitted) means "leave unchanged"; explicit JSON null means
+    # "unassign". Pydantic's exclude_unset distinguishes these two cases
+    # in the route handler.
+    project_id: int | None = None
 
 
 class DailyTaskRead(BaseSchema):
@@ -34,6 +40,7 @@ class DailyTaskRead(BaseSchema):
     text: str
     is_done: bool
     sort_order: float = 0
+    project_id: int | None = None
     created_at: UtcDateTime
     updated_at: UtcDateTime
 

@@ -15,6 +15,7 @@ import {
 } from "../api/tracker";
 import { escapeHtml, setMessage } from "../utils";
 import { renderEmptyStateWithCat } from "./icons";
+import { projectChipHtml, renderProjectPicker } from "./project-picker";
 
 const MOODS = [
   { emoji: "😩", label: "Exhausted" },
@@ -39,6 +40,10 @@ let dateBar: HTMLDivElement;
 let dailyState: DailyStateRead | null = null;
 let selectedMood = "";
 let doneExpanded = false;
+// Pre-selected project for the next task being added. Sticky across saves
+// so a user staying on one thread doesn't have to re-pick every time. Null
+// = "(no project)".
+let pendingProjectId: number | null = null;
 let onDataChangedCb: (() => Promise<void>) | null = null;
 
 // Date being viewed. null = today (live, editable). Any other date = read-only.
@@ -102,6 +107,7 @@ function taskHtml(task: DailyTaskRead, readOnly: boolean): string {
       <span class="task-text ${task.is_done ? "done" : ""}"
             data-task-action="edit" data-id="${task.id}"
             title="${readOnly ? "" : "Double-click to edit"}">${escapeHtml(task.text)}</span>
+      ${projectChipHtml(task.project_id)}
       ${readOnly ? "" : `
         ${task.is_done ? "" : `<button class="task-carry" data-task-action="carry" data-id="${task.id}" title="Carry to tomorrow">Tomorrow</button>`}
         <button class="task-delete" data-task-action="delete" data-id="${task.id}" title="Delete">×</button>`}
@@ -309,6 +315,21 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
   // Re-render the sleeping-cat empty state when the user picks a new skin.
   window.addEventListener("cat:skin-changed", () => render());
 
+  // Project picker for new tasks. The selection persists across saves so a
+  // user staying on one thread doesn't have to re-pick every time.
+  const projectPickerEl = document.querySelector<HTMLDivElement>("#task-project-picker");
+  if (projectPickerEl !== null) {
+    void renderProjectPicker({
+      container: projectPickerEl,
+      selectedId: pendingProjectId,
+      label: "Project (optional)",
+      onChange: (id) => { pendingProjectId = id; },
+    });
+  }
+
+  // After a project is renamed/archived elsewhere, re-render so chips update.
+  window.addEventListener("projects:updated", () => render());
+
   // Date navigation (delegated)
   dateBar.addEventListener("click", async (event) => {
     const target = event.target;
@@ -334,7 +355,7 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
     const text = taskInput.value.trim();
     if (!text) { setMessage(trackerMessage, "Task text is required.", "error"); return; }
     try {
-      await createDailyTask({ text });
+      await createDailyTask({ text, project_id: pendingProjectId });
       taskInput.value = "";
       setMessage(trackerMessage, "Task created.", "success");
       await onRefreshNeeded();

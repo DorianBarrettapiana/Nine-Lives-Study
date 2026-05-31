@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -30,6 +30,9 @@ class FeynmanEntry(Base):
     explanation: Mapped[str] = mapped_column(Text, default="", nullable=False)
     gaps: Mapped[str] = mapped_column(Text, default="", nullable=False)
     analogy: Mapped[str] = mapped_column(Text, default="", nullable=False)
+
+    # Optional research-thread bucket. See app/models/project.py.
+    project_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(),

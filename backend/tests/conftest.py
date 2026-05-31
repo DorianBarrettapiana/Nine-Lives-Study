@@ -38,6 +38,7 @@ from app.models.feynman_entry import FeynmanEntry  # noqa: E402, F401
 from app.models.mood_entry import MoodEntry  # noqa: E402, F401
 from app.models.paper_note import PaperNote  # noqa: E402, F401
 from app.models.pomodoro_session import PomodoroSession  # noqa: E402, F401
+from app.models.project import Project  # noqa: E402, F401
 from app.models.session import Session as SessionModel  # noqa: E402, F401
 from app.models.stopwatch_session import StopwatchSession  # noqa: E402, F401
 from app.models.user import User  # noqa: E402, F401

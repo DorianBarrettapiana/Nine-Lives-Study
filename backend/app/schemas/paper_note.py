@@ -22,6 +22,7 @@ class PaperNoteCreate(BaseModel):
     doi: str | None = Field(default=None, max_length=200)
     abstract: str | None = None
     feynman_entry_id: int | None = None
+    project_id: int | None = None
 
 
 class PaperNoteUpdate(BaseModel):
@@ -38,6 +39,7 @@ class PaperNoteUpdate(BaseModel):
     doi: str | None = Field(default=None, max_length=200)
     abstract: str | None = None
     feynman_entry_id: int | None = None
+    project_id: int | None = None
 
 
 class PaperNoteRead(BaseSchema):
@@ -62,5 +64,6 @@ class PaperNoteRead(BaseSchema):
     zotero_version: int | None = None
     source: str = "manual"
     feynman_entry_id: int | None = None
+    project_id: int | None = None
     created_at: UtcDateTime
     updated_at: UtcDateTime

@@ -29,6 +29,7 @@ from app.models.feynman_entry import FeynmanEntry
 from app.models.mood_entry import MoodEntry
 from app.models.paper_note import PaperNote
 from app.models.pomodoro_session import PomodoroSession
+from app.models.project import Project
 from app.models.stopwatch_session import StopwatchSession
 from app.models.user import User
 from app.models.xp_event import XpEvent
@@ -36,6 +37,7 @@ from app.schemas.stats import (
     DailyMoodStat,
     DailyTaskStat,
     DailyWorkStat,
+    ProjectTimeStat,
     UserStatsRead,
     WeeklySummary,
     WeeklySummaryCounts,
@@ -184,6 +186,59 @@ def get_stats(
         )
     ]
 
+    # --- Time per project (transitive through linked_task_id) ---------------
+    # Reuses the already-fetched `pomodoro_sessions` / `stopwatch_sessions`
+    # dicts so we don't issue another round-trip per row. A bulk fetch of
+    # tasks + projects keeps this O(n) too.
+    linked_task_ids = {
+        sess.linked_task_id
+        for sess in list(pomodoro_sessions.values()) + list(stopwatch_sessions.values())
+        if sess.linked_task_id is not None
+    }
+    tasks_by_id = {
+        task.id: task for task in db.scalars(
+            select(DailyTask).where(DailyTask.id.in_(linked_task_ids))
+        ).all()
+    } if linked_task_ids else {}
+    project_ids = {
+        task.project_id
+        for task in tasks_by_id.values()
+        if task.project_id is not None
+    }
+    projects_by_id = {
+        p.id: p for p in db.scalars(
+            select(Project).where(Project.id.in_(project_ids))
+        ).all()
+    } if project_ids else {}
+
+    minutes_by_project: dict[int | None, int] = {}
+    for ev in selected_work_events:
+        if ev.entity_type == ENTITY_POMODORO:
+            session = pomodoro_sessions.get(ev.entity_id)
+        else:
+            session = stopwatch_sessions.get(ev.entity_id)
+        project_id: int | None = None
+        if session is not None and session.linked_task_id is not None:
+            task = tasks_by_id.get(session.linked_task_id)
+            if task is not None and task.user_id == user_id:
+                project_id = task.project_id
+        minutes_by_project[project_id] = minutes_by_project.get(project_id, 0) + ev.amount
+
+    time_per_project = [
+        ProjectTimeStat(
+            project_id=pid,
+            name=(projects_by_id[pid].name if (pid is not None and pid in projects_by_id)
+                  else "(no project)"),
+            minutes=minutes,
+        )
+        for pid, minutes in sorted(
+            minutes_by_project.items(),
+            # Sort: actual projects first (by minutes desc), "(no project)" last
+            # so the user's named threads dominate the visual hierarchy.
+            key=lambda item: (item[0] is None, -item[1]),
+        )
+    ]
+
     # --- Other totals -------------------------------------------------------
     total_tasks_done = db.scalar(
         select(func.count(XpEvent.id))
@@ -267,6 +322,7 @@ def get_stats(
         daily_moods=daily_moods,
         daily_work_minutes=daily_work_minutes,
         work_labels=work_labels,
+        time_per_project=time_per_project,
         total_tasks_done=total_tasks_done,
         total_work_minutes=total_work_minutes,
         total_notes=total_notes,

@@ -41,6 +41,7 @@ from app.models.feynman_entry import FeynmanEntry
 from app.models.mood_entry import MoodEntry
 from app.models.paper_note import PaperNote
 from app.models.pomodoro_session import PomodoroSession
+from app.models.project import Project
 from app.models.stopwatch_session import StopwatchSession
 from app.models.xp_event import XpEvent
 
@@ -187,7 +188,26 @@ def gather_weekly(
     # Work minutes grouped by the session's focus snapshot. Legacy sessions
     # without a snapshot fall back to their linked daily task, then to an
     # explicit unlabeled bucket. This also includes temporary descriptions.
+    #
+    # Same loop also rolls up minutes by the linked task's project. Sessions
+    # have no direct project_id — they inherit transitively through
+    # linked_task_id → daily_task.project_id (intentional, single source of
+    # truth). Sessions whose task has no project, or which have no linked
+    # task at all, contribute to the "(no project)" bucket.
     time_per_task: Counter[str] = Counter()
+    time_per_project: Counter[str] = Counter()
+    project_name_cache: dict[int, str] = {}
+
+    def _project_name(project_id: int | None) -> str:
+        if project_id is None:
+            return "(no project)"
+        if project_id not in project_name_cache:
+            project = db.get(Project, project_id)
+            project_name_cache[project_id] = (
+                project.name if (project is not None and project.user_id == user_id) else "(unknown)"
+            )
+        return project_name_cache[project_id]
+
     for ev in work_events:
         if ev.entity_type == ENTITY_POMODORO:
             sess = db.get(PomodoroSession, ev.entity_id)
@@ -207,6 +227,16 @@ def gather_weekly(
         )
         time_per_task[task_label] += ev.amount
 
+        # Resolve project transitively via the linked task. db.get(DailyTask)
+        # is a primary-key lookup (cheap, identity-map-cached within the
+        # session); fine inside the loop.
+        project_id: int | None = None
+        if sess.linked_task_id is not None:
+            task = db.get(DailyTask, sess.linked_task_id)
+            if task is not None and task.user_id == user_id:
+                project_id = task.project_id
+        time_per_project[_project_name(project_id)] += ev.amount
+
     return {
         "week_start": week_start_utc.date().isoformat(),
         "week_end": (week_end_utc - timedelta(days=1)).date().isoformat(),
@@ -215,6 +245,7 @@ def gather_weekly(
         # Sorted descending so the highest-investment task is first in the
         # serialized JSON — keeps the prompt's natural narrative order.
         "time_per_task_minutes": dict(time_per_task.most_common()),
+        "time_per_project_minutes": dict(time_per_project.most_common()),
         "tasks_done": tasks_done,
         "tasks_total": tasks_total,
         "moods": dict(mood_counter),
@@ -297,13 +328,17 @@ never corporate. Acknowledge real effort, flag patterns gently, and
 avoid empty validation. If a metric is low, say so — PhD students see
 through cheerleading.
 
-KEY DATA: `time_per_task_minutes` is a map of `{task_text: minutes}`
-showing how work time split across the user's own daily-task labels.
-Use this as the spine of every observation — it's the difference between
-"you worked 12 hours" (useless) and "5h on chapter 2 vs 4h on lit
-review" (actionable). If "(unlabeled)" is a large share, gently note it
-so the user can start tagging more sessions. Never invent task labels —
-quote them verbatim from `time_per_task_minutes` keys.
+KEY DATA — two complementary breakdowns:
+- `time_per_project_minutes` is the user's own research-thread buckets
+  (e.g. "DiffusionPolicy", "Survey draft"). When 2+ projects show up,
+  THIS is the spine of the recap — PhD students live by which thread
+  the week went into. Quote project names verbatim.
+- `time_per_task_minutes` is the per-task breakdown within those
+  threads. Use it for granularity once you've framed the project mix.
+
+If "(no project)" or "(unlabeled)" is a large share, gently note it
+so the user can start tagging more work. Never invent project or task
+labels — quote them verbatim from the keys.
 
 ALWAYS finish the recap with one line in exactly this format (verbatim,
 including the asterisks, on its own line):

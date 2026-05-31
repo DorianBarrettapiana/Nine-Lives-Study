@@ -52,6 +52,9 @@ class PaperNote(Base):
     zotero_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     source: Mapped[str] = mapped_column(String(20), default="manual", nullable=False)
 
+    # Optional research-thread bucket. See app/models/project.py.
+    project_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(),
         default=utc_now,

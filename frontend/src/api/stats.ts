@@ -25,6 +25,12 @@ export interface WorkLabelStat {
   minutes: number;
 }
 
+export interface ProjectTimeStat {
+  project_id: number | null;
+  name: string;
+  minutes: number;
+}
+
 export interface WeeklySummaryCounts {
   work_minutes: number;
   tasks_done: number;
@@ -44,6 +50,7 @@ export interface UserStatsRead {
   daily_moods: DailyMoodStat[];
   daily_work_minutes: DailyWorkStat[];
   work_labels: WorkLabelStat[];
+  time_per_project?: ProjectTimeStat[];
   total_tasks_done: number;
   total_work_minutes: number;
   total_notes: number;

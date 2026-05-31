@@ -18,6 +18,7 @@ let weeklyGrid: HTMLDivElement | null;
 let statsTasksChart: HTMLDivElement;
 let statsPomodoroChart: HTMLDivElement;
 let statsFocusChart: HTMLDivElement;
+let statsProjectChart: HTMLDivElement;
 let statsMoodChart: HTMLDivElement;
 let statsTasksTitle: HTMLHeadingElement;
 let statsPomodoroTitle: HTMLHeadingElement;
@@ -363,6 +364,28 @@ function renderFocusSection(): void {
   `).join("");
 }
 
+function renderProjectSection(): void {
+  if (!statsProjectChart) return;
+  const rows = userStats?.time_per_project ?? [];
+  // Reuse focus-stat-row styling for visual consistency. We still show the
+  // "(no project)" row because seeing its weight is the nudge that pushes
+  // the user to start tagging things.
+  if (rows.length === 0) {
+    statsProjectChart.innerHTML = `<div class="empty-state">Create a project in the Projects tab and assign tasks to see your time split by research thread.</div>`;
+    return;
+  }
+  const max = Math.max(...rows.map((r) => r.minutes), 1);
+  statsProjectChart.innerHTML = rows.map((r) => `
+    <div class="focus-stat-row">
+      <div class="focus-stat-label">
+        <span>${r.project_id === null ? "<em>(no project)</em>" : escapeHtml(r.name)}</span>
+        <strong>${fmtMinutes(r.minutes)}</strong>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(r.minutes / max * 100)}%"></div></div>
+    </div>
+  `).join("");
+}
+
 // --- Mood ---
 // Color per mood emoji — kept in the same order as the picker for visual
 // consistency between recording and review.
@@ -502,6 +525,7 @@ export function render(): void {
   renderTaskDayList();
   renderWorkSection();
   renderFocusSection();
+  renderProjectSection();
   renderMoodChart();
 }
 
@@ -533,6 +557,7 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
   statsTasksChart = document.querySelector<HTMLDivElement>("#stats-tasks-chart")!;
   statsPomodoroChart = document.querySelector<HTMLDivElement>("#stats-pomodoro-chart")!;
   statsFocusChart = document.querySelector<HTMLDivElement>("#stats-focus-chart")!;
+  statsProjectChart = document.querySelector<HTMLDivElement>("#stats-project-chart")!;
   statsMoodChart = document.querySelector<HTMLDivElement>("#stats-mood-chart")!;
   statsTasksTitle = document.querySelector<HTMLHeadingElement>("#stats-tasks-title")!;
   statsPomodoroTitle = document.querySelector<HTMLHeadingElement>("#stats-pomodoro-title")!;
