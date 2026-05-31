@@ -2220,3 +2220,153 @@ h3 {
   font-size: 0.85rem;
   padding: 0.3rem 0;
 }
+
+/* --- Today (unified) ---------------------------------------------------- */
+
+.today-card {
+  padding-top: 0.9rem;
+  padding-bottom: 0.7rem;
+}
+.today-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.today-date-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.date-nav-btn {
+  background: var(--bg-muted);
+  color: var(--text-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+.date-nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.date-nav-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+.date-nav-today { font-size: 0.85rem; }
+
+.today-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.today-filter-label {
+  font-size: 0.85rem;
+  color: var(--text-soft);
+}
+.today-project-filter-select {
+  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+
+.today-hero .eyebrow {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 0.4rem;
+}
+.main-goal-select {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  font-size: 1rem;
+  font-weight: 600;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+}
+
+.today-project-breakdown {
+  margin: 0.25rem 0 0.6rem;
+  font-size: 0.82rem;
+}
+
+.task-main-goal {
+  background: rgba(245, 158, 11, 0.06);
+  border-left: 3px solid rgba(245, 158, 11, 0.6);
+}
+.task-main-goal-star {
+  flex-shrink: 0;
+  font-size: 0.95rem;
+}
+
+.task-form input[type="date"] {
+  width: 160px;
+  flex-shrink: 0;
+}
+.project-picker-select.inline {
+  width: auto;
+  min-width: 140px;
+}
+
+.due-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.45rem;
+  margin-left: 0.4rem;
+  border-radius: 999px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border-soft);
+  color: var(--text-soft);
+  font-weight: 600;
+}
+.due-pill.due-today { background: rgba(245, 158, 11, 0.18); color: #d97706; border-color: rgba(245, 158, 11, 0.4); }
+.due-pill.due-soon  { background: rgba(99, 102, 241, 0.14); color: var(--text-accent); border-color: rgba(99, 102, 241, 0.35); }
+.due-pill.due-overdue { background: rgba(239, 68, 68, 0.18); color: #ef4444; border-color: rgba(239, 68, 68, 0.4); }
+
+.compact-btn { padding: 0.25rem 0.55rem; font-size: 0.78rem; }
+
+.upcoming-list {
+  display: grid;
+  gap: 0.4rem;
+}
+.upcoming-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--bg-item);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.upcoming-item:hover { border-color: var(--accent); }
+.upcoming-when, .upcoming-late {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  min-width: 6.5rem;
+}
+.upcoming-late { color: #ef4444; }
+.upcoming-text { flex: 1; min-width: 0; }
+
+.quick-mood-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.today-mood-status { font-size: 0.82rem; }
+
+@media (max-width: 600px) {
+  .today-header-row { flex-direction: column; align-items: flex-start; }
+  .task-form { flex-wrap: wrap; }
+  .task-form input[type="date"] { width: 100%; }
+}

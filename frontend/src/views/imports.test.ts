@@ -27,12 +27,6 @@ describe("view modules import cleanly", () => {
     expect(typeof mod.renderInitial).toBe("function");
   });
 
-  it("tracker", async () => {
-    const mod = await import("./tracker");
-    expect(typeof mod.init).toBe("function");
-    expect(typeof mod.refresh).toBe("function");
-  });
-
   it("pomodoro", async () => {
     const mod = await import("./pomodoro");
     expect(typeof mod.init).toBe("function");
