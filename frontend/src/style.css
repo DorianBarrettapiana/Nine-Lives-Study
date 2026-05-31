@@ -1883,3 +1883,30 @@ h3 {
 .pomodoro-task-picker {
   width: 100%;
 }
+
+/* --- AI recap "Next step" action block --------------------------------- */
+
+.ai-next-step {
+  margin-top: 1rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.ai-next-step-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+.ai-next-step-text {
+  font-size: 0.95rem;
+  line-height: 1.45;
+  margin-bottom: 0.6rem;
+}
+.ai-next-step-btn {
+  font-size: 0.85rem;
+  padding: 0.4rem 0.8rem;
+}
