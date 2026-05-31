@@ -11,6 +11,7 @@ export interface FeynmanEntryRead {
   explanation: string;
   gaps: string;
   analogy: string;
+  project_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -20,6 +21,7 @@ export interface FeynmanEntryCreate {
   explanation: string;
   gaps: string;
   analogy: string;
+  project_id?: number | null;
 }
 
 export interface FeynmanEntryUpdate {
@@ -27,6 +29,7 @@ export interface FeynmanEntryUpdate {
   explanation?: string;
   gaps?: string;
   analogy?: string;
+  project_id?: number | null;
 }
 
 export async function listFeynmanEntries(): Promise<FeynmanEntryRead[]> {

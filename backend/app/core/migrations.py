@@ -47,6 +47,16 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     # functions LEFT JOIN and treat missing rows as "(unlabeled)").
     ("stopwatch_sessions", "linked_task_id",       "INTEGER"),
     ("pomodoro_sessions", "linked_task_id",        "INTEGER"),
+    # Project linkage (research-thread top-level grouping). ON DELETE
+    # SET NULL behaviour is documented in app/models/project.py; SQLite
+    # enforces it only when foreign_keys pragma is on (we currently
+    # don't), so the /projects DELETE route explicitly sets these to
+    # NULL before removing the row. Sessions inherit project transitively
+    # via linked_task_id → daily_task.project_id; no column on the
+    # session tables, to keep one source of truth.
+    ("daily_tasks",     "project_id",              "INTEGER"),
+    ("paper_notes",     "project_id",              "INTEGER"),
+    ("feynman_entries", "project_id",              "INTEGER"),
 ]
 
 # Backfill completed pomodoro work sessions into xp_events so that stats

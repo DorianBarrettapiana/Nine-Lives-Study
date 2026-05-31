@@ -8,6 +8,7 @@ from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.core.xp import ENTITY_FEYNMAN, EVENT_FEYNMAN, XP_FEYNMAN_CREATE, award_xp_event
 from app.models.feynman_entry import FeynmanEntry
+from app.models.project import Project
 from app.models.user import User
 from app.schemas.feynman_entry import (
     FeynmanEntryCreate,
@@ -23,6 +24,14 @@ def _get_owned_entry(entry_id: int, current_user: User, db: Session) -> FeynmanE
     if entry is None or entry.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feynman entry not found.")
     return entry
+
+
+def _validate_project_id(project_id: int | None, current_user: User, db: Session) -> None:
+    if project_id is None:
+        return
+    project = db.get(Project, project_id)
+    if project is None or project.user_id != current_user.id:
+        raise HTTPException(status_code=400, detail="Unknown project.")
 
 
 @router.get("", response_model=list[FeynmanEntryRead])
@@ -44,12 +53,14 @@ def create_feynman_entry(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FeynmanEntry:
+    _validate_project_id(payload.project_id, current_user, db)
     entry = FeynmanEntry(
         user_id=current_user.id,
         concept=payload.concept,
         explanation=payload.explanation,
         gaps=payload.gaps,
         analogy=payload.analogy,
+        project_id=payload.project_id,
     )
     db.add(entry)
     db.flush()
@@ -75,6 +86,8 @@ def update_feynman_entry(
 ) -> FeynmanEntry:
     entry = _get_owned_entry(entry_id, current_user, db)
     data = payload.model_dump(exclude_unset=True)
+    if "project_id" in data:
+        _validate_project_id(data["project_id"], current_user, db)
     for field_name, field_value in data.items():
         setattr(entry, field_name, field_value)
     db.commit()

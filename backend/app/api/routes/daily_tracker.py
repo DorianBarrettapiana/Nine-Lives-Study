@@ -19,6 +19,7 @@ from app.core.xp import (
     award_xp_event,
 )
 from app.models.daily_tracker import DailyLog, DailyTask
+from app.models.project import Project
 from app.models.user import User
 from app.schemas.daily_tracker import (
     DailyLogRead,
@@ -47,6 +48,23 @@ def _get_owned_task(task_id: int, current_user: User, db: Session) -> DailyTask:
     if task is None or task.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Daily task not found.")
     return task
+
+
+def _validate_project_id(project_id: int | None, current_user: User, db: Session) -> None:
+    """Reject project_id values that don't belong to the current user.
+
+    NULL is always allowed (it means "unassigned"). Anything else must be a
+    Project row owned by the same user, otherwise we 400 to surface the
+    UI bug rather than silently writing a cross-user FK that won't render.
+    """
+    if project_id is None:
+        return
+    project = db.get(Project, project_id)
+    if project is None or project.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unknown project.",
+        )
 
 
 @router.get("", response_model=DailyStateRead)
@@ -105,12 +123,14 @@ def create_daily_task(
         .limit(1)
     )
     next_so = (max_so or 0.0) + 1.0
+    _validate_project_id(payload.project_id, current_user, db)
     task = DailyTask(
         user_id=current_user.id,
         task_date=day,
         text=payload.text,
         is_done=False,
         sort_order=next_so,
+        project_id=payload.project_id,
     )
     db.add(task)
     db.commit()
@@ -129,6 +149,8 @@ def update_daily_task(
     was_done = task.is_done
 
     data = payload.model_dump(exclude_unset=True)
+    if "project_id" in data:
+        _validate_project_id(data["project_id"], current_user, db)
     for field_name, field_value in data.items():
         setattr(task, field_name, field_value)
 

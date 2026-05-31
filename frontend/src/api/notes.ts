@@ -21,6 +21,7 @@ export interface PaperNoteRead {
   zotero_version: number | null;
   source: string;
   feynman_entry_id: number | null;
+  project_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -37,6 +38,7 @@ export interface PaperNoteCreate {
   doi?: string | null;
   abstract?: string | null;
   feynman_entry_id?: number | null;
+  project_id?: number | null;
 }
 
 export type PaperNoteUpdate = Partial<PaperNoteCreate>;

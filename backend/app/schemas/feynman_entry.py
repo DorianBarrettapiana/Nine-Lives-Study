@@ -12,6 +12,7 @@ class FeynmanEntryCreate(BaseModel):
     explanation: str = ""
     gaps: str = ""
     analogy: str = ""
+    project_id: int | None = None
 
 
 class FeynmanEntryUpdate(BaseModel):
@@ -21,6 +22,7 @@ class FeynmanEntryUpdate(BaseModel):
     explanation: str | None = None
     gaps: str | None = None
     analogy: str | None = None
+    project_id: int | None = None
 
 
 class FeynmanEntryRead(BaseSchema):
@@ -32,5 +34,6 @@ class FeynmanEntryRead(BaseSchema):
     explanation: str
     gaps: str
     analogy: str
+    project_id: int | None = None
     created_at: UtcDateTime
     updated_at: UtcDateTime

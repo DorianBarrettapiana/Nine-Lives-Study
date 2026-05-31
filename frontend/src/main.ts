@@ -17,13 +17,15 @@ import * as SummariesView from "./views/summaries";
 import * as MoodView from "./views/mood";
 import * as NotesView from "./views/notes";
 import * as PomodoroView from "./views/pomodoro";
+import * as ProjectsView from "./views/projects";
+import { refreshProjects } from "./views/project-state";
 import * as StatsView from "./views/stats";
 import * as StopwatchView from "./views/stopwatch";
 import * as FriendsView from "./views/friends";
 import * as TrackerView from "./views/tracker";
 import * as TodayView from "./views/today";
 
-type AppView = "today" | "notes" | "feynman" | "tracker" | "pomodoro" | "stats" | "mood" | "friends";
+type AppView = "today" | "notes" | "feynman" | "tracker" | "pomodoro" | "stats" | "mood" | "projects" | "friends";
 
 const APP_HTML = `
   <div class="app-shell">
@@ -82,6 +84,7 @@ const APP_HTML = `
           <button class="feature-tab" data-view="tracker">Daily tracker</button>
           <button class="feature-tab" data-view="pomodoro">Pomodoro</button>
           <button class="feature-tab" data-view="mood">Mood</button>
+          <button class="feature-tab" data-view="projects">Projects</button>
           <button class="feature-tab" data-view="stats">Stats</button>
           <button class="feature-tab" data-view="friends">Friends</button>
         </nav>
@@ -144,6 +147,7 @@ const APP_HTML = `
                 <label>Abstract<textarea id="note-abstract" placeholder="Paper abstract..."></textarea></label>
               </details>
               <label>Linked Feynman record<select id="note-feynman-link"><option value="">None</option></select></label>
+              <div id="note-project-picker" class="note-project-picker"></div>
               <div class="button-row">
                 <button type="submit" id="note-submit-button">Add note</button>
                 <button type="button" id="note-cancel-button" class="secondary hidden">Cancel edit</button>
@@ -199,6 +203,7 @@ const APP_HTML = `
             </div>
             <form id="task-form" class="task-form">
               <input id="task-input" type="text" placeholder="Add a task for today..." />
+              <div id="task-project-picker" class="task-project-picker"></div>
               <button type="submit">Add task</button>
             </form>
             <div id="task-list" class="task-list"></div>
@@ -306,6 +311,11 @@ const APP_HTML = `
             <div id="stats-focus-chart" class="stats-chart"></div>
           </section>
           <section class="card">
+            <h2>Time per project</h2>
+            <p class="hint">Aggregated from work sessions whose linked task belongs to a project. Sessions without a project sit in "(no project)".</p>
+            <div id="stats-project-chart" class="stats-chart"></div>
+          </section>
+          <section class="card">
             <h2 id="stats-mood-title">Last 7 days — mood</h2>
             <div id="stats-mood-chart" class="mood-history"></div>
           </section>
@@ -329,6 +339,25 @@ const APP_HTML = `
               </div>
             </div>
             <div id="mood-list" class="mood-history-list"></div>
+          </section>
+        </div>
+
+        <div id="projects-view" class="hidden">
+          <section class="card">
+            <h2>Projects / research threads</h2>
+            <p class="hint">Group related daily tasks, paper notes, and Feynman entries under a named project. Work sessions inherit their project from the linked task.</p>
+            <form id="project-form" class="form">
+              <div class="two-cols">
+                <label>Name <input id="project-name-input" type="text" maxlength="100" placeholder="e.g. DiffusionPolicy" /></label>
+                <label>Color <input id="project-color-input" type="color" value="#6366f1" /></label>
+              </div>
+              <div class="button-row"><button type="submit">Add project</button></div>
+              <p id="project-message" class="message"></p>
+            </form>
+          </section>
+          <section class="card">
+            <h2>Your projects</h2>
+            <div id="projects-list" class="projects-list"></div>
           </section>
         </div>
 
@@ -408,6 +437,7 @@ async function refreshAll(): Promise<void> {
       TrackerView.refresh(),
       PomodoroView.refresh(),
       MoodView.refresh(),
+      ProjectsView.refresh(),
       StatsView.refresh(),
       StopwatchView.refresh(),
       FriendsView.refresh(),
@@ -567,6 +597,7 @@ function mountApp(user: UserRead): void {
     tracker:  app!.querySelector<HTMLDivElement>("#tracker-view")!,
     pomodoro: app!.querySelector<HTMLDivElement>("#pomodoro-view")!,
     mood:     app!.querySelector<HTMLDivElement>("#mood-view")!,
+    projects: app!.querySelector<HTMLDivElement>("#projects-view")!,
     stats:    app!.querySelector<HTMLDivElement>("#stats-view")!,
     friends:  app!.querySelector<HTMLDivElement>("#friends-view")!,
   };
@@ -584,6 +615,14 @@ function mountApp(user: UserRead): void {
   PomodoroView.init(() => Promise.all([PomodoroView.refresh(), StatsView.refresh()]).then());
   PomodoroView.setUser(user);  // pass settings (work/break durations etc.) to the timer
   MoodView.init(() => Promise.all([MoodView.refresh(), StatsView.refresh()]).then());
+  // Projects: refresh stats too so the "Time per project" card reflects
+  // renames/archives immediately rather than next stats refresh.
+  ProjectsView.init(async () => {
+    await Promise.all([StatsView.refresh(), NotesView.refresh(), TrackerView.refresh(), FeynmanView.refresh()]);
+  });
+  // Warm the projects cache at boot so pickers in other views can render
+  // their dropdowns without a per-view fetch.
+  void refreshProjects(true);
   StatsView.init(() => StatsView.refresh());
   StopwatchView.init(user.cat_skin);
   FriendsView.init(() => FriendsView.refresh());

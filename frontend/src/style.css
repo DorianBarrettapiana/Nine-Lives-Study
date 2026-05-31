@@ -2117,3 +2117,98 @@ h3 {
   margin-top: 0.6rem;
   flex-wrap: wrap;
 }
+
+/* --- Projects ----------------------------------------------------------- */
+
+.project-picker {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+}
+.project-picker-label {
+  font-size: 0.85rem;
+  color: var(--text-soft);
+  font-weight: 600;
+}
+.project-picker-select {
+  width: 100%;
+}
+
+.task-project-picker,
+.note-project-picker {
+  margin: 0.5rem 0;
+}
+
+.project-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.45rem;
+  margin-left: 0.4rem;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: var(--text-accent);
+  vertical-align: middle;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.project-chip-archived { opacity: 0.55; font-style: italic; }
+
+.projects-list {
+  display: grid;
+  gap: 0.6rem;
+}
+.project-list {
+  display: grid;
+  gap: 0.4rem;
+}
+.project-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--bg-item);
+}
+.project-row.is-archived { opacity: 0.6; }
+.project-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+.project-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--text);
+  cursor: text;
+}
+.project-edit-input {
+  flex: 1;
+  font: inherit;
+  padding: 0.3rem 0.5rem;
+}
+.project-row-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+.project-row-actions .link-btn.danger { color: #f87171; }
+
+.project-archived-block {
+  margin-top: 0.5rem;
+}
+.project-archived-block > summary {
+  cursor: pointer;
+  color: var(--text-soft);
+  font-size: 0.85rem;
+  padding: 0.3rem 0;
+}

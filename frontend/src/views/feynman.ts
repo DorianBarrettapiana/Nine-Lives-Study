@@ -10,6 +10,7 @@ import { generateFeynmanReview, listSummaries, type AiSummaryRead } from "../api
 import { escapeHtml, formatDate, setMessage } from "../utils";
 import { aiErrorMessage, ensureAiConsent, isAiEnabled, renderAiMarkdown } from "./ai-tools";
 import { renderEmptyStateWithCat } from "./icons";
+import { projectChipHtml } from "./project-picker";
 
 const FEYNMAN_STEPS = [
   { title: "1. Pick a concept", description: "Write down one concept or theory you want to understand deeply.", fieldLabel: "Concept", placeholder: "e.g. Monte Carlo ray tracing, separatrix, BRDF, heat flux..." },
@@ -70,7 +71,7 @@ export function render(): void {
     <article class="feynman-card">
       <div class="note-header">
         <div>
-          <h3>${escapeHtml(entry.concept)}</h3>
+          <h3>${escapeHtml(entry.concept)}${projectChipHtml(entry.project_id)}</h3>
           <p class="note-meta">Updated ${formatDate(entry.updated_at)}</p>
         </div>
         <div class="note-actions">

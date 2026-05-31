@@ -30,6 +30,16 @@ class WorkLabelStat(BaseModel):
     minutes: int
 
 
+class ProjectTimeStat(BaseModel):
+    """Minutes grouped by the project bucket the session's linked task
+    belongs to. Sessions inherit project transitively via linked_task_id.
+    `project_id` is None for the "(no project)" bucket."""
+
+    project_id: int | None
+    name: str
+    minutes: int
+
+
 class WeeklySummaryCounts(BaseModel):
     work_minutes: int = 0
     tasks_done: int = 0
@@ -51,6 +61,7 @@ class UserStatsRead(BaseModel):
     daily_moods: list[DailyMoodStat]
     daily_work_minutes: list[DailyWorkStat]
     work_labels: list[WorkLabelStat]
+    time_per_project: list[ProjectTimeStat] = []
     total_tasks_done: int
     total_work_minutes: int
     total_notes: int

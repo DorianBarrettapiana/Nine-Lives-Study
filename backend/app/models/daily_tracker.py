@@ -2,7 +2,7 @@
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -35,6 +35,12 @@ class DailyTask(Base):
     # Defaults to 0 so legacy rows stay in their original creation order
     # until the user reorders them.
     sort_order: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+
+    # Optional research-thread bucket. NULL = unassigned. ON DELETE SET
+    # NULL is enforced application-side (the /projects DELETE route nulls
+    # this column before removing the project) since SQLite's FK enforcement
+    # isn't enabled on this connection.
+    project_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(),

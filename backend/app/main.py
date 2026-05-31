@@ -13,6 +13,7 @@ from app.api.routes.health import router as health_router
 from app.api.routes.mood import router as mood_router
 from app.api.routes.paper_notes import router as paper_notes_router
 from app.api.routes.pomodoro import router as pomodoro_router
+from app.api.routes.projects import router as projects_router
 from app.api.routes.stats import router as stats_router
 from app.api.routes.stopwatch import router as stopwatch_router
 from app.api.routes.summaries import router as summaries_router
@@ -33,6 +34,7 @@ from app.models.friendship import Friendship  # noqa: F401
 from app.models.mood_entry import MoodEntry  # noqa: F401
 from app.models.paper_note import PaperNote  # noqa: F401
 from app.models.pomodoro_session import PomodoroSession  # noqa: F401
+from app.models.project import Project  # noqa: F401
 from app.models.session import Session  # noqa: F401
 from app.models.stopwatch_session import StopwatchSession  # noqa: F401
 from app.models.user import User  # noqa: F401
@@ -75,6 +77,7 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(users_router)
+app.include_router(projects_router)
 app.include_router(paper_notes_router)
 app.include_router(feynman_entries_router)
 app.include_router(daily_tracker_router)

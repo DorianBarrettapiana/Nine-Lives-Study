@@ -32,6 +32,7 @@ import { generatePaperNoteThemes } from "../api/summaries";
 import { escapeHtml, setMessage } from "../utils";
 import { aiErrorMessage, ensureAiConsent, isAiEnabled, renderAiMarkdown } from "./ai-tools";
 import { renderEmptyStateWithCat } from "./icons";
+import { projectChipHtml, renderProjectPicker } from "./project-picker";
 
 let notesList: HTMLDivElement;
 let noteForm: HTMLFormElement;
@@ -59,6 +60,9 @@ let notes: PaperNoteRead[] = [];
 let feynmanEntries: FeynmanEntryRead[] = [];
 let editedNoteId: number | null = null;
 let zoteroConfig: ZoteroConfig = { connected: false, zotero_user_id: null };
+// Project chosen for the note currently being edited/created. Sticky for
+// new notes (same behaviour as the tracker task picker).
+let pendingProjectId: number | null = null;
 
 export function getNotes(): PaperNoteRead[] { return notes; }
 
@@ -74,8 +78,22 @@ function clearNoteForm(): void {
   noteDoiInput.value = "";
   noteAbstractInput.value = "";
   noteFeynmanLink.value = "";
+  // Don't reset pendingProjectId here — sticky across saves so the user
+  // can add a string of notes against one project without re-picking.
+  void rerenderNoteProjectPicker();
   noteSubmitButton.textContent = "Add note";
   noteCancelButton.classList.add("hidden");
+}
+
+async function rerenderNoteProjectPicker(): Promise<void> {
+  const container = document.querySelector<HTMLDivElement>("#note-project-picker");
+  if (container === null) return;
+  await renderProjectPicker({
+    container,
+    selectedId: pendingProjectId,
+    label: "Project (optional)",
+    onChange: (id) => { pendingProjectId = id; },
+  });
 }
 
 function zoteroDeepLink(note: PaperNoteRead): string | null {
@@ -132,7 +150,7 @@ export function render(): void {
       <article class="note-card">
         <div class="note-header">
           <div>
-            <h3>${escapeHtml(note.title)}${sourceBadge}</h3>
+            <h3>${escapeHtml(note.title)}${sourceBadge}${projectChipHtml(note.project_id)}</h3>
             <p class="note-meta">${escapeHtml(note.authors || "Unknown authors")}${note.year ? ` (${note.year})` : ""}${note.item_type ? ` · ${escapeHtml(humanItemType(note.item_type))}` : ""}</p>
           </div>
           <div class="note-actions">
@@ -224,6 +242,7 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
       doi: noteDoiInput.value.trim() || null,
       abstract: noteAbstractInput.value.trim() || null,
       feynman_entry_id: noteFeynmanLink.value ? Number(noteFeynmanLink.value) : null,
+      project_id: pendingProjectId,
     };
     try {
       if (editedNoteId === null) {
@@ -263,6 +282,8 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
       noteDoiInput.value = note.doi ?? "";
       noteAbstractInput.value = note.abstract ?? "";
       noteFeynmanLink.value = note.feynman_entry_id === null ? "" : String(note.feynman_entry_id);
+      pendingProjectId = note.project_id;
+      void rerenderNoteProjectPicker();
       noteSubmitButton.textContent = "Update note";
       noteCancelButton.classList.remove("hidden");
       switchToView("notes");
@@ -308,6 +329,10 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
   });
 
   void refreshZoteroState();
+  // First-paint the project picker; re-paints itself on projects:updated.
+  void rerenderNoteProjectPicker();
+  // Re-render cards when project metadata changes so chips reflect renames.
+  window.addEventListener("projects:updated", () => render());
 }
 
 // ---------------------------------------------------------------------------
