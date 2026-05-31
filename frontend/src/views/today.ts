@@ -652,7 +652,7 @@ export function init(onDataChanged: () => Promise<void>): void {
       } else if (action === "stopwatch") {
         await StopwatchView.startForFocus(id, task.text);
       } else if (action === "pomodoro") {
-        await PomodoroView.startForFocus(id, task.text);
+        await PomodoroView.startForFocus(id);
       }
     } catch (error) {
       console.error(error);

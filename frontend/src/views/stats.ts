@@ -352,7 +352,7 @@ function renderWorkSection(): void {
 function renderFocusSection(): void {
   const labels = userStats?.work_labels ?? [];
   if (labels.length === 0) {
-    statsFocusChart.innerHTML = `<div class="empty-state">Bind a task or focus description when starting a timer to see where your time goes.</div>`;
+    statsFocusChart.innerHTML = `<div class="empty-state">Choose a task when starting a timer to see where your time goes.</div>`;
     return;
   }
   const max = Math.max(...labels.map((item) => item.minutes), 1);
