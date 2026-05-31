@@ -37,6 +37,14 @@ class DailyTask(Base):
     due_date: Mapped[date | None] = mapped_column(Date, index=True, nullable=True)
     text: Mapped[str] = mapped_column(String(500), nullable=False)
     is_done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Reading tasks stay ordinary daily tasks so timers, carry-forward and
+    # stats keep one execution flow. This optional link lets a paper note show
+    # the time invested through its associated tasks.
+    paper_note_id: Mapped[int | None] = mapped_column(
+        ForeignKey("paper_notes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     # User-controlled ordering within a day. Lower sorts first; ties break
     # by `created_at`. Float so the frontend can insert "between neighbors"
     # via the midpoint trick (e.g. 1.0 / 2.0 → drop between → 1.5).

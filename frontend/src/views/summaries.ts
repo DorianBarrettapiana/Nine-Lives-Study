@@ -15,6 +15,7 @@
 
 import {
   generateWeekly,
+  generateProgressRecap,
   getAiConfig,
   getWeeklyAvailability,
   listSummaries,
@@ -22,13 +23,17 @@ import {
   type AiConfigRead,
   type AiSummaryRead,
   type WeeklyAvailability,
+  type ProgressSummaryKind,
 } from "../api/summaries";
 import { ApiError } from "../api/client";
 import { createDailyTask } from "../api/tracker";
 import { escapeHtml, flashMessage, parseApiDate, setMessage } from "../utils";
+import { getCachedProjects } from "./project-state";
 
 let cardEl: HTMLElement | null = null;
 let generateBtn: HTMLButtonElement | null = null;
+let monthlyBtn: HTMLButtonElement | null = null;
+let stageBtn: HTMLButtonElement | null = null;
 let contentEl: HTMLDivElement | null = null;
 let metaEl: HTMLParagraphElement | null = null;
 let messageEl: HTMLParagraphElement | null = null;
@@ -90,12 +95,33 @@ function applyInline(text: string): string {
 // strip that line from the body and render it as an action button below
 // the markdown — turns a passive recap into a one-click follow-through.
 const NEXT_STEP_RE = /\*\*Next step:\*\*\s*(.+?)\s*$/m;
+const NEXT_DUE_RE = /^\*\*Due:\*\*\s*(\d{4}-\d{2}-\d{2})\s*$/m;
+const NEXT_PROJECT_RE = /^\*\*Project:\*\*\s*(.+?)\s*$/m;
 
-function extractNextStep(md: string): { body: string; nextStep: string | null } {
+interface NextStep {
+  text: string;
+  dueDate: string | null;
+  projectName: string | null;
+}
+
+function extractNextStep(md: string): { body: string; nextStep: NextStep | null } {
   const match = md.match(NEXT_STEP_RE);
   if (match === null) return { body: md, nextStep: null };
-  const body = md.replace(NEXT_STEP_RE, "").trimEnd();
-  return { body, nextStep: match[1].trim() };
+  const due = md.match(NEXT_DUE_RE);
+  const project = md.match(NEXT_PROJECT_RE);
+  const body = md
+    .replace(NEXT_STEP_RE, "")
+    .replace(NEXT_DUE_RE, "")
+    .replace(NEXT_PROJECT_RE, "")
+    .trimEnd();
+  return {
+    body,
+    nextStep: {
+      text: match[1].trim(),
+      dueDate: due?.[1] ?? null,
+      projectName: project?.[1]?.trim() ?? null,
+    },
+  };
 }
 
 function showSummary(s: AiSummaryRead, { expanded = false }: { expanded?: boolean } = {}): void {
@@ -113,13 +139,43 @@ function showSummary(s: AiSummaryRead, { expanded = false }: { expanded?: boolea
       <summary>Recap for ${s.period_key} · generated ${when}</summary>
       <div class="ai-summary-body">${renderMarkdown(body)}</div>
       ${nextStep !== null ? renderNextStepAction(nextStep) : ""}
+      <div class="ai-summary-actions">
+        <button type="button" class="secondary" data-ai-action="copy-markdown">Copy Markdown</button>
+      </div>
     </details>
   `;
   if (nextStep !== null) wireNextStepButton(nextStep);
+  wireCopyMarkdownButton(s.content);
   metaEl.textContent = `${s.model}`;
 }
 
-function renderNextStepAction(nextStep: string): string {
+function wireCopyMarkdownButton(markdown: string): void {
+  if (contentEl === null) return;
+  const btn = contentEl.querySelector<HTMLButtonElement>('[data-ai-action="copy-markdown"]');
+  if (btn === null) return;
+  btn.addEventListener("click", () => {
+    void copyMarkdown(markdown, btn);
+  });
+}
+
+async function copyMarkdown(markdown: string, btn: HTMLButtonElement): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(markdown);
+    btn.textContent = "✓ Copied";
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = markdown;
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+    btn.textContent = "✓ Copied";
+  }
+}
+
+function renderNextStepAction(nextStep: NextStep): string {
   // Render the suggestion as a quote-styled block with an inline action.
   // No state-tracking for "already added" — the button is one-shot per
   // page load; multiple clicks create duplicate tasks, but the user
@@ -127,7 +183,9 @@ function renderNextStepAction(nextStep: string): string {
   return `
     <div class="ai-next-step">
       <div class="ai-next-step-label">Next step</div>
-      <div class="ai-next-step-text">${escapeHtml(nextStep)}</div>
+      <div class="ai-next-step-text">${escapeHtml(nextStep.text)}</div>
+      ${nextStep.dueDate ? `<div class="hint">Due ${escapeHtml(nextStep.dueDate)}</div>` : ""}
+      ${nextStep.projectName ? `<div class="hint">Project: ${escapeHtml(nextStep.projectName)}</div>` : ""}
       <button type="button" class="ai-next-step-btn" data-ai-action="add-task">
         + Add to today's tasks
       </button>
@@ -135,7 +193,7 @@ function renderNextStepAction(nextStep: string): string {
   `;
 }
 
-function wireNextStepButton(nextStep: string): void {
+function wireNextStepButton(nextStep: NextStep): void {
   if (contentEl === null) return;
   const btn = contentEl.querySelector<HTMLButtonElement>('[data-ai-action="add-task"]');
   if (btn === null) return;
@@ -144,11 +202,18 @@ function wireNextStepButton(nextStep: string): void {
   });
 }
 
-async function onAddNextStepAsTask(text: string, btn: HTMLButtonElement): Promise<void> {
+async function onAddNextStepAsTask(nextStep: NextStep, btn: HTMLButtonElement): Promise<void> {
   btn.disabled = true;
   btn.textContent = "Adding…";
   try {
-    await createDailyTask({ text });
+    const project = getCachedProjects().find(
+      (item) => item.name.toLowerCase() === nextStep.projectName?.toLowerCase(),
+    );
+    await createDailyTask({
+      text: nextStep.text,
+      due_date: nextStep.dueDate,
+      project_id: project?.id ?? null,
+    });
     btn.textContent = "✓ Added";
     // Other open task pickers (stopwatch/pomodoro) refresh themselves
     // when this fires — keeps the new task visible without a reload.
@@ -175,8 +240,8 @@ function showConsentModal(): Promise<boolean> {
     backdrop.innerHTML = `
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="ai-consent-title">
         <h3 id="ai-consent-title">Send your data to Claude?</h3>
-        <p>To generate this summary, your week's <strong>work-time numbers, task counts, mood entries, and reflection text</strong> will be sent to Anthropic's Claude API.</p>
-        <p class="hint">No passwords, paper notes, or Feynman entries are sent for the weekly recap. You can revoke consent later in settings.</p>
+        <p>To generate this summary, your <strong>focus-time numbers, task counts, paper titles touched, open Feynman gaps, mood entries, and reflection text</strong> will be sent to Anthropic's Claude API.</p>
+        <p class="hint">No passwords or Zotero credentials are sent. You can revoke consent later in settings.</p>
         <div class="modal-actions">
           <button type="button" class="secondary" data-ai-consent="cancel">Not now</button>
           <button type="button" data-ai-consent="ok">I agree, generate</button>
@@ -242,6 +307,37 @@ async function onGenerateClick(): Promise<void> {
   }
 }
 
+async function onGenerateProgressClick(period: ProgressSummaryKind): Promise<void> {
+  if (!config || !messageEl) return;
+  const btn = period === "monthly" ? monthlyBtn : stageBtn;
+  if (btn === null) return;
+  if (!config.user_opted_in) {
+    const agreed = await showConsentModal();
+    if (!agreed) return;
+    try {
+      config = await setAiOptIn(true);
+    } catch (e) {
+      setMessage(messageEl, parseError(e), "error");
+      return;
+    }
+  }
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = "Generating…";
+  try {
+    const summary = await generateProgressRecap(
+      period, -new Date().getTimezoneOffset(),
+    );
+    showSummary(summary, { expanded: true });
+    flashMessage(messageEl, "Recap ready.", "success");
+  } catch (e) {
+    setMessage(messageEl, parseError(e), "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
 function parseError(e: unknown): string {
   if (e instanceof ApiError) {
     try {
@@ -257,6 +353,8 @@ function parseError(e: unknown): string {
 export async function init(): Promise<void> {
   cardEl = document.querySelector<HTMLElement>("#ai-summary-card");
   generateBtn = document.querySelector<HTMLButtonElement>("#ai-summary-generate");
+  monthlyBtn = document.querySelector<HTMLButtonElement>("#ai-summary-monthly");
+  stageBtn = document.querySelector<HTMLButtonElement>("#ai-summary-stage");
   contentEl = document.querySelector<HTMLDivElement>("#ai-summary-content");
   metaEl = document.querySelector<HTMLParagraphElement>("#ai-summary-meta");
   messageEl = document.querySelector<HTMLParagraphElement>("#ai-summary-message");
@@ -277,6 +375,8 @@ export async function init(): Promise<void> {
   cardEl.classList.remove("hidden");
 
   generateBtn.addEventListener("click", () => void onGenerateClick());
+  monthlyBtn?.addEventListener("click", () => void onGenerateProgressClick("monthly"));
+  stageBtn?.addEventListener("click", () => void onGenerateProgressClick("stage"));
 
   // Surface the most recent prior recap so re-opening the view doesn't show
   // a blank card. listSummaries is cheap (no AI call) — fine on init.

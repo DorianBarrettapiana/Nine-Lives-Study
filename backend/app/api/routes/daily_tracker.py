@@ -19,6 +19,7 @@ from app.core.xp import (
     award_xp_event,
 )
 from app.models.daily_tracker import DailyLog, DailyTask
+from app.models.paper_note import PaperNote
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.daily_tracker import (
@@ -65,6 +66,14 @@ def _validate_project_id(project_id: int | None, current_user: User, db: Session
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Unknown project.",
         )
+
+
+def _validate_paper_note_link(note_id: int | None, current_user: User, db: Session) -> None:
+    if note_id is None:
+        return
+    note = db.get(PaperNote, note_id)
+    if note is None or note.user_id != current_user.id:
+        raise HTTPException(status_code=400, detail="Linked paper note not found.")
 
 
 @router.get("", response_model=DailyStateRead)
@@ -117,6 +126,7 @@ def create_daily_task(
     #   explicit planned_date  >  explicit task_date  >  today
     # Both columns are written so legacy queries keep functioning.
     day = payload.planned_date or resolve_target_date(payload.task_date)
+    _validate_paper_note_link(payload.paper_note_id, current_user, db)
     # New tasks land at the bottom of the day's list. Compute as
     # (current max sort_order for the day) + 1, defaulting to 1.0 for the
     # very first task.
@@ -138,6 +148,7 @@ def create_daily_task(
         is_done=False,
         sort_order=next_so,
         project_id=payload.project_id,
+        paper_note_id=payload.paper_note_id,
     )
     db.add(task)
     db.commit()
@@ -257,9 +268,13 @@ def carry_daily_task_forward(
     copied = DailyTask(
         user_id=current_user.id,
         task_date=target_date,
+        planned_date=target_date,
+        due_date=task.due_date,
         text=task.text,
         is_done=False,
         sort_order=(max_so or 0.0) + 1.0,
+        project_id=task.project_id,
+        paper_note_id=task.paper_note_id,
     )
     db.add(copied)
     db.commit()

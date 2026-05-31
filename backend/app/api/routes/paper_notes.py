@@ -8,27 +8,42 @@ Includes the Zotero import workflow:
   POST   /notes/zotero/import   — bulk-create/update PaperNotes from keys
 """
 
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.crypto import decrypt_str, encrypt_str
 from app.core.database import get_db
-from app.core.xp import ENTITY_NOTE, EVENT_NOTE, XP_NOTE_CREATE, award_xp_event
+from app.core.xp import (
+    ENTITY_NOTE,
+    ENTITY_POMODORO,
+    ENTITY_STOPWATCH,
+    EVENT_NOTE,
+    EVENT_POMODORO,
+    EVENT_STOPWATCH,
+    XP_NOTE_CREATE,
+    award_xp_event,
+)
 from app.core.zotero import (
     ZoteroError,
     fetch_items_by_keys,
     list_top_items,
     verify_credentials,
 )
+from app.models.daily_tracker import DailyTask
 from app.models.feynman_entry import FeynmanEntry
 from app.models.paper_note import PaperNote
+from app.models.pomodoro_session import PomodoroSession
 from app.models.project import Project
+from app.models.stopwatch_session import StopwatchSession
 from app.models.user import User
+from app.models.xp_event import XpEvent
+from app.schemas.daily_tracker import DailyTaskRead
 from app.schemas.paper_note import PaperNoteCreate, PaperNoteRead, PaperNoteUpdate
 
 router = APIRouter(prefix="/notes", tags=["paper-notes"])
@@ -65,6 +80,49 @@ def _validate_project_link(project_id: int | None, current_user: User, db: Sessi
 
 def _has_reading_notes(note: PaperNote) -> bool:
     return bool((note.key_points or "").strip() or (note.questions or "").strip())
+
+
+def _reading_minutes_by_note(user_id: int, db: Session) -> dict[int, int]:
+    """Attribute XP-backed focus minutes through paper-backed daily tasks."""
+    totals: dict[int, int] = {}
+    events = db.scalars(
+        select(XpEvent).where(
+            XpEvent.user_id == user_id,
+            XpEvent.event_type.in_([EVENT_POMODORO, EVENT_STOPWATCH]),
+        )
+    ).all()
+    for event in events:
+        session = None
+        if event.entity_type == ENTITY_POMODORO:
+            session = db.get(PomodoroSession, event.entity_id)
+        elif event.entity_type == ENTITY_STOPWATCH:
+            session = db.get(StopwatchSession, event.entity_id)
+        if session is None or session.linked_task_id is None:
+            continue
+
+        task = db.get(DailyTask, session.linked_task_id)
+        if task is None or task.user_id != user_id or task.paper_note_id is None:
+            continue
+        totals[task.paper_note_id] = totals.get(task.paper_note_id, 0) + event.amount
+    return totals
+
+
+def _attach_reading_minutes(notes: list[PaperNote], current_user: User, db: Session) -> list[PaperNote]:
+    totals = _reading_minutes_by_note(current_user.id, db)
+    for note in notes:
+        note.reading_minutes = totals.get(note.id, 0)
+    return notes
+
+
+def _next_task_sort_order(user_id: int, task_date: date, db: Session) -> float:
+    max_so = db.scalar(
+        select(DailyTask.sort_order)
+        .where(DailyTask.user_id == user_id)
+        .where(DailyTask.task_date == task_date)
+        .order_by(DailyTask.sort_order.desc())
+        .limit(1)
+    )
+    return (max_so or 0.0) + 1.0
 
 
 def _decrypt_user_key(user: User) -> str:
@@ -124,7 +182,7 @@ def list_notes(
         .where(PaperNote.user_id == current_user.id)
         .order_by(PaperNote.updated_at.desc())
     )
-    return list(db.scalars(statement).all())
+    return _attach_reading_minutes(list(db.scalars(statement).all()), current_user, db)
 
 
 @router.post("", response_model=PaperNoteRead, status_code=201)
@@ -151,6 +209,7 @@ def create_note(
         source="manual",
         feynman_entry_id=payload.feynman_entry_id,
         project_id=payload.project_id,
+        reading_status=payload.reading_status,
     )
     db.add(note)
     db.flush()  # populate note.id so we can pin the XP event to it
@@ -164,6 +223,7 @@ def create_note(
     )
     db.commit()
     db.refresh(note)
+    note.reading_minutes = 0
     return note
 
 
@@ -204,7 +264,45 @@ def update_note(
 
     db.commit()
     db.refresh(note)
+    _attach_reading_minutes([note], current_user, db)
     return note
+
+
+@router.post("/{note_id}/add-to-today", response_model=DailyTaskRead, status_code=201)
+def add_note_to_today(
+    note_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DailyTask:
+    """Create one ordinary reading task for today, reusing an open one."""
+    note = _get_owned_note(note_id, current_user, db)
+    today = date.today()
+    existing = db.scalar(
+        select(DailyTask)
+        .where(DailyTask.user_id == current_user.id)
+        .where(DailyTask.task_date == today)
+        .where(DailyTask.paper_note_id == note.id)
+        .where(DailyTask.is_done.is_(False))
+        .order_by(DailyTask.created_at.desc())
+    )
+    if existing is not None:
+        return existing
+    task = DailyTask(
+        user_id=current_user.id,
+        task_date=today,
+        planned_date=today,
+        text=f"Read: {note.title}",
+        is_done=False,
+        sort_order=_next_task_sort_order(current_user.id, today, db),
+        project_id=note.project_id,
+        paper_note_id=note.id,
+    )
+    if note.reading_status == "inbox":
+        note.reading_status = "reading"
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return task
 
 
 @router.delete("/{note_id}", status_code=204)
@@ -215,6 +313,14 @@ def delete_note(
 ) -> None:
     """Delete a paper note (must belong to the current user)."""
     note = _get_owned_note(note_id, current_user, db)
+    # SQLite FK enforcement is disabled in this app, so clear the optional
+    # reading-task link explicitly before removing the note.
+    db.execute(
+        update(DailyTask)
+        .where(DailyTask.user_id == current_user.id)
+        .where(DailyTask.paper_note_id == note.id)
+        .values(paper_note_id=None)
+    )
     db.delete(note)
     db.commit()
 

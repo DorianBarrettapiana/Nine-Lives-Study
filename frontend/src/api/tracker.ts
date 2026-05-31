@@ -16,6 +16,7 @@ export interface DailyTaskRead {
   is_done: boolean;
   sort_order: number;
   project_id: number | null;
+  paper_note_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -47,6 +48,7 @@ export interface DailyTaskCreate {
   planned_date?: string | null;
   due_date?: string | null;
   project_id?: number | null;
+  paper_note_id?: number | null;
 }
 
 export interface DailyTaskUpdate {

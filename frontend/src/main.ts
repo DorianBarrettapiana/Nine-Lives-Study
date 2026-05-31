@@ -164,6 +164,14 @@ const APP_HTML = `
                 <label>DOI<input id="note-doi" type="text" placeholder="10.xxxx/..." /></label>
                 <label>Abstract<textarea id="note-abstract" placeholder="Paper abstract..."></textarea></label>
               </details>
+              <label>Reading status
+                <select id="note-reading-status">
+                  <option value="inbox">Inbox</option>
+                  <option value="reading">Reading</option>
+                  <option value="summarized">Summarized</option>
+                  <option value="revisit">Revisit</option>
+                </select>
+              </label>
               <label>Linked Feynman record<select id="note-feynman-link"><option value="">None</option></select></label>
               <div id="note-project-picker" class="note-project-picker"></div>
               <div class="button-row">
@@ -266,10 +274,14 @@ const APP_HTML = `
         <div id="stats-view" class="hidden">
           <section class="card hidden" id="ai-summary-card">
             <div class="section-header">
-              <h2>AI weekly recap</h2>
-              <button id="ai-summary-generate" type="button">Generate</button>
+              <h2>AI research recap</h2>
+              <div class="button-row">
+                <button id="ai-summary-generate" type="button">Generate weekly</button>
+                <button id="ai-summary-monthly" class="secondary" type="button">Monthly</button>
+                <button id="ai-summary-stage" class="secondary" type="button">90-day stage</button>
+              </div>
             </div>
-            <p class="hint" id="ai-summary-hint">Synthesizes this week's work, mood, and reflections into a short narrative.</p>
+            <p class="hint" id="ai-summary-hint">Synthesizes focus time, papers touched, open Feynman gaps, mood, and reflections into an advisor-ready narrative.</p>
             <p class="message" id="ai-summary-message"></p>
             <div id="ai-summary-content" class="ai-summary-markdown"></div>
             <p class="hint" id="ai-summary-meta"></p>

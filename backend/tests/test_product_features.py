@@ -186,3 +186,83 @@ def test_paper_note_theme_route_is_exposed(auth_client: TestClient, monkeypatch)
     assert response.status_code == 201
     assert response.json()["kind"] == "paper_notes"
     assert response.json()["content"] == "Recurring themes"
+
+
+def test_paper_note_read_today_flows_into_focus_minutes_and_recap(
+    auth_client: TestClient, db_engine,
+):
+    project = auth_client.post("/projects", json={"name": "Survey draft"}).json()
+    note = auth_client.post("/notes", json={
+        "title": "Attention Is All You Need",
+        "authors": "Vaswani et al.",
+        "year": 2017,
+        "key_points": "",
+        "questions": "",
+        "tags": "transformers",
+        "project_id": project["id"],
+    }).json()
+
+    first = auth_client.post(f"/notes/{note['id']}/add-to-today")
+    second = auth_client.post(f"/notes/{note['id']}/add-to-today")
+    task = first.json()
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert second.json()["id"] == task["id"]
+    assert task["text"] == "Read: Attention Is All You Need"
+    assert task["paper_note_id"] == note["id"]
+    assert task["project_id"] == project["id"]
+
+    session = auth_client.post("/pomodoro", json={
+        "session_type": "work",
+        "duration_minutes": 25,
+        "linked_task_id": task["id"],
+    }).json()
+    auth_client.patch(f"/pomodoro/{session['id']}/complete", json={})
+
+    notes = auth_client.get("/notes").json()
+    assert notes[0]["reading_status"] == "reading"
+    assert notes[0]["reading_minutes"] == 25
+
+    now = datetime.now(timezone.utc)
+    user_id = auth_client.get("/users/me").json()["id"]
+    with Session(db_engine) as db:
+        recap = gather_weekly(user_id, now - timedelta(days=1), db, now + timedelta(days=1))
+    assert recap["time_per_project_minutes"] == {"Survey draft": 25}
+    assert recap["papers_touched"] == [{
+        "title": "Attention Is All You Need",
+        "reading_status": "reading",
+        "focus_minutes": 25,
+    }]
+
+
+def test_paper_note_reading_status_can_be_updated(auth_client: TestClient):
+    note = auth_client.post("/notes", json={
+        "title": "Paper",
+        "authors": "",
+        "year": None,
+        "key_points": "",
+        "questions": "",
+        "tags": "",
+    }).json()
+
+    response = auth_client.patch(f"/notes/{note['id']}", json={"reading_status": "revisit"})
+
+    assert response.status_code == 200
+    assert response.json()["reading_status"] == "revisit"
+
+
+def test_monthly_progress_recap_route_is_exposed(auth_client: TestClient, monkeypatch):
+    auth_client.post("/summaries/opt-in", json={"opted_in": True})
+    monkeypatch.setattr(summaries.ai, "is_configured", lambda: True)
+    monkeypatch.setattr(
+        summaries.ai,
+        "summarise_progress_recap",
+        lambda *_args: SummaryResult("Advisor-ready recap", "test-model", 10, 5),
+    )
+
+    response = auth_client.post("/summaries/progress/monthly/generate")
+
+    assert response.status_code == 201
+    assert response.json()["kind"] == "monthly"
+    assert response.json()["content"] == "Advisor-ready recap"

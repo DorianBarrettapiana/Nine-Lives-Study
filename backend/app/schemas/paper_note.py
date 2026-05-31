@@ -1,8 +1,12 @@
 """Pydantic schemas for paper notes."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.schemas._base import BaseSchema, UtcDateTime
+
+PaperReadingStatus = Literal["inbox", "reading", "summarized", "revisit"]
 
 
 class PaperNoteCreate(BaseModel):
@@ -23,6 +27,7 @@ class PaperNoteCreate(BaseModel):
     abstract: str | None = None
     feynman_entry_id: int | None = None
     project_id: int | None = None
+    reading_status: PaperReadingStatus = "inbox"
 
 
 class PaperNoteUpdate(BaseModel):
@@ -40,6 +45,7 @@ class PaperNoteUpdate(BaseModel):
     abstract: str | None = None
     feynman_entry_id: int | None = None
     project_id: int | None = None
+    reading_status: PaperReadingStatus | None = None
 
 
 class PaperNoteRead(BaseSchema):
@@ -65,5 +71,7 @@ class PaperNoteRead(BaseSchema):
     source: str = "manual"
     feynman_entry_id: int | None = None
     project_id: int | None = None
+    reading_status: PaperReadingStatus = "inbox"
+    reading_minutes: int = 0
     created_at: UtcDateTime
     updated_at: UtcDateTime

@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.focus import effective_focus_label
@@ -75,7 +75,7 @@ def _get_client():
     return _client
 
 
-SummaryKind = Literal["weekly", "paper_notes", "feynman_review", "reflections"]
+SummaryKind = Literal["weekly", "monthly", "stage", "paper_notes", "feynman_review", "reflections"]
 
 # Single source of truth for which model we call. Pinned to a major version
 # so a Claude minor release doesn't silently change behaviour mid-week.
@@ -171,13 +171,13 @@ def gather_weekly(
 
     # Feynman + paper notes created this week (creative output indicator).
     feynman_count = db.scalar(
-        select(FeynmanEntry.id)
+        select(func.count(FeynmanEntry.id))
         .where(FeynmanEntry.user_id == user_id)
         .where(FeynmanEntry.created_at >= week_start_utc.replace(tzinfo=None))
         .where(FeynmanEntry.created_at < week_end_utc.replace(tzinfo=None))
     )
     paper_notes_count = db.scalar(
-        select(PaperNote.id)
+        select(func.count(PaperNote.id))
         .where(PaperNote.user_id == user_id)
         .where(PaperNote.created_at >= week_start_utc.replace(tzinfo=None))
         .where(PaperNote.created_at < week_end_utc.replace(tzinfo=None))
@@ -196,6 +196,7 @@ def gather_weekly(
     # task at all, contribute to the "(no project)" bucket.
     time_per_task: Counter[str] = Counter()
     time_per_project: Counter[str] = Counter()
+    papers_touched: Counter[int] = Counter()
     project_name_cache: dict[int, str] = {}
 
     def _project_name(project_id: int | None) -> str:
@@ -227,15 +228,34 @@ def gather_weekly(
         )
         time_per_task[task_label] += ev.amount
 
-        # Resolve project transitively via the linked task. db.get(DailyTask)
-        # is a primary-key lookup (cheap, identity-map-cached within the
-        # session); fine inside the loop.
+        # Resolve project and reading attribution transitively through the
+        # linked task. Sessions intentionally keep a single task FK.
         project_id: int | None = None
         if sess.linked_task_id is not None:
             task = db.get(DailyTask, sess.linked_task_id)
             if task is not None and task.user_id == user_id:
                 project_id = task.project_id
+                if task.paper_note_id is not None:
+                    papers_touched[task.paper_note_id] += ev.amount
         time_per_project[_project_name(project_id)] += ev.amount
+
+    paper_touch_rows = []
+    for note_id, minutes in papers_touched.most_common():
+        note = db.get(PaperNote, note_id)
+        if note is not None and note.user_id == user_id:
+            paper_touch_rows.append({
+                "title": note.title,
+                "reading_status": note.reading_status,
+                "focus_minutes": minutes,
+            })
+
+    unresolved_gaps = db.scalars(
+        select(FeynmanEntry)
+        .where(FeynmanEntry.user_id == user_id)
+        .where(FeynmanEntry.gaps != "")
+        .order_by(FeynmanEntry.updated_at.desc())
+        .limit(10)
+    ).all()
 
     # Looming deadlines (next 14 days, not yet done). Capped at 5 entries
     # so the prompt doesn't bloat for users with long task lists. The
@@ -273,10 +293,31 @@ def gather_weekly(
         "tasks_total": tasks_total,
         "moods": dict(mood_counter),
         "reflections": reflections,
-        "feynman_entries_created": 1 if feynman_count else 0,  # presence-only
-        "paper_notes_created": 1 if paper_notes_count else 0,
+        "feynman_entries_created": int(feynman_count or 0),
+        "paper_notes_created": int(paper_notes_count or 0),
+        "papers_touched": paper_touch_rows,
+        "unresolved_feynman_gaps": [
+            {"concept": entry.concept, "gaps": (entry.gaps or "")[:500]}
+            for entry in unresolved_gaps
+        ],
         "streak_days": streak_days,
         "upcoming_deadlines": upcoming,
+    }
+
+
+def gather_with_previous_period(
+    user_id: int,
+    window_start_utc: datetime,
+    window_end_utc: datetime,
+    db: Session,
+) -> dict:
+    """Pair a recap window with the same-length immediately preceding one."""
+    duration = window_end_utc - window_start_utc
+    return {
+        "current_period": gather_weekly(user_id, window_start_utc, db, window_end_utc),
+        "previous_period": gather_weekly(
+            user_id, window_start_utc - duration, db, window_start_utc,
+        ),
     }
 
 
@@ -370,14 +411,24 @@ Surface these in a short "what's pressing next" sentence — it's the
 single most useful forward-looking item we can give a PhD student.
 If the list is empty, don't fabricate urgency.
 
-ALWAYS finish the recap with one line in exactly this format (verbatim,
-including the asterisks, on its own line):
+The input wraps these fields under `current_period` and `previous_period`.
+Compare them: mention one meaningful change in focus time or work mix.
+Include a short **Papers touched** section when
+`current_period.papers_touched` is non-empty. Use
+`current_period.unresolved_feynman_gaps` only when it helps identify a
+concrete next step.
+
+ALWAYS finish the recap with these lines in exactly this format (verbatim,
+including the asterisks, each on its own line):
 
 **Next step:** <one short, concrete action, max 80 chars>
+**Due:** <YYYY-MM-DD>
+**Project:** <one verbatim project name from time_per_project_minutes, or (no project)>
 
-This line is parsed by the frontend to offer a one-click "add to today's
-tasks" button — so make it imperative and specific (e.g. "Re-read paper
-A's section 3 and note 2 questions") rather than vague ("focus more").\
+These lines are parsed by the frontend to offer a one-click task with a
+deadline and project. Make the action imperative and specific (e.g.
+"Re-read paper A's section 3 and note 2 questions") rather than vague
+("focus more"). Use a realistic near-term due date.\
 """
 
 # Tuesday slot: retrospective. Looks at the previous ISO week (Mon-Sun,
@@ -418,6 +469,22 @@ reading). Sections:
 
 Then the **Next step:** line (see KEY DATA above). For Friday pulse,
 this should be doable Sat-Sun.
+"""
+
+_SYSTEM_PROGRESS_RECAP = _SHARED_RECAP_TONE + """
+
+This is a LONGER-HORIZON progress recap for a PhD student preparing for an
+advisor conversation. Summarize the current period and compare it with the
+immediately preceding period of the same length.
+
+Output format: Markdown. ~400 words total. Sections:
+- **Progress in numbers** (hours, task completion, paper notes, Feynman entries)
+- **Where the time went** (largest task labels with hours)
+- **Papers touched** (titles and reading minutes, if any)
+- **What changed from the previous period** (2-3 honest observations)
+- **Open loops for the next advisor conversation** (include useful Feynman gaps)
+
+Then the **Next step:** line (see KEY DATA above).
 """
 
 _SYSTEM_PAPER_NOTES = """\
@@ -498,11 +565,11 @@ def summarise_weekly_retrospective(
     user_id: int, last_week_start_utc: datetime, db: Session,
 ) -> SummaryResult:
     """Tuesday slot — recap of the previous full ISO week (Mon-Sun, closed)."""
-    data = gather_weekly(
+    data = gather_with_previous_period(
         user_id,
         last_week_start_utc,
+        last_week_start_utc + timedelta(days=7),
         db,
-        window_end_utc=last_week_start_utc + timedelta(days=7),
     )
     data["window_label"] = "previous full week (Mon-Sun)"
     return _summarise(_SYSTEM_WEEKLY_RETROSPECTIVE, data, max_tokens=1500)
@@ -513,16 +580,28 @@ def summarise_weekly_pulse(
 ) -> SummaryResult:
     """Friday slot — pulse on current ISO week so far (Mon-now)."""
     now_utc = datetime.now(timezone.utc)
-    data = gather_weekly(
+    data = gather_with_previous_period(
         user_id,
         this_week_start_utc,
+        now_utc,
         db,
-        window_end_utc=now_utc,
     )
     data["window_label"] = "current week so far (Mon-now)"
     # Shorter max_tokens than retrospective — prompt asks for ~200 words
     # vs ~250; cap reflects that.
     return _summarise(_SYSTEM_WEEKLY_PULSE, data, max_tokens=1200)
+
+
+def summarise_progress_recap(
+    user_id: int,
+    window_start_utc: datetime,
+    window_end_utc: datetime,
+    period_label: str,
+    db: Session,
+) -> SummaryResult:
+    data = gather_with_previous_period(user_id, window_start_utc, window_end_utc, db)
+    data["window_label"] = period_label
+    return _summarise(_SYSTEM_PROGRESS_RECAP, data, max_tokens=2400)
 
 
 def summarise_paper_notes(user_id: int, since_utc: datetime, db: Session) -> SummaryResult:

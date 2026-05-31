@@ -14,6 +14,7 @@ rows — so cost is bounded by distinct periods, not click count.
 """
 
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -63,6 +64,13 @@ def _local_monday_utc(tz_offset_minutes: int) -> datetime:
         hour=0, minute=0, second=0, microsecond=0
     )
     return local_monday - tz_delta
+
+
+def _local_month_start_utc(tz_offset_minutes: int) -> datetime:
+    tz_delta = timedelta(minutes=tz_offset_minutes)
+    local_now = _utc_now() + tz_delta
+    local_start = local_now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return local_start - tz_delta
 
 
 def _iso_week_key(week_start_utc: datetime) -> str:
@@ -319,6 +327,36 @@ def generate_weekly(
             detail=f"AI generation failed: {exc}",
         ) from exc
     return _upsert(current_user.id, "weekly", period_key, result, db)
+
+
+@router.post("/progress/{period}/generate", response_model=AiSummaryRead, status_code=201)
+def generate_progress_recap(
+    period: Literal["monthly", "stage"],
+    days: int = Query(default=90, ge=14, le=365),
+    tz_offset: int = Query(default=0, ge=-720, le=840),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AiSummary:
+    """Generate an advisor-ready monthly or rolling stage recap."""
+    _check_base_preconditions(current_user)
+    end = _utc_now()
+    if period == "monthly":
+        start = _local_month_start_utc(tz_offset)
+        period_key = start.strftime("%Y-%m")
+        label = f"current calendar month ({period_key})"
+    else:
+        start = end - timedelta(days=days)
+        period_key = f"{start.date().isoformat()}..{end.date().isoformat()}"
+        label = f"rolling {days}-day research stage"
+    _check_period_not_yet_generated(current_user.id, period, period_key, db)
+    try:
+        result = ai.summarise_progress_recap(current_user.id, start, end, label, db)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI generation failed: {exc}",
+        ) from exc
+    return _upsert(current_user.id, period, period_key, result, db)
 
 
 @router.post("/feynman/{entry_id}/generate", response_model=AiSummaryRead, status_code=201)
