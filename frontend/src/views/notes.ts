@@ -29,7 +29,8 @@ import {
   type ZoteroItem,
 } from "../api/notes";
 import { ApiError } from "../api/client";
-import { listFeynmanEntries, type FeynmanEntryRead } from "../api/feynman";
+import { createFeynmanEntry, listFeynmanEntries, type FeynmanEntryRead } from "../api/feynman";
+import * as FeynmanView from "./feynman";
 import { escapeHtml, setMessage } from "../utils";
 import { renderEmptyStateWithCat } from "./icons";
 import { projectChipHtml, renderProjectPicker } from "./project-picker";
@@ -157,6 +158,9 @@ export function render(): void {
           <div class="note-actions">
             <button class="secondary" data-action="read-today" data-id="${note.id}">+ Read today</button>
             <button class="secondary" data-action="edit" data-id="${note.id}">Edit</button>
+            ${note.feynman_entry_id === null
+              ? `<button class="secondary" data-action="start-feynman" data-id="${note.id}" title="Spawn a Feynman record from this paper and link it">🧠 Start Feynman</button>`
+              : `<button class="link-btn" data-action="open-feynman" data-id="${note.id}" title="Open the linked Feynman record">🧠 Open Feynman</button>`}
             <button class="danger" data-action="delete" data-id="${note.id}">Delete</button>
           </div>
         </div>
@@ -324,6 +328,30 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
         console.error(error);
         setMessage(noteMessage, "Could not add reading task.", "error");
       }
+    } else if (action === "start-feynman") {
+      try {
+        // Same "concept seed" pattern as manual creation: prefill from the
+        // paper title, leave the rest blank — the user will write step 2-4.
+        const entry = await createFeynmanEntry({
+          concept: note.title,
+          explanation: "",
+          gaps: "",
+          analogy: "",
+          project_id: note.project_id,
+        });
+        await updateNote(note.id, { feynman_entry_id: entry.id });
+        setMessage(noteMessage, "Feynman record created and linked.", "success");
+        await onRefreshNeeded();
+        switchToView("feynman");
+        await FeynmanView.loadForEdit(entry.id);
+      } catch (error) {
+        console.error(error);
+        setMessage(noteMessage, "Could not start Feynman.", "error");
+      }
+    } else if (action === "open-feynman") {
+      if (note.feynman_entry_id === null) return;
+      switchToView("feynman");
+      await FeynmanView.loadForEdit(note.feynman_entry_id);
     } else if (action === "delete") {
       const extra = note.source === "zotero"
         ? "\n(The item stays in your Zotero library — only this local note is removed.)"

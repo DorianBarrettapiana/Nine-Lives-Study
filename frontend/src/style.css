@@ -2436,6 +2436,20 @@ h3 {
 }
 .yesterday-task-text { flex: 1; min-width: 0; }
 
+/* --- Feynman: source-paper banner ----------------------------------- */
+.feynman-source-note {
+  background: var(--bg-item);
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  margin: 0.4rem 0 0.8rem;
+  font-size: 0.88rem;
+}
+.feynman-source-title { font-weight: 600; margin: 0.1rem 0; }
+.feynman-source-key > summary { cursor: pointer; font-weight: 600; }
+.feynman-source-key p { margin: 0.3rem 0 0; white-space: pre-wrap; }
+
 @media (max-width: 600px) {
   .today-header-row { flex-direction: column; align-items: flex-start; }
   .task-form { flex-wrap: wrap; }
