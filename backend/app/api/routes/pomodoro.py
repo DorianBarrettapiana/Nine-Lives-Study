@@ -14,6 +14,7 @@ from app.core.xp import (
     EVENT_POMODORO,
     award_xp_event,
 )
+from app.models.daily_tracker import DailyTask
 from app.models.pomodoro_session import PomodoroSession
 from app.models.stopwatch_session import StopwatchSession
 from app.models.user import User
@@ -31,6 +32,18 @@ def _get_owned_session(session_id: int, current_user: User, db: Session) -> Pomo
     if session is None or session.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pomodoro session not found.")
     return session
+
+
+def _resolve_focus(
+    linked_task_id: int | None, work_label: str, current_user: User, db: Session,
+) -> tuple[int | None, str]:
+    label = work_label.strip()
+    if linked_task_id is None:
+        return None, label
+    task = db.get(DailyTask, linked_task_id)
+    if task is None or task.user_id != current_user.id:
+        raise HTTPException(status_code=400, detail="Daily task not found.")
+    return task.id, label or task.text
 
 
 @router.get("", response_model=list[PomodoroSessionRead])
@@ -66,11 +79,15 @@ def start_session(
                 detail="A stopwatch session is already active. End it first.",
             )
 
+    linked_task_id, work_label = _resolve_focus(
+        payload.linked_task_id, payload.work_label, current_user, db,
+    )
     session = PomodoroSession(
         user_id=current_user.id,
         session_type=payload.session_type,
         duration_minutes=payload.duration_minutes,
-        linked_task_id=payload.linked_task_id,
+        work_label=work_label if payload.session_type == "work" else "",
+        linked_task_id=linked_task_id if payload.session_type == "work" else None,
     )
     db.add(session)
     try:

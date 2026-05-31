@@ -20,6 +20,11 @@ export interface DailyWorkStat {
   minutes: number;
 }
 
+export interface WorkLabelStat {
+  label: string;
+  minutes: number;
+}
+
 export interface WeeklySummaryCounts {
   work_minutes: number;
   tasks_done: number;
@@ -38,6 +43,7 @@ export interface UserStatsRead {
   daily_tasks: DailyTaskStat[];
   daily_moods: DailyMoodStat[];
   daily_work_minutes: DailyWorkStat[];
+  work_labels: WorkLabelStat[];
   total_tasks_done: number;
   total_work_minutes: number;
   total_notes: number;

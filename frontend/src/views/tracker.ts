@@ -10,7 +10,7 @@
  */
 
 import {
-  createDailyTask, deleteDailyTask, getDailyState,
+  carryDailyTask, createDailyTask, deleteDailyTask, getDailyState,
   saveDailyLog, updateDailyTask, type DailyStateRead, type DailyTaskRead,
 } from "../api/tracker";
 import { escapeHtml, setMessage } from "../utils";
@@ -102,7 +102,9 @@ function taskHtml(task: DailyTaskRead, readOnly: boolean): string {
       <span class="task-text ${task.is_done ? "done" : ""}"
             data-task-action="edit" data-id="${task.id}"
             title="${readOnly ? "" : "Double-click to edit"}">${escapeHtml(task.text)}</span>
-      ${readOnly ? "" : `<button class="task-delete" data-task-action="delete" data-id="${task.id}" title="Delete">×</button>`}
+      ${readOnly ? "" : `
+        ${task.is_done ? "" : `<button class="task-carry" data-task-action="carry" data-id="${task.id}" title="Carry to tomorrow">Tomorrow</button>`}
+        <button class="task-delete" data-task-action="delete" data-id="${task.id}" title="Delete">×</button>`}
     </div>`;
 }
 
@@ -373,6 +375,10 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
         setMessage(trackerMessage, "Task deleted.", "success");
         await onRefreshNeeded();
         window.dispatchEvent(new CustomEvent("task-list:updated"));
+      }
+      else if (action === "carry") {
+        await carryDailyTask(task.id);
+        setMessage(trackerMessage, "Task copied to tomorrow.", "success");
       }
     } catch (error) {
       console.error(error);

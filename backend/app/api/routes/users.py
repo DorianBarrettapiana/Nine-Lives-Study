@@ -45,7 +45,7 @@ def update_me(
 
     # Special handling for cat_skin: enforce the 30h pomodoro lock.
     if "cat_skin" in data and data["cat_skin"] != current_user.cat_skin:
-        allowed, accumulated = can_change_cat_skin(current_user, db)
+        allowed, accumulated, used_free = can_change_cat_skin(current_user, db)
         if not allowed:
             remaining = CAT_SKIN_REQUIRED_MINUTES - accumulated
             raise HTTPException(
@@ -57,6 +57,8 @@ def update_me(
                 ),
             )
         current_user.cat_skin_changed_at = datetime.now(timezone.utc)
+        if used_free:
+            current_user.cat_skin_free_changes -= 1
 
     for field_name, field_value in data.items():
         setattr(current_user, field_name, field_value)

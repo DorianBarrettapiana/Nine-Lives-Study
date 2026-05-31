@@ -42,6 +42,7 @@ class DailyLogUpsert(BaseModel):
     """Payload used to create or update a daily log."""
 
     log_date: date | None = None
+    main_goal: str | None = Field(default=None, max_length=500)
     mood: str = Field(default="", max_length=20)
     reflection: str = ""
 
@@ -52,6 +53,7 @@ class DailyLogRead(BaseSchema):
     id: int
     user_id: int
     log_date: date
+    main_goal: str
     mood: str
     reflection: str
     created_at: UtcDateTime

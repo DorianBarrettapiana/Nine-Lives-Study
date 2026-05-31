@@ -14,7 +14,7 @@
 import { completeSession, deleteSession, listSessions, startSession, type PomodoroSessionRead } from "../api/pomodoro";
 import { renderTaskPicker } from "./taskPicker";
 import { updateMe, type UserRead } from "../api/users";
-import { flashMessage, fmtMinutes, formatTime, parseApiDate, setMessage } from "../utils";
+import { escapeHtml, flashMessage, fmtMinutes, formatTime, parseApiDate, setMessage } from "../utils";
 import { renderEmptyStateWithCat } from "./icons";
 import { getTodayWorkMinutes } from "./stats";
 
@@ -36,6 +36,7 @@ let settingsBeforeLongInput: HTMLInputElement;
 let settingsAutoStartInput: HTMLInputElement | null;
 let settingsMessage: HTMLParagraphElement;
 let modeHintEl: HTMLParagraphElement;
+let focusInput: HTMLInputElement;
 
 let user: UserRead | null = null;
 let sessions: PomodoroSessionRead[] = [];
@@ -99,6 +100,7 @@ window.addEventListener("stopwatch:state", (e: Event) => {
 });
 let pomodoroIntervalId: ReturnType<typeof setInterval> | null = null;
 let activeSessionId: number | null = null;
+let onDataChangedCb: (() => Promise<void>) | null = null;
 let taskPickerEl: HTMLDivElement | null = null;
 // Stages the user's task choice between picker change and Start click.
 // Once a work session is in progress, this is no longer the source of
@@ -206,6 +208,7 @@ function celebrate(modeFinished: Mode, nextMode: Mode): void {
 // --- Render -----------------------------------------------------------------
 
 export function render(): void {
+  if (focusInput) focusInput.disabled = activeSessionId !== null;
   pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
   pomodoroStartButton.textContent = pomodoroRunning ? "⏸ Pause" : "▶ Start";
   pomodoroStartButton.classList.toggle("pomo-running", pomodoroRunning);
@@ -246,7 +249,7 @@ export function render(): void {
       return `
       <div class="task-item">
         <span class="tag">${s.session_type === "work" ? "Work" : "Break"}</span>
-        <span class="task-text ${s.is_completed ? "done" : ""}">${s.duration_minutes} min · ${when} · ${s.is_completed ? "completed" : "in progress"}</span>
+        <span class="task-text ${s.is_completed ? "done" : ""}">${s.duration_minutes} min · ${when} · ${s.is_completed ? "completed" : "in progress"}${s.work_label ? ` · ${escapeHtml(s.work_label)}` : ""}</span>
         <button class="task-delete" data-pomo-action="delete" data-id="${s.id}" title="Delete session">×</button>
       </div>`;
     }),
@@ -303,6 +306,8 @@ async function resumeIfInProgress(): Promise<void> {
   }
 
   activeSessionId = active.id;
+  pendingTaskId = active.linked_task_id;
+  if (active.work_label) focusInput.value = active.work_label;
   broadcastPomodoroState();
   if (active.session_type === "work") {
     pomodoroMode = "work";
@@ -358,13 +363,11 @@ function stopTimer(): void {
 async function startCurrentMode(): Promise<void> {
   if (activeSessionId === null) {
     try {
-      // Only attach the task to a work session — break sessions are
-      // mode-switch markers, not actual work to attribute.
-      const linkedTask = pomodoroMode === "work" ? pendingTaskId : null;
       const s = await startSession(
         modeApiType(pomodoroMode),
         modeDurationSeconds(pomodoroMode) / 60,
-        linkedTask,
+        pomodoroMode === "work" ? focusInput.value.trim() : "",
+        pomodoroMode === "work" ? pendingTaskId : null,
       );
       activeSessionId = s.id;
     } catch (error) {
@@ -382,6 +385,18 @@ async function startCurrentMode(): Promise<void> {
     if (pomodoroTimeLeft <= 0) await onComplete();
   }, 500);
   render();
+}
+
+export async function startForFocus(taskId: number | null, label: string): Promise<boolean> {
+  if (pomodoroRunning || activeSessionId !== null) {
+    setMessage(pomodoroMessage, "A pomodoro is already in progress.", "error");
+    return false;
+  }
+  pendingTaskId = taskId;
+  focusInput.value = label;
+  await startCurrentMode();
+  await onDataChangedCb?.();
+  return activeSessionId !== null;
 }
 
 async function onComplete(): Promise<void> {
@@ -434,6 +449,7 @@ async function onComplete(): Promise<void> {
 // --- Init -------------------------------------------------------------------
 
 export function init(onDataChanged: () => Promise<void>): void {
+  onDataChangedCb = onDataChanged;
   pomodoroDisplay          = document.querySelector<HTMLDivElement>("#pomodoro-display")!;
   pomodoroStartButton      = document.querySelector<HTMLButtonElement>("#pomodoro-start-button")!;
   pomodoroResetButton      = document.querySelector<HTMLButtonElement>("#pomodoro-reset-button")!;
@@ -450,6 +466,7 @@ export function init(onDataChanged: () => Promise<void>): void {
   settingsAutoStartInput   = document.querySelector<HTMLInputElement>("#pomodoro-setting-auto-start");
   settingsMessage          = document.querySelector<HTMLParagraphElement>("#pomodoro-settings-message")!;
   modeHintEl               = document.querySelector<HTMLParagraphElement>("#pomodoro-mode-hint")!;
+  focusInput               = document.querySelector<HTMLInputElement>("#pomodoro-focus-input")!;
   taskPickerEl             = document.querySelector<HTMLDivElement>("#pomodoro-task-picker");
 
   // Render the task picker so the user can pick before clicking Start.

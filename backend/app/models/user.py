@@ -48,6 +48,11 @@ class User(Base):
     # flips this to True. Until then, AI routes refuse with 403.
     ai_opt_in: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # Social sharing stays optional. Defaults preserve the existing friend
+    # experience for current users while making both controls explicit.
+    share_study_time: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
+    share_activity: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
+
     # --- Zotero integration (per-user, optional) ----------------------------
     # `zotero_user_id` is the public numeric ID the user copies from their
     # Zotero profile URL (zotero.org/<username>; the integer is on Settings →

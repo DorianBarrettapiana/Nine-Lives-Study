@@ -30,6 +30,7 @@ import { renderTaskPicker } from "./taskPicker";
 let clockEl: HTMLDivElement;       // analog clock SVG container
 let displayEl: HTMLDivElement;     // digital readout below the clock
 let todayEl: HTMLParagraphElement; // "Today: Xh Ym" hint line
+let focusInput: HTMLInputElement;
 let startBtn: HTMLButtonElement;
 let endBtn: HTMLButtonElement;
 let messageEl: HTMLParagraphElement;
@@ -102,8 +103,10 @@ function render(): void {
   // yet, so add them locally for a live, accurate readout.
   if (todayEl) {
     const live = active ? Math.floor(seconds / 60) : 0;
-    todayEl.textContent = `Today: ${fmtMinutes(getTodayWorkMinutes() + live)}`;
+    const focus = active?.work_label ? ` · ${active.work_label}` : "";
+    todayEl.textContent = `Today: ${fmtMinutes(getTodayWorkMinutes() + live)}${focus}`;
   }
+  if (focusInput) focusInput.disabled = !!active;
 
   if (!active) {
     startBtn.textContent = "▶ Start";
@@ -181,7 +184,7 @@ async function onStartClick(): Promise<void> {
   setMessage(messageEl, "", "neutral");
   try {
     if (active === null) {
-      const s = await startStopwatch(pendingTaskId);
+      const s = await startStopwatch(focusInput.value.trim(), pendingTaskId);
       setActive(s);
     } else if (active.is_running) {
       // Optimistic pause: freeze the displayed seconds immediately so the
@@ -215,6 +218,17 @@ async function onStartClick(): Promise<void> {
     // render() inside setActive re-derives disabled from current state.
     render();
   }
+}
+
+export async function startForFocus(taskId: number | null, label: string): Promise<boolean> {
+  if (active || inFlight) {
+    setMessage(messageEl, "End the current stopwatch before starting another focus.", "error");
+    return false;
+  }
+  pendingTaskId = taskId;
+  focusInput.value = label;
+  await onStartClick();
+  return active !== null;
 }
 
 async function onEndClick(): Promise<void> {
@@ -276,6 +290,7 @@ export function init(initialCatSkin: string = "tabby"): void {
   clockEl = document.querySelector<HTMLDivElement>("#stopwatch-clock")!;
   displayEl = document.querySelector<HTMLDivElement>("#stopwatch-display")!;
   todayEl = document.querySelector<HTMLParagraphElement>("#stopwatch-today")!;
+  focusInput = document.querySelector<HTMLInputElement>("#stopwatch-focus-input")!;
   startBtn = document.querySelector<HTMLButtonElement>("#stopwatch-start-btn")!;
   endBtn = document.querySelector<HTMLButtonElement>("#stopwatch-end-btn")!;
   messageEl = document.querySelector<HTMLParagraphElement>("#stopwatch-message")!;

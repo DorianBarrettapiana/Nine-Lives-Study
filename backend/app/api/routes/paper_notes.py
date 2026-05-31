@@ -25,6 +25,7 @@ from app.core.zotero import (
     list_top_items,
     verify_credentials,
 )
+from app.models.feynman_entry import FeynmanEntry
 from app.models.paper_note import PaperNote
 from app.models.user import User
 from app.schemas.paper_note import PaperNoteCreate, PaperNoteRead, PaperNoteUpdate
@@ -43,6 +44,14 @@ def _get_owned_note(note_id: int, current_user: User, db: Session) -> PaperNote:
     if note is None or note.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paper note not found.")
     return note
+
+
+def _validate_feynman_link(entry_id: int | None, current_user: User, db: Session) -> None:
+    if entry_id is None:
+        return
+    entry = db.get(FeynmanEntry, entry_id)
+    if entry is None or entry.user_id != current_user.id:
+        raise HTTPException(status_code=400, detail="Linked Feynman entry not found.")
 
 
 def _decrypt_user_key(user: User) -> str:
@@ -112,6 +121,7 @@ def create_note(
     db: Session = Depends(get_db),
 ) -> PaperNote:
     """Create a paper note for the current user."""
+    _validate_feynman_link(payload.feynman_entry_id, current_user, db)
     note = PaperNote(
         user_id=current_user.id,
         title=payload.title,
@@ -125,6 +135,7 @@ def create_note(
         doi=payload.doi,
         abstract=payload.abstract,
         source="manual",
+        feynman_entry_id=payload.feynman_entry_id,
     )
     db.add(note)
     db.flush()  # populate note.id so we can pin the XP event to it
@@ -158,6 +169,8 @@ def update_note(
     note = _get_owned_note(note_id, current_user, db)
 
     data = payload.model_dump(exclude_unset=True)
+    if "feynman_entry_id" in data:
+        _validate_feynman_link(data["feynman_entry_id"], current_user, db)
     for field_name, field_value in data.items():
         setattr(note, field_name, field_value)
 

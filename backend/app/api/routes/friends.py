@@ -224,6 +224,8 @@ def get_friend_study_stats(
     friend = db.get(User, user_id)
     if friend is None or not friend.is_active:
         raise HTTPException(status_code=404, detail="User not found.")
+    if not friend.share_study_time:
+        raise HTTPException(status_code=403, detail="This friend keeps study time private.")
 
     since = date.today() - timedelta(days=days - 1)
 
@@ -304,6 +306,7 @@ def get_feed(
         select(XpEvent, User.username, User.cat_skin)
         .join(User, User.id == XpEvent.user_id)
         .where(XpEvent.user_id.in_(fids))
+        .where(User.share_activity.is_(True))
         .order_by(XpEvent.created_at.desc())
         .limit(limit)
     ).all()
@@ -358,6 +361,9 @@ def toggle_like(
         f = _get_friendship(current_user.id, event.user_id, db)
         if f is None or f.status != "accepted":
             raise HTTPException(status_code=403, detail="Not allowed.")
+        owner = db.get(User, event.user_id)
+        if owner is None or not owner.share_activity:
+            raise HTTPException(status_code=403, detail="This activity is private.")
 
     existing = db.scalar(
         select(FeedLike)

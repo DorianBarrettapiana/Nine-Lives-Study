@@ -67,6 +67,7 @@ class DailyLog(Base):
     )
 
     log_date: Mapped[date] = mapped_column(Date, index=True, nullable=False)
+    main_goal: Mapped[str] = mapped_column(String(500), default="", server_default="", nullable=False)
     mood: Mapped[str] = mapped_column(String(20), default="", nullable=False)
     reflection: Mapped[str] = mapped_column(Text, default="", nullable=False)
 

@@ -18,7 +18,7 @@ when running.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -56,6 +56,7 @@ class StopwatchSession(Base):
     last_started_at: Mapped[datetime | None] = mapped_column(
         DateTime(), nullable=True,
     )
+    work_label: Mapped[str] = mapped_column(String(300), default="", server_default="", nullable=False)
 
     # Optional link to the daily task the user is working on. Set at Start
     # via the dropdown, updatable mid-session (PATCH /stopwatch/{id}/task)

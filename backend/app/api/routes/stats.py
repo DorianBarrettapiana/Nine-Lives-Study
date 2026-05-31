@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.core.xp import (
+    ENTITY_POMODORO,
+    ENTITY_STOPWATCH,
     EVENT_FEYNMAN,
     EVENT_MOOD,
     EVENT_NOTE,
@@ -25,6 +27,8 @@ from app.core.xp import (
 from app.models.feynman_entry import FeynmanEntry
 from app.models.mood_entry import MoodEntry
 from app.models.paper_note import PaperNote
+from app.models.pomodoro_session import PomodoroSession
+from app.models.stopwatch_session import StopwatchSession
 from app.models.user import User
 from app.models.xp_event import XpEvent
 from app.schemas.stats import (
@@ -34,6 +38,7 @@ from app.schemas.stats import (
     UserStatsRead,
     WeeklySummary,
     WeeklySummaryCounts,
+    WorkLabelStat,
 )
 
 router = APIRouter(prefix="/stats", tags=["stats"])
@@ -124,6 +129,44 @@ def get_stats(
     ]
     total_work_minutes = sum(minutes_by_day.values())
 
+    # Focus labels answer the more useful question: where did the time go?
+    # Keep an explicit unlabeled bucket so users can see why binding work
+    # sessions to a task or description improves the report.
+    selected_work_events = [
+        ev for ev in work_events
+        if (_local_day(ev.created_at) or "") >= since_str
+    ]
+    pomodoro_ids = [
+        ev.entity_id for ev in selected_work_events
+        if ev.entity_type == ENTITY_POMODORO and ev.entity_id is not None
+    ]
+    stopwatch_ids = [
+        ev.entity_id for ev in selected_work_events
+        if ev.entity_type == ENTITY_STOPWATCH and ev.entity_id is not None
+    ]
+    pomodoro_labels = dict(db.execute(
+        select(PomodoroSession.id, PomodoroSession.work_label)
+        .where(PomodoroSession.id.in_(pomodoro_ids))
+    ).all()) if pomodoro_ids else {}
+    stopwatch_labels = dict(db.execute(
+        select(StopwatchSession.id, StopwatchSession.work_label)
+        .where(StopwatchSession.id.in_(stopwatch_ids))
+    ).all()) if stopwatch_ids else {}
+    minutes_by_label: dict[str, int] = {}
+    for ev in selected_work_events:
+        if ev.entity_type == ENTITY_POMODORO:
+            label = pomodoro_labels.get(ev.entity_id, "")
+        else:
+            label = stopwatch_labels.get(ev.entity_id, "")
+        label = (label or "").strip() or "Unlabelled work"
+        minutes_by_label[label] = minutes_by_label.get(label, 0) + ev.amount
+    work_labels = [
+        WorkLabelStat(label=label, minutes=minutes)
+        for label, minutes in sorted(
+            minutes_by_label.items(), key=lambda item: (-item[1], item[0].lower()),
+        )
+    ]
+
     # --- Other totals -------------------------------------------------------
     total_tasks_done = db.scalar(
         select(func.count(XpEvent.id))
@@ -206,6 +249,7 @@ def get_stats(
         daily_tasks=daily_tasks,
         daily_moods=daily_moods,
         daily_work_minutes=daily_work_minutes,
+        work_labels=work_labels,
         total_tasks_done=total_tasks_done,
         total_work_minutes=total_work_minutes,
         total_notes=total_notes,

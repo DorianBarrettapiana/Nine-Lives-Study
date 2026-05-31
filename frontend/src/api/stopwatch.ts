@@ -12,6 +12,7 @@ export interface StopwatchSessionRead {
   last_started_at: string | null;
   is_running: boolean;
   elapsed_seconds: number;
+  work_label: string;
   linked_task_id: number | null;
 }
 
@@ -20,11 +21,12 @@ export async function getActive(): Promise<StopwatchSessionRead | null> {
 }
 
 export async function startStopwatch(
+  workLabel = "",
   linkedTaskId: number | null = null,
 ): Promise<StopwatchSessionRead> {
   return apiFetch<StopwatchSessionRead>("/stopwatch/start", {
     method: "POST",
-    body: JSON.stringify({ linked_task_id: linkedTaskId }),
+    body: JSON.stringify({ work_label: workLabel, linked_task_id: linkedTaskId }),
   });
 }
 

@@ -1,6 +1,6 @@
 """Daily tracker routes (scoped to current user)."""
 
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -161,6 +161,46 @@ def delete_daily_task(
     db.commit()
 
 
+@router.post("/tasks/{task_id}/carry-forward", response_model=DailyTaskRead, status_code=201)
+def carry_daily_task_forward(
+    task_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DailyTask:
+    """Copy an unfinished task to the following day, without duplicates."""
+    task = _get_owned_task(task_id, current_user, db)
+    if task.is_done:
+        raise HTTPException(status_code=400, detail="Completed tasks do not need to be carried forward.")
+    target_date = task.task_date + timedelta(days=1)
+    existing = db.scalar(
+        select(DailyTask)
+        .where(DailyTask.user_id == current_user.id)
+        .where(DailyTask.task_date == target_date)
+        .where(DailyTask.text == task.text)
+    )
+    if existing is not None:
+        return existing
+
+    max_so = db.scalar(
+        select(DailyTask.sort_order)
+        .where(DailyTask.user_id == current_user.id)
+        .where(DailyTask.task_date == target_date)
+        .order_by(DailyTask.sort_order.desc())
+        .limit(1)
+    )
+    copied = DailyTask(
+        user_id=current_user.id,
+        task_date=target_date,
+        text=task.text,
+        is_done=False,
+        sort_order=(max_so or 0.0) + 1.0,
+    )
+    db.add(copied)
+    db.commit()
+    db.refresh(copied)
+    return copied
+
+
 @router.put("/log", response_model=DailyLogRead)
 def upsert_daily_log(
     payload: DailyLogUpsert,
@@ -180,11 +220,14 @@ def upsert_daily_log(
         log = DailyLog(
             user_id=current_user.id,
             log_date=day,
+            main_goal=payload.main_goal or "",
             mood=payload.mood,
             reflection=payload.reflection,
         )
         db.add(log)
     else:
+        if payload.main_goal is not None:
+            log.main_goal = payload.main_goal
         log.mood = payload.mood
         log.reflection = payload.reflection
 

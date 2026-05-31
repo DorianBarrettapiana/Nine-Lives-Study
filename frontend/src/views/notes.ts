@@ -27,7 +27,10 @@ import {
   type ZoteroItem,
 } from "../api/notes";
 import { ApiError } from "../api/client";
+import { listFeynmanEntries, type FeynmanEntryRead } from "../api/feynman";
+import { generatePaperNoteThemes } from "../api/summaries";
 import { escapeHtml, setMessage } from "../utils";
+import { aiErrorMessage, ensureAiConsent, isAiEnabled, renderAiMarkdown } from "./ai-tools";
 import { renderEmptyStateWithCat } from "./icons";
 
 let notesList: HTMLDivElement;
@@ -41,6 +44,11 @@ let noteTagsInput: HTMLInputElement;
 let noteUrlInput: HTMLInputElement;
 let noteDoiInput: HTMLInputElement;
 let noteAbstractInput: HTMLTextAreaElement;
+let noteFeynmanLink: HTMLSelectElement;
+let noteSearchInput: HTMLInputElement;
+let noteTagFilterInput: HTMLInputElement;
+let noteAiThemesButton: HTMLButtonElement;
+let noteAiOutput: HTMLDivElement;
 let noteSubmitButton: HTMLButtonElement;
 let noteCancelButton: HTMLButtonElement;
 let noteMessage: HTMLParagraphElement;
@@ -48,6 +56,7 @@ let zoteroSettingsButton: HTMLButtonElement;
 let zoteroImportButton: HTMLButtonElement;
 
 let notes: PaperNoteRead[] = [];
+let feynmanEntries: FeynmanEntryRead[] = [];
 let editedNoteId: number | null = null;
 let zoteroConfig: ZoteroConfig = { connected: false, zotero_user_id: null };
 
@@ -64,6 +73,7 @@ function clearNoteForm(): void {
   noteUrlInput.value = "";
   noteDoiInput.value = "";
   noteAbstractInput.value = "";
+  noteFeynmanLink.value = "";
   noteSubmitButton.textContent = "Add note";
   noteCancelButton.classList.add("hidden");
 }
@@ -76,11 +86,20 @@ function zoteroDeepLink(note: PaperNoteRead): string | null {
 }
 
 export function render(): void {
-  if (notes.length === 0) {
+  const query = noteSearchInput?.value.trim().toLowerCase() ?? "";
+  const tagQuery = noteTagFilterInput?.value.trim().toLowerCase() ?? "";
+  const visibleNotes = notes.filter((note) => {
+    const haystack = [
+      note.title, note.authors, note.doi, note.url, note.key_points, note.questions,
+    ].join(" ").toLowerCase();
+    const tags = note.tags.toLowerCase();
+    return (!query || haystack.includes(query)) && (!tagQuery || tags.includes(tagQuery));
+  });
+  if (visibleNotes.length === 0) {
     notesList.innerHTML = renderEmptyStateWithCat("No paper note yet.");
     return;
   }
-  notesList.innerHTML = notes.map((note) => {
+  notesList.innerHTML = visibleNotes.map((note) => {
     const tags = note.tags.split(",").map((t) => t.trim()).filter(Boolean)
       .map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join("");
     const zoteroLink = zoteroDeepLink(note);
@@ -124,6 +143,7 @@ export function render(): void {
         ${linksHtml}
         ${note.key_points ? `<p class="note-text"><strong>Key ideas:</strong> ${escapeHtml(note.key_points)}</p>` : ""}
         ${note.questions ? `<p class="note-text"><strong>Questions:</strong> ${escapeHtml(note.questions)}</p>` : ""}
+        ${note.feynman_entry_id ? `<p class="note-meta"><strong>Feynman link:</strong> ${escapeHtml(feynmanEntries.find((entry) => entry.id === note.feynman_entry_id)?.concept ?? "Linked record")}</p>` : ""}
         ${abstractHtml}
         ${tags ? `<div class="tags">${tags}</div>` : ""}
       </article>`;
@@ -137,7 +157,11 @@ function humanItemType(itemType: string): string {
 
 export async function refresh(): Promise<void> {
   try {
-    notes = await listNotes();
+    [notes, feynmanEntries] = await Promise.all([listNotes(), listFeynmanEntries()]);
+    noteFeynmanLink.innerHTML = `<option value="">None</option>` + feynmanEntries.map((entry) =>
+      `<option value="${entry.id}">${escapeHtml(entry.concept)}</option>`
+    ).join("");
+    noteAiThemesButton.classList.toggle("hidden", !(await isAiEnabled()));
     render();
   } catch (error) {
     console.error(error);
@@ -170,6 +194,11 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
   noteUrlInput = document.querySelector<HTMLInputElement>("#note-url")!;
   noteDoiInput = document.querySelector<HTMLInputElement>("#note-doi")!;
   noteAbstractInput = document.querySelector<HTMLTextAreaElement>("#note-abstract")!;
+  noteFeynmanLink = document.querySelector<HTMLSelectElement>("#note-feynman-link")!;
+  noteSearchInput = document.querySelector<HTMLInputElement>("#note-search")!;
+  noteTagFilterInput = document.querySelector<HTMLInputElement>("#note-tag-filter")!;
+  noteAiThemesButton = document.querySelector<HTMLButtonElement>("#note-ai-themes")!;
+  noteAiOutput = document.querySelector<HTMLDivElement>("#note-ai-output")!;
   noteSubmitButton = document.querySelector<HTMLButtonElement>("#note-submit-button")!;
   noteCancelButton = document.querySelector<HTMLButtonElement>("#note-cancel-button")!;
   noteMessage = document.querySelector<HTMLParagraphElement>("#note-message")!;
@@ -194,6 +223,7 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
       url: noteUrlInput.value.trim() || null,
       doi: noteDoiInput.value.trim() || null,
       abstract: noteAbstractInput.value.trim() || null,
+      feynman_entry_id: noteFeynmanLink.value ? Number(noteFeynmanLink.value) : null,
     };
     try {
       if (editedNoteId === null) {
@@ -232,6 +262,7 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
       noteUrlInput.value = note.url ?? "";
       noteDoiInput.value = note.doi ?? "";
       noteAbstractInput.value = note.abstract ?? "";
+      noteFeynmanLink.value = note.feynman_entry_id === null ? "" : String(note.feynman_entry_id);
       noteSubmitButton.textContent = "Update note";
       noteCancelButton.classList.remove("hidden");
       switchToView("notes");
@@ -249,6 +280,23 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
         console.error(error);
         setMessage(noteMessage, "Could not delete note.", "error");
       }
+    }
+  });
+
+  noteSearchInput.addEventListener("input", () => render());
+  noteTagFilterInput.addEventListener("input", () => render());
+  noteAiThemesButton.addEventListener("click", async () => {
+    try {
+      if (!await ensureAiConsent("Your paper-note titles, tags, key ideas, and questions")) return;
+      noteAiThemesButton.disabled = true;
+      noteAiThemesButton.textContent = "Finding themes...";
+      const summary = await generatePaperNoteThemes();
+      noteAiOutput.innerHTML = `<div class="ai-summary-body">${renderAiMarkdown(summary.content)}</div>`;
+    } catch (error) {
+      setMessage(noteMessage, aiErrorMessage(error), "error");
+    } finally {
+      noteAiThemesButton.disabled = false;
+      noteAiThemesButton.textContent = "Find AI themes";
     }
   });
 

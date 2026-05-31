@@ -31,6 +31,7 @@ class PomodoroSession(Base):
     )
     duration_minutes: Mapped[int] = mapped_column(Integer, default=25, nullable=False)
     is_completed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    work_label: Mapped[str] = mapped_column(String(300), default="", server_default="", nullable=False)
 
     started_at: Mapped[datetime] = mapped_column(
         DateTime(),

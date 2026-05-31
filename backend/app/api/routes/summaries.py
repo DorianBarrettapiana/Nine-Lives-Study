@@ -319,3 +319,43 @@ def generate_weekly(
             detail=f"AI generation failed: {exc}",
         ) from exc
     return _upsert(current_user.id, "weekly", period_key, result, db)
+
+
+@router.post("/feynman/{entry_id}/generate", response_model=AiSummaryRead, status_code=201)
+def generate_feynman_review(
+    entry_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AiSummary:
+    """Give immediate, rigorous feedback on one Feynman explanation."""
+    _check_base_preconditions(current_user)
+    try:
+        result = ai.summarise_feynman_review(current_user.id, entry_id, db)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI generation failed: {exc}",
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Feynman entry not found.")
+    return _upsert(current_user.id, "feynman_review", f"feynman:{entry_id}", result, db)
+
+
+@router.post("/paper-notes/generate", response_model=AiSummaryRead, status_code=201)
+def generate_paper_note_themes(
+    days: int = Query(default=30, ge=1, le=365),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AiSummary:
+    """Find recurring themes and questions in the user's recent paper notes."""
+    _check_base_preconditions(current_user)
+    since = _utc_now() - timedelta(days=days - 1)
+    period_key = f"{since.date().isoformat()}..{_utc_now().date().isoformat()}"
+    try:
+        result = ai.summarise_paper_notes(current_user.id, since, db)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI generation failed: {exc}",
+        ) from exc
+    return _upsert(current_user.id, "paper_notes", period_key, result, db)
