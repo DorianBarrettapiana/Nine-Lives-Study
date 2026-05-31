@@ -355,6 +355,8 @@ const APP_HTML = `
         </div>
 
         <div id="projects-view" class="hidden">
+          <div id="project-dashboard-container" class="hidden"></div>
+          <div id="projects-list-container">
           <section class="card">
             <h2>Projects / research threads</h2>
             <p class="hint">Group related daily tasks, paper notes, and Feynman entries under a named project. Work sessions inherit their project from the linked task.</p>
@@ -371,6 +373,7 @@ const APP_HTML = `
             <h2>Your projects</h2>
             <div id="projects-list" class="projects-list"></div>
           </section>
+          </div>
         </div>
 
         <div id="friends-view" class="hidden">
