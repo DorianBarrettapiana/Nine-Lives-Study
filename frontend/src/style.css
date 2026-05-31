@@ -2088,6 +2088,12 @@ h3 {
 .zotero-item:hover { background: rgba(127, 127, 127, 0.06); }
 .zotero-item.is-imported { opacity: 0.75; }
 
+.zotero-item input[type="checkbox"] {
+  width: auto;
+  flex: 0 0 auto;
+  margin-top: 0.2rem;
+}
+
 .zotero-item-body {
   display: flex;
   flex-direction: column;
