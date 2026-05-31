@@ -1,9 +1,12 @@
 """Regression tests for the daily product workflow added around Today."""
 
+from datetime import date, datetime, timedelta, timezone
+
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from app.api.routes import summaries
-from app.core.ai import SummaryResult
+from app.core.ai import SummaryResult, gather_weekly
 
 
 def test_unfinished_task_can_be_carried_forward_once(auth_client: TestClient):
@@ -40,6 +43,65 @@ def test_pomodoro_focus_appears_in_stats(auth_client: TestClient):
     stats = auth_client.get("/stats?days=7").json()
 
     assert stats["work_labels"] == [{"label": "Read diffusion paper", "minutes": 25}]
+
+
+def test_stats_task_ratio_includes_unfinished_tasks(auth_client: TestClient):
+    first = auth_client.post("/daily/tasks", json={"text": "Draft results"}).json()
+    auth_client.post("/daily/tasks", json={"text": "Read reviewer notes"})
+    auth_client.post("/daily/tasks", json={
+        "text": "Plan tomorrow",
+        "task_date": (date.today() + timedelta(days=1)).isoformat(),
+    })
+    auth_client.patch(f"/daily/tasks/{first['id']}", json={"is_done": True})
+
+    stats = auth_client.get("/stats?days=7").json()
+
+    assert stats["daily_tasks"] == [{
+        "date": first["task_date"],
+        "total": 2,
+        "done": 1,
+    }]
+
+
+def test_daily_tracker_mood_appears_in_mood_history(auth_client: TestClient):
+    payload = {"mood": "focused", "reflection": "Good momentum"}
+
+    first = auth_client.put("/daily/log", json=payload)
+    second = auth_client.put("/daily/log", json=payload)
+    history = auth_client.get("/mood").json()
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert [entry["mood"] for entry in history] == ["focused"]
+
+
+def test_quick_mood_updates_daily_log_snapshot(auth_client: TestClient):
+    response = auth_client.post("/mood", json={"mood": "calm", "reflection": ""})
+
+    daily = auth_client.get("/daily").json()
+
+    assert response.status_code == 201
+    assert daily["log"]["mood"] == "calm"
+
+
+def test_ai_weekly_focus_uses_temporary_label(auth_client: TestClient, db_engine):
+    user_id = auth_client.get("/users/me").json()["id"]
+    session = auth_client.post(
+        "/pomodoro",
+        json={"session_type": "work", "duration_minutes": 25, "work_label": "Sketch experiment design"},
+    ).json()
+    auth_client.patch(f"/pomodoro/{session['id']}/complete", json={})
+    now = datetime.now(timezone.utc)
+
+    with Session(db_engine) as db:
+        recap = gather_weekly(
+            user_id,
+            now - timedelta(days=1),
+            db,
+            now + timedelta(days=1),
+        )
+
+    assert recap["time_per_task_minutes"] == {"Sketch experiment design": 25}
 
 
 def test_stopwatch_accepts_temporary_focus(auth_client: TestClient):

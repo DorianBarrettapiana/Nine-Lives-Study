@@ -1,9 +1,8 @@
 """Stats aggregation routes (scoped to current user).
 
-Counts for activity events (tasks, moods, etc.) come from the xp_events
-ledger so deletions don't rewrite history. *Work minutes* (pomodoro +
-stopwatch) come from the live session tables so the actual elapsed time
-is accurate regardless of XP-rule changes over time.
+Counts for immutable activity events come from the xp_events ledger so
+deletions don't rewrite history. Daily task completion ratios come from
+the planner rows so unfinished work remains visible.
 """
 
 from datetime import date, datetime, timedelta, timezone
@@ -14,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.core.focus import effective_focus_label
 from app.core.xp import (
     ENTITY_POMODORO,
     ENTITY_STOPWATCH,
@@ -24,6 +24,7 @@ from app.core.xp import (
     EVENT_STOPWATCH,
     EVENT_TASK_DONE,
 )
+from app.models.daily_tracker import DailyTask
 from app.models.feynman_entry import FeynmanEntry
 from app.models.mood_entry import MoodEntry
 from app.models.paper_note import PaperNote
@@ -71,22 +72,31 @@ def get_stats(
             ts = ts.replace(tzinfo=timezone.utc)
         return (ts.astimezone(timezone.utc) + tz_delta).strftime("%Y-%m-%d")
 
-    # --- Tasks per day (XP_TASK_DONE events grouped by local day) -----------
+    # --- Tasks per planning day: completion ratio includes unfinished work --
+    task_rows = db.scalars(
+        select(DailyTask)
+        .where(DailyTask.user_id == user_id)
+        .where(DailyTask.task_date >= since)
+        .where(DailyTask.task_date <= today_local)
+    ).all()
+    task_counts: dict[str, dict[str, int]] = {}
+    for task in task_rows:
+        day = task.task_date.isoformat()
+        counts = task_counts.setdefault(day, {"total": 0, "done": 0})
+        counts["total"] += 1
+        if task.is_done:
+            counts["done"] += 1
+    daily_tasks = [
+        DailyTaskStat(date=date.fromisoformat(d), total=c["total"], done=c["done"])
+        for d, c in sorted(task_counts.items())
+    ]
+
+    # The immutable XP ledger still drives lifetime and weekly done counts.
     task_events = db.scalars(
         select(XpEvent)
         .where(XpEvent.user_id == user_id)
         .where(XpEvent.event_type == EVENT_TASK_DONE)
     ).all()
-    task_counts: dict[str, int] = {}
-    for ev in task_events:
-        day = _local_day(ev.created_at)
-        if day is None or day < since_str:
-            continue
-        task_counts[day] = task_counts.get(day, 0) + 1
-    daily_tasks = [
-        DailyTaskStat(date=date.fromisoformat(d), total=c, done=c)
-        for d, c in sorted(task_counts.items())
-    ]
 
     # --- Mood per day: latest emoji recorded that local day -----------------
     mood_rows = db.scalars(
@@ -144,21 +154,28 @@ def get_stats(
         ev.entity_id for ev in selected_work_events
         if ev.entity_type == ENTITY_STOPWATCH and ev.entity_id is not None
     ]
-    pomodoro_labels = dict(db.execute(
-        select(PomodoroSession.id, PomodoroSession.work_label)
+    pomodoro_sessions = {
+        session.id: session for session in db.scalars(
+            select(PomodoroSession)
         .where(PomodoroSession.id.in_(pomodoro_ids))
-    ).all()) if pomodoro_ids else {}
-    stopwatch_labels = dict(db.execute(
-        select(StopwatchSession.id, StopwatchSession.work_label)
+        ).all()
+    } if pomodoro_ids else {}
+    stopwatch_sessions = {
+        session.id: session for session in db.scalars(
+            select(StopwatchSession)
         .where(StopwatchSession.id.in_(stopwatch_ids))
-    ).all()) if stopwatch_ids else {}
+        ).all()
+    } if stopwatch_ids else {}
     minutes_by_label: dict[str, int] = {}
     for ev in selected_work_events:
         if ev.entity_type == ENTITY_POMODORO:
-            label = pomodoro_labels.get(ev.entity_id, "")
+            session = pomodoro_sessions.get(ev.entity_id)
         else:
-            label = stopwatch_labels.get(ev.entity_id, "")
-        label = (label or "").strip() or "Unlabelled work"
+            session = stopwatch_sessions.get(ev.entity_id)
+        label = (
+            effective_focus_label(session, db, unlabeled_label="Unlabelled work")
+            if session is not None else "Unlabelled work"
+        )
         minutes_by_label[label] = minutes_by_label.get(label, 0) + ev.amount
     work_labels = [
         WorkLabelStat(label=label, minutes=minutes)

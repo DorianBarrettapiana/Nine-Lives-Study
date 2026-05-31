@@ -100,7 +100,7 @@ export function init(onDataChanged: () => Promise<void>): void {
       await createMoodEntry({ mood: selectedMood, reflection: moodReflectionInput.value.trim() });
       selectedMood = "";
       moodReflectionInput.value = "";
-      setMessage(moodMessage, "Mood recorded. +3 XP", "success");
+      setMessage(moodMessage, "Mood recorded.", "success");
       await onDataChanged();
     } catch (error) {
       console.error(error);

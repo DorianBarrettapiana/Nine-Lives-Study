@@ -295,11 +295,10 @@ def test_import_overwrite_resets_user_fields(
     assert key1["key_points"] == ""
 
 
-def test_import_xp_awarded_once_per_zotero_key(
+def test_import_xp_awarded_after_user_adds_reading_notes(
     auth_client: TestClient, monkeypatch: pytest.MonkeyPatch,
 ):
-    """Re-importing must not stack XP — award_xp_event is keyed on
-    (user, event, entity_type, entity_id) which is stable across re-imports."""
+    """Importing a reference is not study work; adding reflections is."""
     _connect(auth_client, monkeypatch)
     items = [_make_item("KEY1")]
     monkeypatch.setattr(
@@ -308,14 +307,23 @@ def test_import_xp_awarded_once_per_zotero_key(
     )
 
     before = auth_client.get("/xp").json()
-    auth_client.post("/notes/zotero/import", json={"keys": ["KEY1"]})
-    after_first = auth_client.get("/xp").json()
-    assert after_first["xp"] == before["xp"] + 10
+    imported = auth_client.post("/notes/zotero/import", json={"keys": ["KEY1"]})
+    after_import = auth_client.get("/xp").json()
+    assert after_import["xp"] == before["xp"]
 
-    # Re-import the same key → no extra XP.
+    note_id = imported.json()["notes"][0]["id"]
+    auth_client.patch(f"/notes/{note_id}", json={"key_points": "My synthesis"})
+    after_notes = auth_client.get("/xp").json()
+    assert after_notes["xp"] == before["xp"] + 10
+
+    # Further edits and re-imports do not stack XP.
+    auth_client.patch(f"/notes/{note_id}", json={"questions": "One question"})
+    after_edit = auth_client.get("/xp").json()
+    assert after_edit["xp"] == after_notes["xp"]
+
     auth_client.post("/notes/zotero/import", json={"keys": ["KEY1"]})
-    after_second = auth_client.get("/xp").json()
-    assert after_second["xp"] == after_first["xp"]
+    after_resync = auth_client.get("/xp").json()
+    assert after_resync["xp"] == after_notes["xp"]
 
 
 def test_cross_user_zotero_isolation(

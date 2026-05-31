@@ -54,6 +54,10 @@ def _validate_feynman_link(entry_id: int | None, current_user: User, db: Session
         raise HTTPException(status_code=400, detail="Linked Feynman entry not found.")
 
 
+def _has_reading_notes(note: PaperNote) -> bool:
+    return bool((note.key_points or "").strip() or (note.questions or "").strip())
+
+
 def _decrypt_user_key(user: User) -> str:
     """Decrypt the stored Zotero key, or raise 400 with a helpful message."""
     if not user.zotero_user_id or not user.zotero_api_key_enc:
@@ -167,12 +171,23 @@ def update_note(
     user-written key_points / questions — see :func:`import_zotero_items`.
     """
     note = _get_owned_note(note_id, current_user, db)
+    had_reading_notes = _has_reading_notes(note)
 
     data = payload.model_dump(exclude_unset=True)
     if "feynman_entry_id" in data:
         _validate_feynman_link(data["feynman_entry_id"], current_user, db)
     for field_name, field_value in data.items():
         setattr(note, field_name, field_value)
+
+    if note.source == "zotero" and not had_reading_notes and _has_reading_notes(note):
+        award_xp_event(
+            user_id=current_user.id,
+            event_type=EVENT_NOTE,
+            entity_type=ENTITY_NOTE,
+            entity_id=note.id,
+            amount=XP_NOTE_CREATE,
+            db=db,
+        )
 
     db.commit()
     db.refresh(note)
@@ -406,17 +421,6 @@ def import_zotero_items(
             )
             db.add(note)
             db.flush()
-            # Award XP once per Zotero key — award_xp_event is idempotent on
-            # (user, event, entity_type, entity_id), so re-imports don't grant
-            # extra XP later.
-            award_xp_event(
-                user_id=current_user.id,
-                event_type=EVENT_NOTE,
-                entity_type=ENTITY_NOTE,
-                entity_id=note.id,
-                amount=XP_NOTE_CREATE,
-                db=db,
-            )
             imported += 1
             out.append(note)
         else:

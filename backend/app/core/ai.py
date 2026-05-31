@@ -28,6 +28,7 @@ from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.focus import effective_focus_label
 from app.core.streak import compute_streak
 from app.core.xp import (
     ENTITY_POMODORO,
@@ -183,11 +184,9 @@ def gather_weekly(
 
     streak_days, _active_today = compute_streak(user_id, tz_offset_minutes=0, db=db)
 
-    # Work minutes grouped by the daily task the user linked to each session.
-    # JOIN XpEvent → session (pomodoro OR stopwatch) → DailyTask. Sessions
-    # without a linked_task_id bucket into "(unlabeled)". This is the single
-    # most important addition to the prompt — turns "you worked 12h" into
-    # "5h on chapter 2, 4h on lit review, 3h unlabeled".
+    # Work minutes grouped by the session's focus snapshot. Legacy sessions
+    # without a snapshot fall back to their linked daily task, then to an
+    # explicit unlabeled bucket. This also includes temporary descriptions.
     time_per_task: Counter[str] = Counter()
     for ev in work_events:
         if ev.entity_type == ENTITY_POMODORO:
@@ -198,14 +197,14 @@ def gather_weekly(
             continue
         if sess is None:
             continue
-        task_label = "(unlabeled)"
-        if sess.linked_task_id is not None:
-            task = db.get(DailyTask, sess.linked_task_id)
-            if task is not None:
-                # First ~120 chars only — task text can be long and bulks up
-                # the prompt without adding signal.
-                task_label = (task.text or "(empty)")[:120]
-            # else: task was deleted post-session; label stays "(unlabeled)"
+        # First ~120 chars only: descriptions can be long and bulk up the
+        # prompt without adding signal.
+        task_label = effective_focus_label(
+            sess,
+            db,
+            unlabeled_label="(unlabeled)",
+            max_length=120,
+        )
         time_per_task[task_label] += ev.amount
 
     return {
