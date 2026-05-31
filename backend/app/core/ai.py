@@ -75,7 +75,7 @@ def _get_client():
     return _client
 
 
-SummaryKind = Literal["weekly", "monthly", "stage", "paper_notes", "feynman_review", "reflections"]
+SummaryKind = Literal["weekly", "monthly", "stage", "feynman_review", "reflections"]
 
 # Single source of truth for which model we call. Pinned to a major version
 # so a Claude minor release doesn't silently change behaviour mid-week.
@@ -321,30 +321,6 @@ def gather_with_previous_period(
     }
 
 
-def gather_paper_notes(user_id: int, since_utc: datetime, db: Session) -> dict:
-    notes = db.scalars(
-        select(PaperNote)
-        .where(PaperNote.user_id == user_id)
-        .where(PaperNote.created_at >= since_utc.replace(tzinfo=None))
-        .order_by(PaperNote.created_at.desc())
-    ).all()
-    return {
-        "since": since_utc.date().isoformat(),
-        "count": len(notes),
-        "notes": [
-            {
-                "title": n.title,
-                "authors": n.authors,
-                "year": n.year,
-                "tags": n.tags,
-                "key_points": (n.key_points or "")[:2000],  # bound per-note size
-                "questions": (n.questions or "")[:1000],
-            }
-            for n in notes
-        ],
-    }
-
-
 def gather_feynman_review(user_id: int, entry_id: int, db: Session) -> dict | None:
     entry = db.get(FeynmanEntry, entry_id)
     if entry is None or entry.user_id != user_id:
@@ -487,19 +463,6 @@ Output format: Markdown. ~400 words total. Sections:
 Then the **Next step:** line (see KEY DATA above).
 """
 
-_SYSTEM_PAPER_NOTES = """\
-You are a research-reading coach. The user shares the paper notes they've
-written over a period. Find the throughlines.
-
-Output format: Markdown. ~300 words.
-- **Themes** (2-4 clusters with the paper titles under each)
-- **Open questions** (the recurring unknowns across notes)
-- **One paper to revisit** (the single one most worth re-reading, and why)
-
-Cite paper titles verbatim from the input. Don't invent connections that
-aren't supported by the notes' actual text.\
-"""
-
 _SYSTEM_FEYNMAN = """\
 You are evaluating a Feynman-technique self-explanation. The user wrote
 an explanation of a concept, listed their own gaps, and an analogy.
@@ -602,11 +565,6 @@ def summarise_progress_recap(
     data = gather_with_previous_period(user_id, window_start_utc, window_end_utc, db)
     data["window_label"] = period_label
     return _summarise(_SYSTEM_PROGRESS_RECAP, data, max_tokens=2400)
-
-
-def summarise_paper_notes(user_id: int, since_utc: datetime, db: Session) -> SummaryResult:
-    data = gather_paper_notes(user_id, since_utc, db)
-    return _summarise(_SYSTEM_PAPER_NOTES, data, max_tokens=2000)
 
 
 def summarise_feynman_review(user_id: int, entry_id: int, db: Session) -> SummaryResult | None:

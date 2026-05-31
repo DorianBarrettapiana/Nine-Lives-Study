@@ -182,12 +182,11 @@ const APP_HTML = `
             <p id="note-message" class="message"></p>
           </section>
           <section class="card">
-            <div class="section-header"><h2>Saved notes</h2><button id="note-ai-themes" class="secondary hidden" type="button">Find AI themes</button></div>
+            <h2>Saved notes</h2>
             <div class="two-cols">
               <input id="note-search" type="search" placeholder="Search title, author, DOI, text..." />
               <input id="note-tag-filter" type="search" placeholder="Filter tags..." />
             </div>
-            <div id="note-ai-output" class="ai-summary-markdown"></div>
             <div id="notes-list" class="notes-list"></div>
           </section>
         </div>

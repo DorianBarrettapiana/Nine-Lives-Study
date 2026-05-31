@@ -24,7 +24,7 @@ def utc_now() -> datetime:
 
 # The set of summary kinds we support. Keep in sync with frontend
 # `SummaryKind` + the prompt-table in `app/core/ai.py`.
-SUMMARY_KINDS = ("weekly", "monthly", "stage", "paper_notes", "feynman_review", "reflections")
+SUMMARY_KINDS = ("weekly", "monthly", "stage", "feynman_review", "reflections")
 
 
 class AiSummary(Base):
@@ -39,7 +39,7 @@ class AiSummary(Base):
     # One of SUMMARY_KINDS — kept as string for forward compatibility.
     kind: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     # Free-form period identifier. For weekly: ISO week like "2026-W22".
-    # For paper_notes / feynman_review / reflections: a date range like
+    # For feynman_review / reflections: a date range like
     # "2026-05-22..2026-05-29" or a single id like "feynman:42".
     period_key: Mapped[str] = mapped_column(String(64), nullable=False)
     # Markdown content. Plain string, NOT JSON.
