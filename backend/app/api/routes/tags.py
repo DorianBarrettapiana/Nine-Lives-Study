@@ -10,6 +10,7 @@ write path next to the item's other validation.
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -31,7 +32,6 @@ from app.schemas.daily_tracker import DailyTaskRead
 from app.schemas.feynman_entry import FeynmanEntryRead
 from app.schemas.paper_note import PaperNoteRead
 from app.schemas.tag import TagCreate, TagRead, TagUpdate
-from pydantic import BaseModel
 
 router = APIRouter(prefix="/tags", tags=["tags"])
 

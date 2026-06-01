@@ -104,7 +104,7 @@ def test_delete_tag_cascades_links(auth_client: TestClient):
     note = _make_note(auth_client, "P1", tag_names=["alpha"])
     tag_id = auth_client.get("/tags").json()[0]["id"]
     assert auth_client.delete(f"/tags/{tag_id}").status_code == 204
-    r = auth_client.get(f"/notes")
+    r = auth_client.get("/notes")
     assert r.json()[0]["tag_list"] == []
     # The note itself survives.
     assert any(n["id"] == note["id"] for n in r.json())
