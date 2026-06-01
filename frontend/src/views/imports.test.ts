@@ -34,12 +34,6 @@ describe("view modules import cleanly", () => {
     expect(typeof mod.setUser).toBe("function");
   });
 
-  it("mood", async () => {
-    const mod = await import("./mood");
-    expect(typeof mod.init).toBe("function");
-    expect(typeof mod.refresh).toBe("function");
-  });
-
   it("stats", async () => {
     const mod = await import("./stats");
     expect(typeof mod.init).toBe("function");

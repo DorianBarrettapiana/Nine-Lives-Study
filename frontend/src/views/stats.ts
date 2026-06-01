@@ -5,7 +5,7 @@
  * Pomodoro section: SVG line chart (minutes/day) + time-of-day distribution.
  */
 
-import { listMoodEntries, type MoodEntryRead } from "../api/mood";
+import { deleteMoodEntry, listMoodEntries, type MoodEntryRead } from "../api/mood";
 import { getUserStats, getUserXp, type UserProgressRead, type UserStatsRead } from "../api/stats";
 import { getDailyState, type DailyStateRead } from "../api/tracker";
 import { updateMe } from "../api/users";
@@ -20,6 +20,9 @@ let statsPomodoroChart: HTMLDivElement;
 let statsFocusChart: HTMLDivElement;
 let statsProjectChart: HTMLDivElement;
 let statsMoodChart: HTMLDivElement;
+let statsMoodList: HTMLDivElement | null = null;
+let statsMoodListTitle: HTMLHeadingElement | null = null;
+let statsMoodListMessage: HTMLParagraphElement | null = null;
 let statsTasksTitle: HTMLHeadingElement;
 let statsPomodoroTitle: HTMLHeadingElement;
 let statsMoodTitle: HTMLHeadingElement;
@@ -514,6 +517,40 @@ function renderMoodChart(): void {
     ${renderMoodLegend()}`;
 }
 
+function renderMoodList(): void {
+  if (!statsMoodList || !statsMoodListTitle) return;
+  const label = `Mood entries — last ${statsDays} day${statsDays > 1 ? "s" : ""}`;
+  statsMoodListTitle.textContent = label;
+
+  if (moodEntries.length === 0) {
+    statsMoodList.innerHTML = `<div class="empty-state">No mood entries in this window.</div>`;
+    return;
+  }
+  // moodEntries from the API are already in the listing window. Sort
+  // newest-first so the user reads the most recent context first.
+  const sorted = [...moodEntries].sort(
+    (a, b) => b.created_at.localeCompare(a.created_at),
+  );
+  statsMoodList.innerHTML = sorted.map((e) => {
+    const when = parseApiDate(e.created_at).toLocaleString(undefined, {
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+    });
+    const reflection = e.reflection
+      ? `<p class="mood-entry-preview">${escapeHtml(e.reflection)}</p>`
+      : "";
+    return `
+      <div class="mood-entry-card" data-id="${e.id}">
+        <div class="mood-entry-header">
+          <span class="mood-entry-emoji">${e.mood}</span>
+          <span class="mood-entry-time hint">${when}</span>
+          <button class="mood-entry-delete danger-small" type="button"
+                  data-stats-mood-delete="${e.id}" title="Delete">×</button>
+        </div>
+        ${reflection}
+      </div>`;
+  }).join("");
+}
+
 export function render(): void {
   const label = `Last ${statsDays} day${statsDays > 1 ? "s" : ""}`;
   statsTasksTitle.textContent = `${label} — daily log`;
@@ -527,6 +564,7 @@ export function render(): void {
   renderFocusSection();
   renderProjectSection();
   renderMoodChart();
+  renderMoodList();
 }
 
 export async function refresh(): Promise<void> {
@@ -559,6 +597,28 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
   statsFocusChart = document.querySelector<HTMLDivElement>("#stats-focus-chart")!;
   statsProjectChart = document.querySelector<HTMLDivElement>("#stats-project-chart")!;
   statsMoodChart = document.querySelector<HTMLDivElement>("#stats-mood-chart")!;
+  statsMoodList = document.querySelector<HTMLDivElement>("#stats-mood-list");
+  statsMoodListTitle = document.querySelector<HTMLHeadingElement>("#stats-mood-list-title");
+  statsMoodListMessage = document.querySelector<HTMLParagraphElement>("#stats-mood-list-message");
+
+  // Delegated delete button on the mood-entries list.
+  statsMoodList?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const id = Number(target.dataset.statsMoodDelete);
+    if (!Number.isFinite(id)) return;
+    if (!window.confirm("Delete this mood entry?")) return;
+    try {
+      await deleteMoodEntry(id);
+      await refresh();
+    } catch (e) {
+      console.error(e);
+      if (statsMoodListMessage) {
+        statsMoodListMessage.className = "message error";
+        statsMoodListMessage.textContent = "Could not delete entry.";
+      }
+    }
+  });
   statsTasksTitle = document.querySelector<HTMLHeadingElement>("#stats-tasks-title")!;
   statsPomodoroTitle = document.querySelector<HTMLHeadingElement>("#stats-pomodoro-title")!;
   statsMoodTitle = document.querySelector<HTMLHeadingElement>("#stats-mood-title")!;
