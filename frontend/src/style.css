@@ -1778,6 +1778,12 @@ h3 {
   align-items: stretch;
   text-align: center;
 }
+/* Two-class selector beats the generic `.hidden { display: none }` rule,
+   which would otherwise tie on specificity and lose to `display: flex`
+   purely on source-order. */
+.timer-mode-panel.hidden {
+  display: none;
+}
 
 /* Override the big-tab pomodoro display sizing — sidebar context is much
    tighter. The pixel clock is the visual anchor; the digits are supportive. */
