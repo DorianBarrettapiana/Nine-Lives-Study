@@ -2628,13 +2628,58 @@ h3 {
 .upcoming-late { color: #ef4444; }
 .upcoming-text { flex: 1; min-width: 0; }
 
-.quick-mood-row {
+/* Today's expanded mood card — emoji picker + reflection + per-entry list. */
+.today-mood-card .mood-row {
+  margin-bottom: 0.6rem;
+}
+.today-mood-reflection {
+  min-height: 3rem;
+  font-size: 0.9rem;
+}
+.today-mood-list {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+.today-mood-empty {
+  margin: 0.4rem 0 0;
+  font-size: 0.82rem;
+}
+.today-mood-entry {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--bg-item);
 }
-.today-mood-status { font-size: 0.82rem; }
+.today-mood-entry-emoji { font-size: 1.1rem; }
+.today-mood-entry-time {
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.today-mood-entry-reflection {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-soft);
+  font-size: 0.88rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.today-mood-entry-delete {
+  background: transparent;
+  color: var(--text-muted);
+  border: 0;
+  padding: 0 0.4rem;
+  font-size: 1rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.today-mood-entry-delete:hover {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
 
 /* --- Project dashboard ------------------------------------------------ */
 .project-name-btn {

@@ -9,7 +9,7 @@
  * old daily_logs.mood column is left untouched by this view.
  */
 
-import { createMoodEntry, listMoodEntries, type MoodEntryRead } from "../api/mood";
+import { createMoodEntry, deleteMoodEntry, listMoodEntries, type MoodEntryRead } from "../api/mood";
 import {
   carryDailyTask, createDailyTask, deleteDailyTask, getDailyState,
   listUpcomingTasks, saveDailyLog, updateDailyTask,
@@ -52,9 +52,13 @@ let yesterdayCardEl: HTMLElement;
 let yesterdayBodyEl: HTMLDivElement;
 let yesterdayCarryAllBtn: HTMLButtonElement;
 let moodRow: HTMLDivElement;
-let moodStatusEl: HTMLElement;
+let moodReflectionInput: HTMLTextAreaElement;
+let moodSaveBtn: HTMLButtonElement;
+let moodMessageEl: HTMLParagraphElement;
+let moodListEl: HTMLDivElement;
 let reflectionInput: HTMLTextAreaElement;
 let messageEl: HTMLParagraphElement;
+let selectedMood = "";
 
 let state: DailyStateRead | null = null;
 let upcoming: DailyTaskRead[] = [];
@@ -353,26 +357,37 @@ function humanWhen(date: string): string {
 function renderMood(): void {
   const readOnly = !isToday();
   moodRow.innerHTML = MOODS.map((m) => `
-    <button class="mood-button" type="button"
+    <button class="mood-button ${selectedMood === m.emoji ? "active" : ""}" type="button"
             data-today-mood="${m.emoji}" title="${m.label}"
             ${readOnly ? "disabled" : ""}>
       ${m.emoji}
     </button>
   `).join("");
+  moodReflectionInput.disabled = readOnly;
+  moodSaveBtn.disabled = readOnly;
+
   if (todaysMoods.length === 0) {
-    moodStatusEl.textContent = isToday() ? "No mood logged today." : "";
+    moodListEl.innerHTML = isToday()
+      ? `<p class="hint today-mood-empty">No mood logged today yet.</p>`
+      : "";
     return;
   }
-  const compact = todaysMoods
-    .slice(0, 5)
-    .map((m) => {
-      const t = parseApiDate(m.created_at).toLocaleTimeString(undefined, {
-        hour: "2-digit", minute: "2-digit",
-      });
-      return `${m.mood} ${t}`;
-    })
-    .join(" · ");
-  moodStatusEl.textContent = `Today: ${compact}`;
+  // One row per entry — emoji, time, optional reflection, delete.
+  moodListEl.innerHTML = todaysMoods.map((m) => {
+    const t = parseApiDate(m.created_at).toLocaleTimeString(undefined, {
+      hour: "2-digit", minute: "2-digit",
+    });
+    const reflection = m.reflection
+      ? `<span class="today-mood-entry-reflection">${escapeHtml(m.reflection)}</span>`
+      : "";
+    return `
+      <div class="today-mood-entry">
+        <span class="today-mood-entry-emoji">${m.mood}</span>
+        <span class="today-mood-entry-time hint">${t}</span>
+        ${reflection}
+        ${isToday() ? `<button type="button" class="today-mood-entry-delete" data-mood-delete="${m.id}" title="Delete">×</button>` : ""}
+      </div>`;
+  }).join("");
 }
 
 function renderReflection(): void {
@@ -440,7 +455,7 @@ export async function refresh(): Promise<void> {
       // Today doesn't shift the looming-deadlines window.
       listUpcomingTasks().catch(() => [] as DailyTaskRead[]),
       // Today's mood stream (server scopes to caller). 1-day window is
-      // enough for the status strip; full history lives in Mood tab.
+      // enough for the inline list; multi-day history lives in Stats.
       listMoodEntries(1).catch(() => [] as MoodEntryRead[]),
       yesterdayFetch,
     ]);
@@ -482,14 +497,36 @@ async function setMainGoal(taskId: number | null): Promise<void> {
   }
 }
 
-async function recordMood(mood: string): Promise<void> {
+async function recordMood(): Promise<void> {
+  if (!selectedMood) {
+    setMessage(moodMessageEl, "Pick a mood first.", "error");
+    return;
+  }
   try {
-    await createMoodEntry({ mood, reflection: "" });
+    await createMoodEntry({
+      mood: selectedMood,
+      reflection: moodReflectionInput.value.trim(),
+    });
+    selectedMood = "";
+    moodReflectionInput.value = "";
+    setMessage(moodMessageEl, "Mood recorded.", "success");
     await refresh();
     await onDataChangedCb?.();
   } catch (error) {
     console.error(error);
-    setMessage(messageEl, "Could not record mood.", "error");
+    setMessage(moodMessageEl, "Could not record mood.", "error");
+  }
+}
+
+async function removeMood(id: number): Promise<void> {
+  if (!window.confirm("Delete this mood entry?")) return;
+  try {
+    await deleteMoodEntry(id);
+    await refresh();
+    await onDataChangedCb?.();
+  } catch (error) {
+    console.error(error);
+    setMessage(moodMessageEl, "Could not delete entry.", "error");
   }
 }
 
@@ -630,7 +667,10 @@ export function init(onDataChanged: () => Promise<void>): void {
   yesterdayBodyEl = document.querySelector<HTMLDivElement>("#today-yesterday-body")!;
   yesterdayCarryAllBtn = document.querySelector<HTMLButtonElement>("#today-yesterday-carry-all")!;
   moodRow = document.querySelector<HTMLDivElement>("#today-mood-row")!;
-  moodStatusEl = document.querySelector<HTMLElement>("#today-mood-status")!;
+  moodReflectionInput = document.querySelector<HTMLTextAreaElement>("#today-mood-reflection")!;
+  moodSaveBtn = document.querySelector<HTMLButtonElement>("#today-mood-save")!;
+  moodMessageEl = document.querySelector<HTMLParagraphElement>("#today-mood-message")!;
+  moodListEl = document.querySelector<HTMLDivElement>("#today-mood-list")!;
   reflectionInput = document.querySelector<HTMLTextAreaElement>("#today-reflection")!;
   messageEl = document.querySelector<HTMLParagraphElement>("#today-message")!;
 
@@ -807,14 +847,30 @@ export function init(onDataChanged: () => Promise<void>): void {
     await refresh();
   });
 
-  // Mood — every click writes a new entry. No more daily_logs.mood from here.
-  moodRow.addEventListener("click", async (event) => {
+  // Mood emoji click — stage selection (Save button commits with optional
+  // reflection text). Keeps single-click recording out of the way of
+  // misclicks, and lets users add context before persisting.
+  moodRow.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
     const mood = target.dataset.todayMood;
     if (!mood || !isToday()) return;
-    await recordMood(mood);
+    selectedMood = selectedMood === mood ? "" : mood;
+    renderMood();
   });
+  moodSaveBtn.addEventListener("click", () => void recordMood());
+  moodListEl.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const id = Number(target.dataset.moodDelete);
+    if (!Number.isFinite(id)) return;
+    void removeMood(id);
+  });
+  // History link routes the user to Stats where the full timeline lives.
+  document.querySelector<HTMLButtonElement>("#today-mood-history-link")
+    ?.addEventListener("click", () => {
+      document.querySelector<HTMLButtonElement>('.feature-tab[data-view="stats"]')?.click();
+    });
 
   // Reflection save
   document.querySelector<HTMLButtonElement>("#today-save-reflection")!

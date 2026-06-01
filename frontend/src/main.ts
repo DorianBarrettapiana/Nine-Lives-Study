@@ -15,7 +15,6 @@ import { showAuthScreen } from "./views/auth";
 import * as FeynmanView from "./views/feynman";
 import * as MilestonesView from "./views/milestones";
 import * as SummariesView from "./views/summaries";
-import * as MoodView from "./views/mood";
 import * as NotesView from "./views/notes";
 import * as PomodoroView from "./views/pomodoro";
 import * as ProjectsView from "./views/projects";
@@ -26,7 +25,7 @@ import * as TimerMode from "./views/timerMode";
 import * as FriendsView from "./views/friends";
 import * as TodayView from "./views/today";
 
-type AppView = "today" | "notes" | "feynman" | "stats" | "mood" | "projects" | "friends";
+type AppView = "today" | "notes" | "feynman" | "stats" | "projects" | "friends";
 
 const APP_HTML = `
   <div class="app-shell">
@@ -162,7 +161,6 @@ const APP_HTML = `
           <button class="feature-tab active" data-view="today">Today</button>
           <button class="feature-tab" data-view="notes">Paper notes</button>
           <button class="feature-tab" data-view="feynman">Feynman</button>
-          <button class="feature-tab" data-view="mood">Mood</button>
           <button class="feature-tab" data-view="projects">Projects</button>
           <button class="feature-tab" data-view="stats">Stats</button>
           <button class="feature-tab" data-view="friends">Friends</button>
@@ -215,12 +213,20 @@ const APP_HTML = `
             <div id="today-upcoming-list" class="upcoming-list"></div>
           </section>
 
-          <section class="card">
-            <h2>Quick mood</h2>
-            <div class="quick-mood-row">
-              <div id="today-mood-row" class="mood-row"></div>
-              <span id="today-mood-status" class="hint today-mood-status"></span>
+          <section class="card today-mood-card">
+            <div class="section-header">
+              <h2>😊 Mood</h2>
+              <button id="today-mood-history-link" class="link-btn" type="button"
+                      title="Open Stats to see 30-day history">📈 History</button>
             </div>
+            <div id="today-mood-row" class="mood-row"></div>
+            <textarea id="today-mood-reflection" class="today-mood-reflection"
+                      placeholder="What's behind this? (optional)"></textarea>
+            <div class="button-row">
+              <button id="today-mood-save" type="button">Record mood</button>
+            </div>
+            <p id="today-mood-message" class="message"></p>
+            <div id="today-mood-list" class="today-mood-list"></div>
           </section>
 
           <section class="card">
@@ -359,29 +365,12 @@ const APP_HTML = `
             <h2 id="stats-mood-title">Last 7 days — mood</h2>
             <div id="stats-mood-chart" class="mood-history"></div>
           </section>
-        </div>
-        <div id="mood-view" class="hidden">
           <section class="card">
-            <h2>How are you feeling?</h2>
-            <p class="hint">Record your mood at any time — multiple entries per day are fine.</p>
-            <div id="mood-picker" class="mood-row"></div>
-            <label>Reflection (optional)<textarea id="mood-reflection-input" placeholder="What's on your mind? What happened today?"></textarea></label>
-            <div class="button-row"><button id="save-mood-button">Record mood</button></div>
-            <p id="mood-message" class="message"></p>
-          </section>
-          <section class="card">
-            <div class="section-header">
-              <h2>Mood history</h2>
-              <div class="days-selector" id="mood-days-selector">
-                <button class="days-btn active" data-days="7">7 days</button>
-                <button class="days-btn" data-days="30">30 days</button>
-                <button class="days-btn" data-days="90">90 days</button>
-              </div>
-            </div>
-            <div id="mood-list" class="mood-history-list"></div>
+            <h2 id="stats-mood-list-title">Mood entries — last 7 days</h2>
+            <p id="stats-mood-list-message" class="message"></p>
+            <div id="stats-mood-list" class="mood-history-list"></div>
           </section>
         </div>
-
         <div id="projects-view" class="hidden">
           <div id="project-dashboard-container" class="hidden"></div>
           <div id="projects-list-container">
@@ -478,7 +467,6 @@ async function refreshAll(): Promise<void> {
       TodayView.refresh(),
       FeynmanView.refresh(),
       PomodoroView.refresh(),
-      MoodView.refresh(),
       ProjectsView.refresh(),
       StatsView.refresh(),
       StopwatchView.refresh(),
@@ -638,7 +626,6 @@ function mountApp(user: UserRead): void {
     today:    app!.querySelector<HTMLDivElement>("#today-view")!,
     notes:    app!.querySelector<HTMLDivElement>("#notes-view")!,
     feynman:  app!.querySelector<HTMLDivElement>("#feynman-view")!,
-    mood:     app!.querySelector<HTMLDivElement>("#mood-view")!,
     projects: app!.querySelector<HTMLDivElement>("#projects-view")!,
     stats:    app!.querySelector<HTMLDivElement>("#stats-view")!,
     friends:  app!.querySelector<HTMLDivElement>("#friends-view")!,
@@ -656,9 +643,6 @@ function mountApp(user: UserRead): void {
   PomodoroView.init(() => Promise.all([PomodoroView.refresh(), StatsView.refresh()]).then());
   PomodoroView.setUser(user);  // pass settings (work/break durations etc.) to the timer
   PomodoroView.setCatSkin(user.cat_skin);  // initial pixel-clock tint
-  MoodView.init(() => Promise.all([
-    MoodView.refresh(), TodayView.refresh(), StatsView.refresh(),
-  ]).then());
   // Projects: refresh stats too so the "Time per project" card reflects
   // renames/archives immediately rather than next stats refresh.
   ProjectsView.init(async () => {
