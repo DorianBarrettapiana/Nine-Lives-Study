@@ -55,5 +55,5 @@ export function init(): void {
     });
   });
   // Apply persisted choice on first paint.
-  setMode(currentMode);
+  setMode(getMode());
 }
