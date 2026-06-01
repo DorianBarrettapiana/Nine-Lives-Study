@@ -18,6 +18,7 @@ from app.api.routes.projects import router as projects_router
 from app.api.routes.stats import router as stats_router
 from app.api.routes.stopwatch import router as stopwatch_router
 from app.api.routes.summaries import router as summaries_router
+from app.api.routes.tags import router as tags_router
 from app.api.routes.users import router as users_router
 from app.api.routes.xp import router as xp_router
 from app.core.config import APP_NAME, APP_VERSION
@@ -39,6 +40,7 @@ from app.models.pomodoro_session import PomodoroSession  # noqa: F401
 from app.models.project import Project  # noqa: F401
 from app.models.session import Session  # noqa: F401
 from app.models.stopwatch_session import StopwatchSession  # noqa: F401
+from app.models.tag import Tag, TagLink  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.user_progress import UserProgress  # noqa: F401
 from app.models.xp_event import XpEvent  # noqa: F401
@@ -91,3 +93,4 @@ app.include_router(mood_router)
 app.include_router(stats_router)
 app.include_router(friends_router)
 app.include_router(summaries_router)
+app.include_router(tags_router)

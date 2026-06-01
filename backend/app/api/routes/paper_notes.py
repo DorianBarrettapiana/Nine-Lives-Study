@@ -19,6 +19,12 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.core.crypto import decrypt_str, encrypt_str
 from app.core.database import get_db
+from app.core.tags import (
+    delete_links_for_item,
+    fetch_tags_for_items,
+    parse_tag_input,
+    replace_item_tags,
+)
 from app.core.xp import (
     ENTITY_NOTE,
     ENTITY_POMODORO,
@@ -41,6 +47,7 @@ from app.models.paper_note import PaperNote
 from app.models.pomodoro_session import PomodoroSession
 from app.models.project import Project
 from app.models.stopwatch_session import StopwatchSession
+from app.models.tag import TAG_ITEM_PAPER_NOTE
 from app.models.user import User
 from app.models.xp_event import XpEvent
 from app.schemas.daily_tracker import DailyTaskRead
@@ -114,6 +121,50 @@ def _attach_reading_minutes(notes: list[PaperNote], current_user: User, db: Sess
     return notes
 
 
+def _resolve_tag_names(payload_tag_names: list[str] | None, payload_tags_csv: str | None) -> list[str] | None:
+    """Pick the authoritative tag list out of a create/update payload.
+
+    Precedence:
+      1. `tag_names` if explicitly provided (even empty → clear all tags)
+      2. `tags` CSV if provided
+      3. None → caller should leave existing tags alone
+    """
+    if payload_tag_names is not None:
+        return parse_tag_input(payload_tag_names)
+    if payload_tags_csv is not None:
+        return parse_tag_input(payload_tags_csv)
+    return None
+
+
+def _serialize_with_tags(
+    notes: list[PaperNote], current_user: User, db: Session,
+) -> list[PaperNoteRead]:
+    """Build PaperNoteRead instances with `tag_list` populated.
+
+    Done in one batched fetch so the list endpoint stays O(1) queries
+    for tags regardless of how many notes the user has.
+    """
+    tag_map = fetch_tags_for_items(
+        current_user.id, TAG_ITEM_PAPER_NOTE, [n.id for n in notes], db,
+    )
+    reads: list[PaperNoteRead] = []
+    for note in notes:
+        # `reading_minutes` is a derived field set ad-hoc by
+        # _attach_reading_minutes; ensure it exists so model_validate
+        # doesn't fall back to the default for callers that forgot to
+        # attribute it (e.g. Zotero importer).
+        if not hasattr(note, "reading_minutes"):
+            note.reading_minutes = 0
+        read = PaperNoteRead.model_validate(note)
+        read.tag_list = tag_map.get(note.id, [])
+        reads.append(read)
+    return reads
+
+
+def _tags_csv_from_names(names: list[str]) -> str:
+    return ", ".join(names)
+
+
 def _next_task_sort_order(user_id: int, task_date: date, db: Session) -> float:
     max_so = db.scalar(
         select(DailyTask.sort_order)
@@ -175,14 +226,15 @@ def _zotero_error_to_http(exc: ZoteroError) -> HTTPException:
 def list_notes(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> list[PaperNote]:
+) -> list[PaperNoteRead]:
     """Return all paper notes for the current user."""
     statement = (
         select(PaperNote)
         .where(PaperNote.user_id == current_user.id)
         .order_by(PaperNote.updated_at.desc())
     )
-    return _attach_reading_minutes(list(db.scalars(statement).all()), current_user, db)
+    notes = _attach_reading_minutes(list(db.scalars(statement).all()), current_user, db)
+    return _serialize_with_tags(notes, current_user, db)
 
 
 @router.post("", response_model=PaperNoteRead, status_code=201)
@@ -190,10 +242,12 @@ def create_note(
     payload: PaperNoteCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> PaperNote:
+) -> PaperNoteRead:
     """Create a paper note for the current user."""
     _validate_feynman_link(payload.feynman_entry_id, current_user, db)
     _validate_project_link(payload.project_id, current_user, db)
+
+    tag_names = _resolve_tag_names(payload.tag_names, payload.tags) or []
     note = PaperNote(
         user_id=current_user.id,
         title=payload.title,
@@ -201,7 +255,9 @@ def create_note(
         year=payload.year,
         key_points=payload.key_points,
         questions=payload.questions,
-        tags=payload.tags,
+        # Keep the CSV mirror in sync so legacy reads still see something
+        # sensible. The new authoritative store is tag_links.
+        tags=_tags_csv_from_names(tag_names),
         item_type=payload.item_type,
         url=payload.url,
         doi=payload.doi,
@@ -213,6 +269,7 @@ def create_note(
     )
     db.add(note)
     db.flush()  # populate note.id so we can pin the XP event to it
+    replace_item_tags(current_user.id, TAG_ITEM_PAPER_NOTE, note.id, tag_names, db)
     award_xp_event(
         user_id=current_user.id,
         event_type=EVENT_NOTE,
@@ -224,7 +281,7 @@ def create_note(
     db.commit()
     db.refresh(note)
     note.reading_minutes = 0
-    return note
+    return _serialize_with_tags([note], current_user, db)[0]
 
 
 @router.patch("/{note_id}", response_model=PaperNoteRead)
@@ -233,7 +290,7 @@ def update_note(
     payload: PaperNoteUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> PaperNote:
+) -> PaperNoteRead:
     """Update an existing paper note (must belong to the current user).
 
     Note: editing a Zotero-synced note only changes the local copy. We
@@ -249,8 +306,18 @@ def update_note(
         _validate_feynman_link(data["feynman_entry_id"], current_user, db)
     if "project_id" in data:
         _validate_project_link(data["project_id"], current_user, db)
+
+    # Pull tag fields out before the generic setattr loop — they need
+    # the link table, not direct column assignment.
+    tag_names = _resolve_tag_names(
+        data.pop("tag_names", None) if "tag_names" in data else None,
+        data.pop("tags", None) if "tags" in data else None,
+    )
     for field_name, field_value in data.items():
         setattr(note, field_name, field_value)
+    if tag_names is not None:
+        replace_item_tags(current_user.id, TAG_ITEM_PAPER_NOTE, note.id, tag_names, db)
+        note.tags = _tags_csv_from_names(tag_names)
 
     if note.source == "zotero" and not had_reading_notes and _has_reading_notes(note):
         award_xp_event(
@@ -265,7 +332,7 @@ def update_note(
     db.commit()
     db.refresh(note)
     _attach_reading_minutes([note], current_user, db)
-    return note
+    return _serialize_with_tags([note], current_user, db)[0]
 
 
 @router.post("/{note_id}/add-to-today", response_model=DailyTaskRead, status_code=201)
@@ -321,6 +388,7 @@ def delete_note(
         .where(DailyTask.paper_note_id == note.id)
         .values(paper_note_id=None)
     )
+    delete_links_for_item(TAG_ITEM_PAPER_NOTE, note.id, db)
     db.delete(note)
     db.commit()
 
@@ -540,6 +608,10 @@ def import_zotero_items(
             )
             db.add(note)
             db.flush()
+            replace_item_tags(
+                current_user.id, TAG_ITEM_PAPER_NOTE, note.id,
+                parse_tag_input(item.tags), db,
+            )
             imported += 1
             out.append(note)
         else:
@@ -558,6 +630,13 @@ def import_zotero_items(
             if payload.on_existing == "overwrite":
                 existing.key_points = ""
                 existing.questions = ""
+            # Sync the link table to Zotero's tag list. Treat Zotero
+            # as authoritative on re-import: a tag removed there is
+            # removed here too.
+            replace_item_tags(
+                current_user.id, TAG_ITEM_PAPER_NOTE, existing.id,
+                parse_tag_input(item.tags), db,
+            )
             updated += 1
             out.append(existing)
 
@@ -570,5 +649,5 @@ def import_zotero_items(
         imported=imported,
         updated=updated,
         skipped=max(0, skipped),
-        notes=[PaperNoteRead.model_validate(n) for n in out],
+        notes=_serialize_with_tags(out, current_user, db),
     )

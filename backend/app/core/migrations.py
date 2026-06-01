@@ -100,6 +100,59 @@ _BACKFILL_TASKS = text("""
 """)
 
 
+def _backfill_paper_note_tag_csv(conn) -> None:
+    """Lift `paper_notes.tags` CSV into (tags, tag_links).
+
+    Reads every (user_id, id, tags) row, splits the CSV, and writes
+    INSERT OR IGNORE for both target tables so re-runs are safe. We
+    don't clear the CSV column afterwards — the route layer keeps
+    writing both during the migration window, and a future cleanup
+    PR can drop the column once we trust the new path.
+    """
+    import re as _re
+
+    rows = conn.execute(text(
+        "SELECT id, user_id, tags FROM paper_notes "
+        "WHERE tags IS NOT NULL AND tags != ''"
+    )).fetchall()
+    ws = _re.compile(r"\s+")
+    for note_id, user_id, csv in rows:
+        seen: set[str] = set()
+        for chunk in csv.split(","):
+            display = ws.sub(" ", chunk.strip())
+            if not display:
+                continue
+            norm = display.casefold()
+            if norm in seen:
+                continue
+            seen.add(norm)
+
+            conn.execute(
+                text(
+                    "INSERT OR IGNORE INTO tags "
+                    "(user_id, name, normalized_name, color, created_at, updated_at) "
+                    "VALUES (:uid, :name, :norm, '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                ),
+                {"uid": user_id, "name": display, "norm": norm},
+            )
+            tag_id = conn.execute(
+                text(
+                    "SELECT id FROM tags WHERE user_id = :uid AND normalized_name = :norm"
+                ),
+                {"uid": user_id, "norm": norm},
+            ).scalar()
+            if tag_id is None:
+                continue
+            conn.execute(
+                text(
+                    "INSERT OR IGNORE INTO tag_links "
+                    "(tag_id, item_type, item_id, created_at) "
+                    "VALUES (:tid, 'paper_note', :iid, CURRENT_TIMESTAMP)"
+                ),
+                {"tid": tag_id, "iid": note_id},
+            )
+
+
 def run_migrations(engine: Engine) -> None:
     """Apply any missing column additions. Safe to call on every startup."""
     inspector = inspect(engine)
@@ -188,6 +241,20 @@ def run_migrations(engine: Engine) -> None:
                 ON pomodoro_sessions (user_id)
                 WHERE is_completed = 0 AND session_type = 'work'
             """))
+
+        # Tag backfill: lift the legacy comma-separated `paper_notes.tags`
+        # column into real (tags, tag_links) rows so the cross-module tag
+        # cloud sees them. Both target tables are created by
+        # Base.metadata.create_all before run_migrations runs, so they're
+        # already in `existing_tables` — no need to re-inspect mid-
+        # transaction (which would open a separate StaticPool connection
+        # and confuse SQLite about the in-flight tx state).
+        if (
+            "paper_notes" in existing_tables
+            and "tags" in existing_tables
+            and "tag_links" in existing_tables
+        ):
+            _backfill_paper_note_tag_csv(conn)
 
         # Zotero dedupe guard: one PaperNote per (user, Zotero item key).
         # Re-importing the same item updates the existing row in place

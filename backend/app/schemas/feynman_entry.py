@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field
 
 from app.schemas._base import BaseSchema, UtcDateTime
+from app.schemas.tag import TagSummary
 
 
 class FeynmanEntryCreate(BaseModel):
@@ -13,6 +14,7 @@ class FeynmanEntryCreate(BaseModel):
     gaps: str = ""
     analogy: str = ""
     project_id: int | None = None
+    tag_names: list[str] | None = None
 
 
 class FeynmanEntryUpdate(BaseModel):
@@ -23,6 +25,7 @@ class FeynmanEntryUpdate(BaseModel):
     gaps: str | None = None
     analogy: str | None = None
     project_id: int | None = None
+    tag_names: list[str] | None = None
 
 
 class FeynmanEntryRead(BaseSchema):
@@ -35,5 +38,6 @@ class FeynmanEntryRead(BaseSchema):
     gaps: str
     analogy: str
     project_id: int | None = None
+    tag_list: list[TagSummary] = []
     created_at: UtcDateTime
     updated_at: UtcDateTime
