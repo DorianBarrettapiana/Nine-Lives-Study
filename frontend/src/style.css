@@ -1645,7 +1645,11 @@ h3 {
   font-size: 0.85rem;
 }
 
-.milestones-add-form {
+/* Use :not(.hidden) so the global `.hidden { display: none }` rule
+ * still wins when the toggle adds the class. Without this guard, the
+ * later-defined `display: grid` would clobber the hide and the form
+ * would stay visible after Save / Cancel. */
+.milestones-add-form:not(.hidden) {
   display: grid;
   gap: 0.5rem;
   padding: 0.6rem;
