@@ -61,6 +61,18 @@ const APP_HTML = `
                title="Today's work-time goal (pomodoro + stopwatch). Click to edit."></div>
           <p id="perfect-day-badge" class="perfect-day-badge hidden">✨ Perfect day!</p>
         </section>
+        <section class="card stopwatch-card" id="stopwatch-card">
+          <h2>Work timer</h2>
+          <div id="stopwatch-clock" class="stopwatch-clock"></div>
+          <div id="stopwatch-display" class="stopwatch-display">00:00:00</div>
+          <p id="stopwatch-today" class="hint stopwatch-today">Today: —</p>
+          <div id="stopwatch-task-picker" class="stopwatch-task-picker"></div>
+          <div class="button-row stopwatch-buttons">
+            <button id="stopwatch-start-btn" type="button">▶ Start</button>
+            <button id="stopwatch-end-btn" type="button" class="secondary">End</button>
+          </div>
+          <p id="stopwatch-message" class="message"></p>
+        </section>
         <section class="card milestones-card" id="milestones-card">
           <div class="section-header">
             <h2>🗓 Upcoming</h2>
@@ -83,18 +95,6 @@ const APP_HTML = `
             <summary>Past / archived</summary>
             <div id="milestones-past-list" class="milestones-list"></div>
           </details>
-        </section>
-        <section class="card stopwatch-card" id="stopwatch-card">
-          <h2>Work timer</h2>
-          <div id="stopwatch-clock" class="stopwatch-clock"></div>
-          <div id="stopwatch-display" class="stopwatch-display">00:00:00</div>
-          <p id="stopwatch-today" class="hint stopwatch-today">Today: —</p>
-          <div id="stopwatch-task-picker" class="stopwatch-task-picker"></div>
-          <div class="button-row stopwatch-buttons">
-            <button id="stopwatch-start-btn" type="button">▶ Start</button>
-            <button id="stopwatch-end-btn" type="button" class="secondary">End</button>
-          </div>
-          <p id="stopwatch-message" class="message"></p>
         </section>
       </aside>
 
