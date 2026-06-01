@@ -3,6 +3,7 @@
  */
 
 import { apiFetch } from "./client";
+import type { TagSummary } from "./tags";
 
 export interface DailyTaskRead {
   id: number;
@@ -17,6 +18,7 @@ export interface DailyTaskRead {
   sort_order: number;
   project_id: number | null;
   paper_note_id: number | null;
+  tag_list: TagSummary[];
   created_at: string;
   updated_at: string;
 }
@@ -49,6 +51,7 @@ export interface DailyTaskCreate {
   due_date?: string | null;
   project_id?: number | null;
   paper_note_id?: number | null;
+  tag_names?: string[];
 }
 
 export interface DailyTaskUpdate {
@@ -58,6 +61,7 @@ export interface DailyTaskUpdate {
   planned_date?: string | null;
   due_date?: string | null;
   project_id?: number | null;
+  tag_names?: string[];
 }
 
 export interface DailyLogUpsert {

@@ -3,6 +3,7 @@
  */
 
 import { apiFetch } from "./client";
+import type { TagSummary } from "./tags";
 
 export interface FeynmanEntryRead {
   id: number;
@@ -12,6 +13,7 @@ export interface FeynmanEntryRead {
   gaps: string;
   analogy: string;
   project_id: number | null;
+  tag_list: TagSummary[];
   created_at: string;
   updated_at: string;
 }
@@ -22,6 +24,7 @@ export interface FeynmanEntryCreate {
   gaps: string;
   analogy: string;
   project_id?: number | null;
+  tag_names?: string[];
 }
 
 export interface FeynmanEntryUpdate {
@@ -30,6 +33,7 @@ export interface FeynmanEntryUpdate {
   gaps?: string;
   analogy?: string;
   project_id?: number | null;
+  tag_names?: string[];
 }
 
 export async function listFeynmanEntries(): Promise<FeynmanEntryRead[]> {

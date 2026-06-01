@@ -9,6 +9,12 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.core.mood import record_mood_entry
+from app.core.tags import (
+    delete_links_for_item,
+    fetch_tags_for_items,
+    parse_tag_input,
+    replace_item_tags,
+)
 from app.core.xp import (
     ENTITY_DAILY_LOG,
     ENTITY_DAILY_TASK,
@@ -21,6 +27,7 @@ from app.core.xp import (
 from app.models.daily_tracker import DailyLog, DailyTask
 from app.models.paper_note import PaperNote
 from app.models.project import Project
+from app.models.tag import TAG_ITEM_DAILY_TASK
 from app.models.user import User
 from app.schemas.daily_tracker import (
     DailyLogRead,
@@ -68,6 +75,21 @@ def _validate_project_id(project_id: int | None, current_user: User, db: Session
         )
 
 
+def _serialize_tasks_with_tags(
+    tasks: list[DailyTask], current_user: User, db: Session,
+) -> list[DailyTaskRead]:
+    """Build DailyTaskRead instances with tag_list populated in one query."""
+    tag_map = fetch_tags_for_items(
+        current_user.id, TAG_ITEM_DAILY_TASK, [t.id for t in tasks], db,
+    )
+    reads: list[DailyTaskRead] = []
+    for task in tasks:
+        read = DailyTaskRead.model_validate(task)
+        read.tag_list = tag_map.get(task.id, [])
+        reads.append(read)
+    return reads
+
+
 def _validate_paper_note_link(note_id: int | None, current_user: User, db: Session) -> None:
     if note_id is None:
         return
@@ -106,7 +128,7 @@ def get_daily_state(
 
     return DailyStateRead(
         date=day,
-        tasks=tasks,
+        tasks=_serialize_tasks_with_tags(tasks, current_user, db),
         log=log,
         done_count=done_count,
         total_count=total_count,
@@ -119,7 +141,7 @@ def create_daily_task(
     payload: DailyTaskCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> DailyTask:
+) -> DailyTaskRead:
     # Dual-write date semantics: the canonical "when do I work on this"
     # is `planned_date`. Old clients still send `task_date`; new clients
     # can send either / both. Resolution order:
@@ -151,9 +173,15 @@ def create_daily_task(
         paper_note_id=payload.paper_note_id,
     )
     db.add(task)
+    db.flush()
+    if payload.tag_names is not None:
+        replace_item_tags(
+            current_user.id, TAG_ITEM_DAILY_TASK, task.id,
+            parse_tag_input(payload.tag_names), db,
+        )
     db.commit()
     db.refresh(task)
-    return task
+    return _serialize_tasks_with_tags([task], current_user, db)[0]
 
 
 @router.patch("/tasks/{task_id}", response_model=DailyTaskRead)
@@ -162,7 +190,7 @@ def update_daily_task(
     payload: DailyTaskUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> DailyTask:
+) -> DailyTaskRead:
     task = _get_owned_task(task_id, current_user, db)
     was_done = task.is_done
 
@@ -174,8 +202,17 @@ def update_daily_task(
     # it's the canonical column going forward.
     if "planned_date" in data and data["planned_date"] is not None:
         data["task_date"] = data["planned_date"]
+
+    has_tag_field = "tag_names" in data
+    tag_payload = data.pop("tag_names", None)
     for field_name, field_value in data.items():
         setattr(task, field_name, field_value)
+    if has_tag_field:
+        replace_item_tags(
+            current_user.id, TAG_ITEM_DAILY_TASK, task.id,
+            parse_tag_input(tag_payload) if tag_payload is not None else [],
+            db,
+        )
 
     # Award XP only on the not-done → done transition. award_xp_event is
     # idempotent on (event_type, entity_id), so even if this transition
@@ -193,7 +230,7 @@ def update_daily_task(
 
     db.commit()
     db.refresh(task)
-    return task
+    return _serialize_tasks_with_tags([task], current_user, db)[0]
 
 
 @router.delete("/tasks/{task_id}", status_code=204)
@@ -203,6 +240,7 @@ def delete_daily_task(
     db: Session = Depends(get_db),
 ) -> None:
     task = _get_owned_task(task_id, current_user, db)
+    delete_links_for_item(TAG_ITEM_DAILY_TASK, task.id, db)
     db.delete(task)
     db.commit()
 
@@ -213,7 +251,7 @@ def list_upcoming_tasks(
     include_overdue: bool = True,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> list[DailyTask]:
+) -> list[DailyTaskRead]:
     """Tasks with a due_date inside [today, today+horizon_days], not done.
 
     Sorted by due_date ascending so the most pressing item is first.
@@ -235,7 +273,7 @@ def list_upcoming_tasks(
     )
     if not include_overdue:
         stmt = stmt.where(DailyTask.due_date >= today)
-    return list(db.scalars(stmt).all())
+    return _serialize_tasks_with_tags(list(db.scalars(stmt).all()), current_user, db)
 
 
 @router.post("/tasks/{task_id}/carry-forward", response_model=DailyTaskRead, status_code=201)
@@ -243,7 +281,7 @@ def carry_daily_task_forward(
     task_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> DailyTask:
+) -> DailyTaskRead:
     """Copy an unfinished task to the following day, without duplicates."""
     task = _get_owned_task(task_id, current_user, db)
     if task.is_done:
@@ -256,7 +294,7 @@ def carry_daily_task_forward(
         .where(DailyTask.text == task.text)
     )
     if existing is not None:
-        return existing
+        return _serialize_tasks_with_tags([existing], current_user, db)[0]
 
     max_so = db.scalar(
         select(DailyTask.sort_order)
@@ -277,9 +315,19 @@ def carry_daily_task_forward(
         paper_note_id=task.paper_note_id,
     )
     db.add(copied)
+    db.flush()
+    # Carry the tags along too — same conceptual task moving forward.
+    src_tag_map = fetch_tags_for_items(
+        current_user.id, TAG_ITEM_DAILY_TASK, [task.id], db,
+    )
+    src_names = [t.name for t in src_tag_map.get(task.id, [])]
+    if src_names:
+        replace_item_tags(
+            current_user.id, TAG_ITEM_DAILY_TASK, copied.id, src_names, db,
+        )
     db.commit()
     db.refresh(copied)
-    return copied
+    return _serialize_tasks_with_tags([copied], current_user, db)[0]
 
 
 @router.put("/log", response_model=DailyLogRead)

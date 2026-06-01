@@ -3,6 +3,7 @@
  */
 
 import { apiFetch } from "./client";
+import type { TagSummary } from "./tags";
 
 export type PaperReadingStatus = "inbox" | "reading" | "summarized" | "revisit";
 
@@ -15,6 +16,7 @@ export interface PaperNoteRead {
   key_points: string;
   questions: string;
   tags: string;
+  tag_list: TagSummary[];
   item_type: string | null;
   url: string | null;
   doi: string | null;
@@ -37,6 +39,7 @@ export interface PaperNoteCreate {
   key_points: string;
   questions: string;
   tags: string;
+  tag_names?: string[];
   item_type?: string | null;
   url?: string | null;
   doi?: string | null;

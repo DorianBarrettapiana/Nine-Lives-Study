@@ -54,7 +54,16 @@ def test_stats_task_ratio_includes_unfinished_tasks(auth_client: TestClient):
     })
     auth_client.patch(f"/daily/tasks/{first['id']}", json={"is_done": True})
 
-    stats = auth_client.get("/stats?days=7").json()
+    # The /daily/tasks route stamps task_date with `date.today()` (local),
+    # while /stats defaults to UTC `today`. Those differ on runners whose
+    # local clock isn't UTC (e.g. self-hosted Windows), so today's task
+    # falls outside the [today-6, today] window in UTC and the response
+    # is empty. The frontend always sends tz_offset; mirror that here so
+    # the test passes on any runner regardless of its timezone.
+    tz_offset_min = round(
+        (datetime.now() - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds() / 60
+    )
+    stats = auth_client.get(f"/stats?days=7&tz_offset={tz_offset_min}").json()
 
     assert stats["daily_tasks"] == [{
         "date": first["task_date"],

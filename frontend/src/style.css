@@ -2757,3 +2757,105 @@ h3 {
   .task-form { flex-wrap: wrap; }
   .task-form input[type="date"] { width: 100%; }
 }
+
+/* ---- Tag input (chip-style autocomplete) ----------------------------- */
+.tag-input { position: relative; }
+.tag-input-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.2rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--bg-elevated, transparent);
+  cursor: text;
+}
+.tag-input-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  background: rgba(99, 102, 241, 0.18);
+  color: var(--text-accent);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.tag-input-chip-x {
+  background: none;
+  border: 0;
+  color: inherit;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.1rem;
+  opacity: 0.7;
+}
+.tag-input-chip-x:hover { opacity: 1; }
+.tag-input-text {
+  flex: 1;
+  min-width: 6rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0.2rem 0;
+}
+.tag-input-suggestions {
+  position: absolute;
+  z-index: 30;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.25rem;
+  background: var(--bg-elevated, #1f2937);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  max-height: 16rem;
+  overflow-y: auto;
+}
+.tag-input-suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.4rem 0.7rem;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tag-input-suggestion:hover,
+.tag-input-suggestion.active {
+  background: rgba(99, 102, 241, 0.16);
+}
+.tag-input-suggestion .hint {
+  opacity: 0.55;
+  font-size: 0.75rem;
+}
+
+/* Legacy CSV input lives in the same label as the chip control while
+   we migrate. Visually de-emphasised but kept reachable for power users. */
+.note-tags-legacy-input {
+  margin-top: 0.4rem;
+  opacity: 0.45;
+  font-size: 0.78rem;
+}
+.note-tags-legacy-input:focus { opacity: 1; }
+.note-tag-input-host { margin-top: 0.25rem; }
+
+/* Clickable tag chips on note cards. */
+.tag.tag-clickable {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.tag.tag-clickable:hover { background: rgba(99, 102, 241, 0.3); }
+.tag-filter-banner { display: flex; align-items: center; gap: 0.5rem; }
