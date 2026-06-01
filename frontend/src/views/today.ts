@@ -23,6 +23,7 @@ import {
 } from "./project-state";
 import { projectChipHtml } from "./project-picker";
 import * as StopwatchView from "./stopwatch";
+import * as TimerMode from "./timerMode";
 
 const MOODS = [
   { emoji: "😩", label: "Exhausted" },
@@ -726,8 +727,10 @@ export function init(onDataChanged: () => Promise<void>): void {
         await onDataChangedCb?.();
         window.dispatchEvent(new CustomEvent("task-list:updated"));
       } else if (action === "stopwatch") {
+        TimerMode.setMode("free");
         await StopwatchView.startForFocus(id, task.text);
       } else if (action === "pomodoro") {
+        TimerMode.setMode("pomodoro");
         await PomodoroView.startForFocus(id);
       }
     } catch (error) {

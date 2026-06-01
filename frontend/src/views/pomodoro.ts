@@ -17,6 +17,8 @@ import { updateMe, type UserRead } from "../api/users";
 import { escapeHtml, flashMessage, fmtMinutes, formatTime, parseApiDate, setMessage } from "../utils";
 import { renderEmptyStateWithCat } from "./icons";
 import { getTodayWorkMinutes } from "./stats";
+import { renderAnalogClockSvg } from "./clock";
+import { getMode as getTimerMode } from "./timerMode";
 
 type Mode = "work" | "short_break" | "long_break";
 
@@ -38,6 +40,37 @@ let settingsMessage: HTMLParagraphElement;
 let modeHintEl: HTMLParagraphElement;
 
 let user: UserRead | null = null;
+let catSkin = "tabby";
+let clockEl: HTMLDivElement | null = null;
+
+/** Called from main.ts when the user picks a new avatar so the pomodoro
+ *  side of the shared pixel clock stays color-matched. */
+export function setCatSkin(skin: string): void {
+  catSkin = skin;
+  if (getTimerMode() === "pomodoro") renderClock();
+}
+
+/** Inner-tick update — runs at 500 ms inside the running interval and on
+ *  visibility-change. Cheaper than the full render(): only refreshes the
+ *  digital display and the pixel-clock SVG, not the buttons / history list. */
+function tickDisplay(): void {
+  pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
+  if (getTimerMode() === "pomodoro") renderClock();
+}
+
+function renderClock(): void {
+  if (!clockEl) clockEl = document.querySelector<HTMLDivElement>("#stopwatch-clock");
+  if (!clockEl) return;
+  // Elapsed within the current phase — hands sweep forward as the phase
+  // progresses. Idle (no session) → 0s, paused color.
+  const total = modeDurationSeconds(pomodoroMode);
+  const elapsed = pomodoroRunning ? Math.max(0, total - pomodoroTimeLeft) : 0;
+  clockEl.innerHTML = renderAnalogClockSvg({
+    seconds: elapsed,
+    running: pomodoroRunning,
+    catSkin,
+  });
+}
 let sessions: PomodoroSessionRead[] = [];
 let pomodoroMode: Mode = "work";
 let pomodoroTimeLeft = 25 * 60;
@@ -208,6 +241,7 @@ function celebrate(modeFinished: Mode, nextMode: Mode): void {
 
 export function render(): void {
   pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
+  if (getTimerMode() === "pomodoro") renderClock();
   pomodoroStartButton.textContent = pomodoroRunning ? "⏸ Pause" : "▶ Start";
   pomodoroStartButton.classList.toggle("pomo-running", pomodoroRunning);
   // Re-evaluate the mutex lock on every render so Reset / Complete / etc.
@@ -331,7 +365,7 @@ async function resumeIfInProgress(): Promise<void> {
   broadcastPomodoroState();
   pomodoroIntervalId = setInterval(async () => {
     pomodoroTimeLeft = Math.max(0, Math.ceil((pomodoroEndTime! - Date.now()) / 1000));
-    pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
+    tickDisplay();
     if (pomodoroTimeLeft <= 0) await onComplete();
   }, 500);
   setMessage(pomodoroMessage, "Resumed session in progress.", "neutral");
@@ -378,7 +412,7 @@ async function startCurrentMode(): Promise<void> {
   broadcastPomodoroState();
   pomodoroIntervalId = setInterval(async () => {
     pomodoroTimeLeft = Math.max(0, Math.ceil((pomodoroEndTime! - Date.now()) / 1000));
-    pomodoroDisplay.textContent = formatTime(pomodoroTimeLeft);
+    tickDisplay();
     if (pomodoroTimeLeft <= 0) await onComplete();
   }, 500);
   render();
@@ -475,6 +509,9 @@ export function init(onDataChanged: () => Promise<void>): void {
   window.addEventListener("progress:updated", () => render());
   // Sleeping-cat empty state needs to re-tint on skin change.
   window.addEventListener("cat:skin-changed", () => render());
+  // Re-paint when the user toggles back into pomodoro mode (the clock was
+  // owned by the stopwatch side while hidden).
+  window.addEventListener("timer-mode:changed", () => render());
 
   pomodoroStartButton.addEventListener("click", async () => {
     if (pomodoroRunning) { stopTimer(); render(); return; }

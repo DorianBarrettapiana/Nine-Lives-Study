@@ -22,10 +22,11 @@ import * as ProjectsView from "./views/projects";
 import { refreshProjects } from "./views/project-state";
 import * as StatsView from "./views/stats";
 import * as StopwatchView from "./views/stopwatch";
+import * as TimerMode from "./views/timerMode";
 import * as FriendsView from "./views/friends";
 import * as TodayView from "./views/today";
 
-type AppView = "today" | "notes" | "feynman" | "pomodoro" | "stats" | "mood" | "projects" | "friends";
+type AppView = "today" | "notes" | "feynman" | "stats" | "mood" | "projects" | "friends";
 
 const APP_HTML = `
   <div class="app-shell">
@@ -61,17 +62,75 @@ const APP_HTML = `
                title="Today's work-time goal (pomodoro + stopwatch). Click to edit."></div>
           <p id="perfect-day-badge" class="perfect-day-badge hidden">✨ Perfect day!</p>
         </section>
-        <section class="card stopwatch-card" id="stopwatch-card">
-          <h2>Work timer</h2>
-          <div id="stopwatch-clock" class="stopwatch-clock"></div>
-          <div id="stopwatch-display" class="stopwatch-display">00:00:00</div>
-          <p id="stopwatch-today" class="hint stopwatch-today">Today: —</p>
-          <div id="stopwatch-task-picker" class="stopwatch-task-picker"></div>
-          <div class="button-row stopwatch-buttons">
-            <button id="stopwatch-start-btn" type="button">▶ Start</button>
-            <button id="stopwatch-end-btn" type="button" class="secondary">End</button>
+        <section class="card stopwatch-card timer-card" id="timer-card">
+          <div class="timer-card-header">
+            <h2>Work timer</h2>
+            <div class="timer-mode-toggle" role="tablist">
+              <button type="button" class="timer-mode-btn active" data-timer-mode="pomodoro" role="tab">🍅 Pomodoro</button>
+              <button type="button" class="timer-mode-btn" data-timer-mode="free" role="tab">⏱ Free</button>
+            </div>
           </div>
-          <p id="stopwatch-message" class="message"></p>
+
+          <div id="stopwatch-clock" class="stopwatch-clock"></div>
+
+          <!-- Pomodoro mode panel -->
+          <div id="timer-panel-pomodoro" class="timer-mode-panel">
+            <div class="pomodoro-header-row">
+              <span id="pomodoro-mode-badge" class="tag">Work</span>
+              <button id="pomodoro-settings-toggle" class="link-btn" type="button" title="Pomodoro settings">⚙️</button>
+            </div>
+            <div id="pomodoro-display" class="pomodoro-display">25:00</div>
+            <div id="pomodoro-task-picker" class="pomodoro-task-picker"></div>
+            <div class="button-row">
+              <button id="pomodoro-start-button" type="button">▶ Start</button>
+              <button id="pomodoro-reset-button" class="secondary" type="button">Reset</button>
+            </div>
+            <p id="pomodoro-message" class="message"></p>
+            <p class="hint pomodoro-mode-hint" id="pomodoro-mode-hint">25 min work · 5 min short break · 15 min long break every 4</p>
+
+            <div id="pomodoro-settings-panel" class="settings-panel hidden">
+              <form id="pomodoro-settings-form" class="form">
+                <div class="settings-grid">
+                  <label>Work (min)
+                    <input id="pomodoro-setting-work" type="number" min="1" max="240" required />
+                  </label>
+                  <label>Short break (min)
+                    <input id="pomodoro-setting-short" type="number" min="1" max="60" required />
+                  </label>
+                  <label>Long break (min)
+                    <input id="pomodoro-setting-long" type="number" min="1" max="60" required />
+                  </label>
+                  <label>Sessions before long break
+                    <input id="pomodoro-setting-before-long" type="number" min="1" max="10" required />
+                  </label>
+                </div>
+                <label class="checkbox-row">
+                  <input id="pomodoro-setting-auto-start" type="checkbox" />
+                  <span>Auto-start next session</span>
+                </label>
+                <div class="button-row"><button type="submit">Save settings</button></div>
+                <p id="pomodoro-settings-message" class="message"></p>
+              </form>
+            </div>
+          </div>
+
+          <!-- Free mode panel -->
+          <div id="timer-panel-free" class="timer-mode-panel hidden">
+            <div id="stopwatch-display" class="stopwatch-display">00:00:00</div>
+            <div id="stopwatch-task-picker" class="stopwatch-task-picker"></div>
+            <div class="button-row stopwatch-buttons">
+              <button id="stopwatch-start-btn" type="button">▶ Start</button>
+              <button id="stopwatch-end-btn" type="button" class="secondary">End</button>
+            </div>
+            <p id="stopwatch-message" class="message"></p>
+          </div>
+
+          <p id="stopwatch-today" class="hint stopwatch-today">Today: —</p>
+
+          <details class="timer-sessions-details">
+            <summary>Today's pomodoros</summary>
+            <div id="pomodoro-list" class="task-list timer-sessions-list"></div>
+          </details>
         </section>
         <section class="card milestones-card" id="milestones-card">
           <div class="section-header">
@@ -103,7 +162,6 @@ const APP_HTML = `
           <button class="feature-tab active" data-view="today">Today</button>
           <button class="feature-tab" data-view="notes">Paper notes</button>
           <button class="feature-tab" data-view="feynman">Feynman</button>
-          <button class="feature-tab" data-view="pomodoro">Pomodoro</button>
           <button class="feature-tab" data-view="mood">Mood</button>
           <button class="feature-tab" data-view="projects">Projects</button>
           <button class="feature-tab" data-view="stats">Stats</button>
@@ -248,60 +306,6 @@ const APP_HTML = `
           </section>
         </div>
 
-
-        <div id="pomodoro-view" class="hidden">
-          <section class="card">
-            <div class="section-header">
-              <div>
-                <h2>Pomodoro</h2>
-                <p class="hint" id="pomodoro-mode-hint">25 min work · 5 min short break · 15 min long break every 4</p>
-              </div>
-              <div class="pomodoro-header-actions">
-                <span id="pomodoro-mode-badge" class="tag">Work</span>
-                <button id="pomodoro-settings-toggle" class="secondary" type="button" title="Pomodoro settings">⚙️</button>
-              </div>
-            </div>
-
-            <div id="pomodoro-settings-panel" class="settings-panel hidden">
-              <form id="pomodoro-settings-form" class="form">
-                <div class="settings-grid">
-                  <label>Work (min)
-                    <input id="pomodoro-setting-work" type="number" min="1" max="240" required />
-                  </label>
-                  <label>Short break (min)
-                    <input id="pomodoro-setting-short" type="number" min="1" max="60" required />
-                  </label>
-                  <label>Long break (min)
-                    <input id="pomodoro-setting-long" type="number" min="1" max="60" required />
-                  </label>
-                  <label>Sessions before long break
-                    <input id="pomodoro-setting-before-long" type="number" min="1" max="10" required />
-                  </label>
-                </div>
-                <label class="checkbox-row">
-                  <input id="pomodoro-setting-auto-start" type="checkbox" />
-                  <span>Auto-start next session (skip clicking Start between phases)</span>
-                </label>
-                <div class="button-row"><button type="submit">Save settings</button></div>
-                <p id="pomodoro-settings-message" class="message"></p>
-              </form>
-            </div>
-
-            <div class="pomodoro-timer">
-              <div id="pomodoro-display" class="pomodoro-display">25:00</div>
-              <div id="pomodoro-task-picker" class="pomodoro-task-picker"></div>
-              <div class="button-row">
-                <button id="pomodoro-start-button">Start</button>
-                <button id="pomodoro-reset-button" class="secondary">Reset</button>
-              </div>
-              <p id="pomodoro-message" class="message"></p>
-            </div>
-          </section>
-          <section class="card">
-            <h2>Today's sessions</h2>
-            <div id="pomodoro-list" class="task-list"></div>
-          </section>
-        </div>
 
         <div id="stats-view" class="hidden">
           <section class="card hidden" id="ai-summary-card">
@@ -596,6 +600,7 @@ function mountApp(user: UserRead): void {
       // Propagate the new skin to all views that show it.
       setCurrentCatSkin(updated.cat_skin);
       StopwatchView.setCatSkin(updated.cat_skin);
+      PomodoroView.setCatSkin(updated.cat_skin);
       // Re-render any visible sleeping-cat empty states with the new skin.
       window.dispatchEvent(new CustomEvent("cat:skin-changed"));
       void FriendsView.refresh();
@@ -633,7 +638,6 @@ function mountApp(user: UserRead): void {
     today:    app!.querySelector<HTMLDivElement>("#today-view")!,
     notes:    app!.querySelector<HTMLDivElement>("#notes-view")!,
     feynman:  app!.querySelector<HTMLDivElement>("#feynman-view")!,
-    pomodoro: app!.querySelector<HTMLDivElement>("#pomodoro-view")!,
     mood:     app!.querySelector<HTMLDivElement>("#mood-view")!,
     projects: app!.querySelector<HTMLDivElement>("#projects-view")!,
     stats:    app!.querySelector<HTMLDivElement>("#stats-view")!,
@@ -651,6 +655,7 @@ function mountApp(user: UserRead): void {
   );
   PomodoroView.init(() => Promise.all([PomodoroView.refresh(), StatsView.refresh()]).then());
   PomodoroView.setUser(user);  // pass settings (work/break durations etc.) to the timer
+  PomodoroView.setCatSkin(user.cat_skin);  // initial pixel-clock tint
   MoodView.init(() => Promise.all([
     MoodView.refresh(), TodayView.refresh(), StatsView.refresh(),
   ]).then());
@@ -664,6 +669,7 @@ function mountApp(user: UserRead): void {
   void refreshProjects(true);
   StatsView.init(() => StatsView.refresh());
   StopwatchView.init(user.cat_skin);
+  TimerMode.init();
   FriendsView.init(() => FriendsView.refresh());
   MilestonesView.init();
   TodayView.init(() => Promise.all([
