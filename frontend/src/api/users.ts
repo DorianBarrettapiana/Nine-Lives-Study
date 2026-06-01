@@ -23,6 +23,7 @@ export interface UserRead {
   daily_goal_minutes: number;
   share_study_time: boolean;
   share_activity: boolean;
+  share_project: boolean;
 }
 
 export interface RegisterPayload {
@@ -52,6 +53,7 @@ export interface UserUpdate {
   daily_goal_minutes?: number;
   share_study_time?: boolean;
   share_activity?: boolean;
+  share_project?: boolean;
 }
 
 export async function register(payload: RegisterPayload): Promise<UserRead> {

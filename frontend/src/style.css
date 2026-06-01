@@ -2628,6 +2628,15 @@ h3 {
 .upcoming-late { color: #ef4444; }
 .upcoming-text { flex: 1; min-width: 0; }
 
+/* Inline project tag on a friend feed item. Smaller than a regular tag so
+   it sits naturally inside the activity sentence rather than dominating. */
+.feed-project-tag {
+  font-size: 0.72rem;
+  padding: 0.1rem 0.45rem;
+  margin-left: 0.15rem;
+  vertical-align: 1px;
+}
+
 /* Today's expanded mood card — emoji picker + reflection + per-entry list. */
 .today-mood-card .mood-row {
   margin-bottom: 0.6rem;
