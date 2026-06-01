@@ -21,6 +21,7 @@ from app.core.database import get_db
 from app.core.xp import ENTITY_POMODORO, ENTITY_STOPWATCH, EVENT_POMODORO, EVENT_STOPWATCH
 from app.models.daily_tracker import DailyLog, DailyTask
 from app.models.feynman_entry import FeynmanEntry
+from app.models.milestone import Milestone
 from app.models.paper_note import PaperNote
 from app.models.pomodoro_session import PomodoroSession
 from app.models.project import Project
@@ -115,7 +116,7 @@ def delete_project(
     # the owning user as defense-in-depth — even though only the user's own
     # project_id values could match, scoping by user_id keeps a future
     # "shared project" feature from accidentally touching other users' rows.
-    for model in (DailyTask, PaperNote, FeynmanEntry):
+    for model in (DailyTask, PaperNote, FeynmanEntry, Milestone):
         db.execute(
             update(model)
             .where(model.user_id == current_user.id)

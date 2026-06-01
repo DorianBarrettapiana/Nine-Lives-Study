@@ -13,6 +13,7 @@ import { renderMoonIconSvg, renderSunIconSvg } from "./views/icons";
 import { setCurrentCatSkin } from "./views/user-state";
 import { showAuthScreen } from "./views/auth";
 import * as FeynmanView from "./views/feynman";
+import * as MilestonesView from "./views/milestones";
 import * as SummariesView from "./views/summaries";
 import * as MoodView from "./views/mood";
 import * as NotesView from "./views/notes";
@@ -59,6 +60,29 @@ const APP_HTML = `
           <div class="daily-goal-line" id="daily-goal-line"
                title="Today's work-time goal (pomodoro + stopwatch). Click to edit."></div>
           <p id="perfect-day-badge" class="perfect-day-badge hidden">✨ Perfect day!</p>
+        </section>
+        <section class="card milestones-card" id="milestones-card">
+          <div class="section-header">
+            <h2>🗓 Upcoming</h2>
+            <button id="milestones-toggle-add" class="link-btn" type="button"
+                    title="Add a milestone">+ Add</button>
+          </div>
+          <form id="milestones-add-form" class="milestones-add-form hidden">
+            <input id="milestones-add-title" type="text" maxlength="200" placeholder="Title (e.g. NeurIPS abstract)" required />
+            <input id="milestones-add-date" type="date" required />
+            <div id="milestones-add-project-picker" class="milestones-add-project"></div>
+            <div class="button-row">
+              <button type="submit">Save</button>
+              <button type="button" class="secondary" id="milestones-add-cancel">Cancel</button>
+            </div>
+            <p id="milestones-add-message" class="message"></p>
+          </form>
+          <div id="milestones-list" class="milestones-list"></div>
+          <button id="milestones-show-more" class="link-btn hidden" type="button"></button>
+          <details id="milestones-past-details" class="milestones-past hidden">
+            <summary>Past / archived</summary>
+            <div id="milestones-past-list" class="milestones-list"></div>
+          </details>
         </section>
         <section class="card stopwatch-card" id="stopwatch-card">
           <h2>Work timer</h2>
@@ -455,6 +479,7 @@ async function refreshAll(): Promise<void> {
       StatsView.refresh(),
       StopwatchView.refresh(),
       FriendsView.refresh(),
+      MilestonesView.refresh(),
     ]);
   } catch (error) {
     if (error instanceof UnauthorizedError) {
@@ -640,6 +665,7 @@ function mountApp(user: UserRead): void {
   StatsView.init(() => StatsView.refresh());
   StopwatchView.init(user.cat_skin);
   FriendsView.init(() => FriendsView.refresh());
+  MilestonesView.init();
   TodayView.init(() => Promise.all([
     TodayView.refresh(), StatsView.refresh(), PomodoroView.refresh(),
   ]).then());
