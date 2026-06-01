@@ -52,6 +52,10 @@ class User(Base):
     # experience for current users while making both controls explicit.
     share_study_time: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
     share_activity: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", nullable=False)
+    # Project-level granularity: opt-in (default False) because project
+    # names are more identifying ("working on dissertation chapter 4")
+    # than the generic event labels share_activity already exposes.
+    share_project: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
 
     # --- Zotero integration (per-user, optional) ----------------------------
     # `zotero_user_id` is the public numeric ID the user copies from their

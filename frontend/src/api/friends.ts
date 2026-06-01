@@ -80,6 +80,8 @@ export interface FeedItem {
   created_at: string;
   like_count: number;
   liked_by_me: boolean;
+  /** Set only for work-session events when the owner has share_project on. */
+  project_name?: string | null;
 }
 
 export async function getFeed(limit = 30): Promise<FeedItem[]> {

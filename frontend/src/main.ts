@@ -394,13 +394,16 @@ const APP_HTML = `
         </div>
 
         <div id="friends-view" class="hidden">
-          <section class="card">
-            <h2>Privacy</h2>
-            <p class="hint">Friends remain optional. Choose what accepted friends can see.</p>
-            <label class="checkbox-row"><input id="share-study-time" type="checkbox" /> Share study duration</label>
-            <label class="checkbox-row"><input id="share-activity" type="checkbox" /> Share activity types in the feed</label>
-            <div class="button-row"><button id="save-friend-privacy" type="button">Save privacy</button></div>
-            <p id="friend-privacy-message" class="message"></p>
+          <section class="card collapsible" id="friend-privacy-card">
+            <h2 class="collapsible-header">Privacy <span class="collapse-arrow">&#9656;</span></h2>
+            <div class="collapsible-body hidden">
+              <p class="hint">Friends remain optional. Choose what accepted friends can see.</p>
+              <label class="checkbox-row"><input id="share-study-time" type="checkbox" /> Share study duration</label>
+              <label class="checkbox-row"><input id="share-activity" type="checkbox" /> Share activity types in the feed</label>
+              <label class="checkbox-row"><input id="share-project" type="checkbox" /> Share which project I worked on</label>
+              <div class="button-row"><button id="save-friend-privacy" type="button">Save privacy</button></div>
+              <p id="friend-privacy-message" class="message"></p>
+            </div>
           </section>
           <section class="card collapsible" id="friend-search-card">
             <h2 class="collapsible-header">Find friends <span class="collapse-arrow">&#9656;</span></h2>

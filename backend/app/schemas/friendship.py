@@ -51,6 +51,11 @@ class FeedItem(BaseSchema):
     created_at: "UtcDateTime"  # forward-ref to keep import block minimal
     like_count: int
     liked_by_me: bool
+    # Populated only when the event is a work session (task_done /
+    # pomodoro_done) AND the owner has share_project enabled. Friends
+    # then see `... in <project name>` in the feed line; otherwise this
+    # is None and the project is hidden.
+    project_name: str | None = None
 
 
 class NotificationItem(BaseSchema):

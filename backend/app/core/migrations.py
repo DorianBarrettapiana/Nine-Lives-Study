@@ -23,6 +23,7 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     ("users", "daily_goal_minutes",                "INTEGER NOT NULL DEFAULT 120"),
     ("users", "share_study_time",                  "BOOLEAN NOT NULL DEFAULT 1"),
     ("users", "share_activity",                    "BOOLEAN NOT NULL DEFAULT 1"),
+    ("users", "share_project",                     "BOOLEAN NOT NULL DEFAULT 0"),
     ("daily_logs", "main_goal",                    "VARCHAR(500) NOT NULL DEFAULT ''"),
     ("pomodoro_sessions", "work_label",            "VARCHAR(300) NOT NULL DEFAULT ''"),
     ("stopwatch_sessions", "work_label",           "VARCHAR(300) NOT NULL DEFAULT ''"),

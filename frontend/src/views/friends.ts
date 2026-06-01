@@ -46,7 +46,9 @@ let friendRequestsBadge: HTMLSpanElement;
 let friendFeed: HTMLDivElement;
 let shareStudyTimeInput: HTMLInputElement;
 let shareActivityInput: HTMLInputElement;
+let shareProjectInput: HTMLInputElement;
 let privacyMessage: HTMLParagraphElement;
+let friendPrivacyCard: HTMLElement;
 
 let friends: FriendEntry[] = [];
 let requests: FriendRequestEntry[] = [];
@@ -156,10 +158,13 @@ function renderFeed(items: FeedItem[], notifs: NotificationItem[] = []): void {
   const feedHtml = visibleItems.map(item => {
     const label = EVENT_LABELS[item.event_type] ?? item.event_type;
     const likedClass = item.liked_by_me ? " liked" : "";
+    const projectTag = item.project_name
+      ? ` <span class="tag feed-project-tag">${escapeHtml(item.project_name)}</span>`
+      : "";
     return `
       <div class="feed-item">
         <div class="feed-item-content">
-          ${avatarRowHtml(item.cat_skin)}<strong>${escapeHtml(item.username)}</strong> ${label}
+          ${avatarRowHtml(item.cat_skin)}<strong>${escapeHtml(item.username)}</strong> ${label}${projectTag}
           <span class="feed-time">${timeAgo(item.created_at)}</span>
         </div>
         <button class="feed-like-btn${likedClass}" data-eid="${item.id}" title="Like">
@@ -490,6 +495,7 @@ export async function refresh(): Promise<void> {
     updateNotifBadge(notifs.unread_count);
     shareStudyTimeInput.checked = me.share_study_time;
     shareActivityInput.checked = me.share_activity;
+    shareProjectInput.checked = me.share_project;
   } catch (e) {
     console.error(e);
   }
@@ -550,8 +556,11 @@ export function init(_onRefreshNeeded: () => Promise<void>): void {
   friendRequestsBadge = document.querySelector<HTMLSpanElement>("#friend-requests-badge")!;
   shareStudyTimeInput  = document.querySelector<HTMLInputElement>("#share-study-time")!;
   shareActivityInput   = document.querySelector<HTMLInputElement>("#share-activity")!;
+  shareProjectInput    = document.querySelector<HTMLInputElement>("#share-project")!;
   privacyMessage       = document.querySelector<HTMLParagraphElement>("#friend-privacy-message")!;
+  friendPrivacyCard    = document.querySelector<HTMLElement>("#friend-privacy-card")!;
 
+  setupCollapsible(friendPrivacyCard);
   setupCollapsible(friendSearchCard);
   setupCollapsible(friendRequestsCard);
 
@@ -564,6 +573,7 @@ export function init(_onRefreshNeeded: () => Promise<void>): void {
       await updateMe({
         share_study_time: shareStudyTimeInput.checked,
         share_activity: shareActivityInput.checked,
+        share_project: shareProjectInput.checked,
       });
       setMessage(privacyMessage, "Privacy settings saved.", "success");
     } catch (error) {
