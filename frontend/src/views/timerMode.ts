@@ -11,21 +11,29 @@
 export type TimerMode = "pomodoro" | "free";
 
 const STORAGE_KEY = "nl_timer_mode";
-let currentMode: TimerMode = readStoredMode();
+// Lazily initialised so module load doesn't depend on `localStorage` being
+// available at import time (matters in test envs where jsdom is set up
+// after some imports may already have resolved).
+let currentMode: TimerMode | null = null;
 
 function readStoredMode(): TimerMode {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  return raw === "free" ? "free" : "pomodoro";
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw === "free" ? "free" : "pomodoro";
+  } catch {
+    return "pomodoro";
+  }
 }
 
 export function getMode(): TimerMode {
+  if (currentMode === null) currentMode = readStoredMode();
   return currentMode;
 }
 
 /** Switch the visible panel. Idempotent — safe to call when already in mode. */
 export function setMode(mode: TimerMode): void {
   currentMode = mode;
-  localStorage.setItem(STORAGE_KEY, mode);
+  try { localStorage.setItem(STORAGE_KEY, mode); } catch { /* private mode */ }
 
   const pomoPanel = document.getElementById("timer-panel-pomodoro");
   const freePanel = document.getElementById("timer-panel-free");
