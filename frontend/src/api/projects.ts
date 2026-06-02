@@ -56,6 +56,19 @@ export interface ProjectDashboardRead {
   open_tasks_count: number;
   last_activity_at: string | null;
   open_tasks: DailyTaskRead[];
+  task_time_breakdown: Array<{
+    id: number;
+    text: string;
+    is_done: boolean;
+    direct_minutes: number;
+    total_minutes: number;
+    children: Array<{
+      id: number;
+      text: string;
+      is_done: boolean;
+      minutes: number;
+    }>;
+  }>;
   paper_notes: PaperNoteRead[];
   feynman_entries: FeynmanEntryRead[];
   recent_reflections: ReflectionMention[];

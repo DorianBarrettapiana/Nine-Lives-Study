@@ -75,6 +75,26 @@ def _validate_project_id(project_id: int | None, current_user: User, db: Session
         )
 
 
+def _validate_parent_task_id(
+    parent_task_id: int | None,
+    current_user: User,
+    db: Session,
+    *,
+    forbid_self: int | None = None,
+) -> DailyTask | None:
+    """Return an owned top-level parent, rejecting deeper task trees."""
+    if parent_task_id is None:
+        return None
+    if forbid_self == parent_task_id:
+        raise HTTPException(status_code=400, detail="A task cannot be its own parent.")
+    parent = db.get(DailyTask, parent_task_id)
+    if parent is None or parent.user_id != current_user.id:
+        raise HTTPException(status_code=400, detail="Unknown parent task.")
+    if parent.parent_task_id is not None:
+        raise HTTPException(status_code=400, detail="Tasks can only have one level of subtasks.")
+    return parent
+
+
 def _serialize_tasks_with_tags(
     tasks: list[DailyTask], current_user: User, db: Session,
 ) -> list[DailyTaskRead]:
@@ -147,7 +167,8 @@ def create_daily_task(
     # can send either / both. Resolution order:
     #   explicit planned_date  >  explicit task_date  >  today
     # Both columns are written so legacy queries keep functioning.
-    day = payload.planned_date or resolve_target_date(payload.task_date)
+    parent = _validate_parent_task_id(payload.parent_task_id, current_user, db)
+    day = parent.task_date if parent is not None else payload.planned_date or resolve_target_date(payload.task_date)
     _validate_paper_note_link(payload.paper_note_id, current_user, db)
     # New tasks land at the bottom of the day's list. Compute as
     # (current max sort_order for the day) + 1, defaulting to 1.0 for the
@@ -160,7 +181,8 @@ def create_daily_task(
         .limit(1)
     )
     next_so = (max_so or 0.0) + 1.0
-    _validate_project_id(payload.project_id, current_user, db)
+    project_id = parent.project_id if parent is not None else payload.project_id
+    _validate_project_id(project_id, current_user, db)
     task = DailyTask(
         user_id=current_user.id,
         task_date=day,
@@ -169,8 +191,9 @@ def create_daily_task(
         text=payload.text,
         is_done=False,
         sort_order=next_so,
-        project_id=payload.project_id,
+        project_id=project_id,
         paper_note_id=payload.paper_note_id,
+        parent_task_id=parent.id if parent is not None else None,
     )
     db.add(task)
     db.flush()
@@ -195,8 +218,32 @@ def update_daily_task(
     was_done = task.is_done
 
     data = payload.model_dump(exclude_unset=True)
+    if "parent_task_id" in data:
+        parent = _validate_parent_task_id(
+            data["parent_task_id"], current_user, db, forbid_self=task.id,
+        )
+        if parent is not None:
+            has_children = db.scalar(
+                select(DailyTask.id)
+                .where(DailyTask.user_id == current_user.id)
+                .where(DailyTask.parent_task_id == task.id)
+                .limit(1)
+            )
+            if has_children is not None:
+                raise HTTPException(status_code=400, detail="A task with subtasks cannot become a subtask.")
+            data["project_id"] = parent.project_id
+            data["planned_date"] = parent.planned_date
+            data["task_date"] = parent.task_date
     if "project_id" in data:
         _validate_project_id(data["project_id"], current_user, db)
+        if task.parent_task_id is not None and "parent_task_id" not in data:
+            parent = _get_owned_task(task.parent_task_id, current_user, db)
+            if data["project_id"] != parent.project_id:
+                raise HTTPException(status_code=400, detail="A subtask inherits its parent's project.")
+    if task.parent_task_id is not None and "planned_date" in data and "parent_task_id" not in data:
+        parent = _get_owned_task(task.parent_task_id, current_user, db)
+        if data["planned_date"] != parent.planned_date:
+            raise HTTPException(status_code=400, detail="A subtask inherits its parent's planned date.")
     # Keep the legacy `task_date` in sync when the client sets `planned_date`.
     # If the client explicitly sends both (rare), planned_date wins because
     # it's the canonical column going forward.
@@ -207,6 +254,20 @@ def update_daily_task(
     tag_payload = data.pop("tag_names", None)
     for field_name, field_value in data.items():
         setattr(task, field_name, field_value)
+    if task.parent_task_id is None:
+        if "project_id" in data:
+            db.query(DailyTask).filter(
+                DailyTask.user_id == current_user.id,
+                DailyTask.parent_task_id == task.id,
+            ).update({DailyTask.project_id: task.project_id}, synchronize_session=False)
+        if "planned_date" in data:
+            db.query(DailyTask).filter(
+                DailyTask.user_id == current_user.id,
+                DailyTask.parent_task_id == task.id,
+            ).update(
+                {DailyTask.task_date: task.task_date, DailyTask.planned_date: task.planned_date},
+                synchronize_session=False,
+            )
     if has_tag_field:
         replace_item_tags(
             current_user.id, TAG_ITEM_DAILY_TASK, task.id,
@@ -240,6 +301,14 @@ def delete_daily_task(
     db: Session = Depends(get_db),
 ) -> None:
     task = _get_owned_task(task_id, current_user, db)
+    children = list(db.scalars(
+        select(DailyTask)
+        .where(DailyTask.user_id == current_user.id)
+        .where(DailyTask.parent_task_id == task.id)
+    ).all())
+    for child in children:
+        delete_links_for_item(TAG_ITEM_DAILY_TASK, child.id, db)
+        db.delete(child)
     delete_links_for_item(TAG_ITEM_DAILY_TASK, task.id, db)
     db.delete(task)
     db.commit()
@@ -287,14 +356,44 @@ def carry_daily_task_forward(
     if task.is_done:
         raise HTTPException(status_code=400, detail="Completed tasks do not need to be carried forward.")
     target_date = task.task_date + timedelta(days=1)
+    if task.parent_task_id is not None:
+        parent = _get_owned_task(task.parent_task_id, current_user, db)
+        copied_parent = _copy_task_to_date(parent, target_date, current_user, db)
+        copied = _copy_task_to_date(task, target_date, current_user, db, parent_task_id=copied_parent.id)
+    else:
+        copied = _copy_task_to_date(task, target_date, current_user, db)
+        children = db.scalars(
+            select(DailyTask)
+            .where(DailyTask.user_id == current_user.id)
+            .where(DailyTask.parent_task_id == task.id)
+            .where(DailyTask.is_done.is_(False))
+            .order_by(DailyTask.sort_order.asc(), DailyTask.created_at.asc())
+        ).all()
+        for child in children:
+            _copy_task_to_date(child, target_date, current_user, db, parent_task_id=copied.id)
+    db.commit()
+    db.refresh(copied)
+    return _serialize_tasks_with_tags([copied], current_user, db)[0]
+
+
+def _copy_task_to_date(
+    task: DailyTask,
+    target_date: date,
+    current_user: User,
+    db: Session,
+    *,
+    parent_task_id: int | None = None,
+) -> DailyTask:
+    """Copy one task once, preserving tags and an optional copied parent."""
     existing = db.scalar(
         select(DailyTask)
         .where(DailyTask.user_id == current_user.id)
         .where(DailyTask.task_date == target_date)
         .where(DailyTask.text == task.text)
+        .where(DailyTask.parent_task_id == parent_task_id)
     )
     if existing is not None:
-        return _serialize_tasks_with_tags([existing], current_user, db)[0]
+        return existing
 
     max_so = db.scalar(
         select(DailyTask.sort_order)
@@ -313,6 +412,7 @@ def carry_daily_task_forward(
         sort_order=(max_so or 0.0) + 1.0,
         project_id=task.project_id,
         paper_note_id=task.paper_note_id,
+        parent_task_id=parent_task_id,
     )
     db.add(copied)
     db.flush()
@@ -325,9 +425,7 @@ def carry_daily_task_forward(
         replace_item_tags(
             current_user.id, TAG_ITEM_DAILY_TASK, copied.id, src_names, db,
         )
-    db.commit()
-    db.refresh(copied)
-    return _serialize_tasks_with_tags([copied], current_user, db)[0]
+    return copied
 
 
 @router.put("/log", response_model=DailyLogRead)

@@ -32,6 +32,67 @@ def test_completed_task_is_not_carried_forward(auth_client: TestClient):
     assert response.status_code == 400
 
 
+def test_parent_task_carries_unfinished_subtasks_forward(auth_client: TestClient):
+    parent = auth_client.post("/daily/tasks", json={
+        "text": "Process data", "task_date": "2026-05-31",
+    }).json()
+    child = auth_client.post("/daily/tasks", json={
+        "text": "Normalize columns", "parent_task_id": parent["id"],
+    }).json()
+    done_child = auth_client.post("/daily/tasks", json={
+        "text": "Download source", "parent_task_id": parent["id"],
+    }).json()
+    auth_client.patch(f"/daily/tasks/{done_child['id']}", json={"is_done": True})
+
+    response = auth_client.post(f"/daily/tasks/{parent['id']}/carry-forward")
+    assert response.status_code == 201, response.text
+
+    next_day = auth_client.get("/daily?date=2026-06-01").json()["tasks"]
+    copied_parent = next(task for task in next_day if task["parent_task_id"] is None)
+    copied_children = [task for task in next_day if task["parent_task_id"] == copied_parent["id"]]
+    assert copied_parent["text"] == "Process data"
+    assert [task["text"] for task in copied_children] == [child["text"]]
+
+
+def test_subtasks_inherit_project_and_stop_at_one_level(auth_client: TestClient):
+    project = auth_client.post("/projects", json={"name": "Pipeline"}).json()
+    parent = auth_client.post("/daily/tasks", json={
+        "text": "Process data", "project_id": project["id"],
+    }).json()
+    child = auth_client.post("/daily/tasks", json={
+        "text": "Normalize columns", "parent_task_id": parent["id"],
+    })
+    assert child.status_code == 201, child.text
+    assert child.json()["project_id"] == project["id"]
+
+    nested = auth_client.post("/daily/tasks", json={
+        "text": "Inspect nulls", "parent_task_id": child.json()["id"],
+    })
+    assert nested.status_code == 400
+
+
+def test_subtask_parent_is_user_scoped(auth_client: TestClient, second_auth_client: TestClient):
+    parent = auth_client.post("/daily/tasks", json={"text": "Private parent"}).json()
+
+    response = second_auth_client.post("/daily/tasks", json={
+        "text": "Foreign child", "parent_task_id": parent["id"],
+    })
+
+    assert response.status_code == 400
+
+
+def test_deleting_parent_task_removes_subtasks(auth_client: TestClient):
+    parent = auth_client.post("/daily/tasks", json={"text": "Process data"}).json()
+    auth_client.post("/daily/tasks", json={
+        "text": "Normalize columns", "parent_task_id": parent["id"],
+    })
+
+    response = auth_client.delete(f"/daily/tasks/{parent['id']}")
+
+    assert response.status_code == 204
+    assert auth_client.get("/daily").json()["tasks"] == []
+
+
 def test_pomodoro_focus_appears_in_stats(auth_client: TestClient):
     task = auth_client.post("/daily/tasks", json={"text": "Read diffusion paper"}).json()
     session = auth_client.post(

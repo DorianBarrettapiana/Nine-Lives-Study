@@ -574,6 +574,11 @@ h3 {
   gap: 0.6rem;
 }
 
+.task-group {
+  display: grid;
+  gap: 0.35rem;
+}
+
 .task-item {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -584,6 +589,50 @@ h3 {
   padding: 0.65rem 0.875rem;
   background: var(--bg-item);
   transition: border-color 0.15s;
+}
+
+.task-child {
+  margin-left: 1.4rem;
+  border-left: 3px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg-item) 82%, transparent);
+}
+
+.task-add-child {
+  white-space: nowrap;
+}
+
+.task-children {
+  margin-left: 1.25rem;
+}
+
+.task-children > summary {
+  width: fit-content;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  user-select: none;
+}
+
+.task-children-list {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.task-child-form {
+  display: flex;
+  gap: 0.45rem;
+  margin: 0.45rem 0 0 1.4rem;
+}
+
+.task-child-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-child-form button {
+  padding: 0.45rem 0.7rem;
+  font-size: 0.82rem;
 }
 
 .task-item:hover {
@@ -3083,6 +3132,25 @@ h3 {
 }
 .dashboard-task-text, .dashboard-mention-row > span:last-child { flex: 1; min-width: 0; }
 .dashboard-knowledge-row { flex-direction: column; align-items: flex-start; gap: 0.15rem; }
+.dashboard-task-time-row,
+.dashboard-task-time-details > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--bg-item);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+.dashboard-task-time-details > summary { cursor: pointer; }
+.dashboard-task-time-children {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0 1rem;
+}
+.dashboard-task-time-row.child { border-left: 3px solid var(--border-soft); }
 
 /* --- Feynman: source-paper banner ----------------------------------- */
 .feynman-source-note {

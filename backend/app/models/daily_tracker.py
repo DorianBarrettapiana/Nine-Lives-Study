@@ -45,6 +45,15 @@ class DailyTask(Base):
         nullable=True,
         index=True,
     )
+    # Optional one-level breakdown for work that has meaningful steps
+    # (e.g. "Data processing" → clean / normalize / export). Child tasks
+    # remain ordinary timer targets, while dashboards can roll their time
+    # into the parent. The route layer prevents nesting below one level.
+    parent_task_id: Mapped[int | None] = mapped_column(
+        ForeignKey("daily_tasks.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     # User-controlled ordering within a day. Lower sorts first; ties break
     # by `created_at`. Float so the frontend can insert "between neighbors"
     # via the midpoint trick (e.g. 1.0 / 2.0 → drop between → 1.5).
