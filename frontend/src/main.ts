@@ -247,36 +247,42 @@ const APP_HTML = `
               </div>
             </div>
             <p class="hint">Literature notes. Connect Zotero to pull in references in one click.</p>
-            <form id="note-form" class="note-form">
-              <label>Paper title *<input id="note-title" type="text" placeholder="Enter paper title..." required /></label>
-              <div class="two-cols">
-                <label>Authors<input id="note-authors" type="text" placeholder="Author A, Author B..." /></label>
-                <label>Year<input id="note-year" type="number" placeholder="2026" /></label>
-              </div>
-              <label>Key ideas &amp; method<textarea id="note-key-points" placeholder="Main idea, method, assumptions..."></textarea></label>
-              <label>Questions &amp; thoughts<textarea id="note-questions" placeholder="Open questions, limitations, links with your work..."></textarea></label>
-              <label>Tags<input id="note-tags" type="text" placeholder="key-words" /></label>
-              <details class="note-extras">
-                <summary>More fields (URL, DOI, abstract)</summary>
-                <label>URL<input id="note-url" type="url" placeholder="https://..." /></label>
-                <label>DOI<input id="note-doi" type="text" placeholder="10.xxxx/..." /></label>
-                <label>Abstract<textarea id="note-abstract" placeholder="Paper abstract..."></textarea></label>
-              </details>
-              <label>Reading status
-                <select id="note-reading-status">
-                  <option value="inbox">Inbox</option>
-                  <option value="reading">Reading</option>
-                  <option value="summarized">Summarized</option>
-                  <option value="revisit">Revisit</option>
-                </select>
-              </label>
-              <label>Linked Feynman record<select id="note-feynman-link"><option value="">None</option></select></label>
-              <div id="note-project-picker" class="note-project-picker"></div>
-              <div class="button-row">
-                <button type="submit" id="note-submit-button">Add note</button>
-                <button type="button" id="note-cancel-button" class="secondary hidden">Cancel edit</button>
-              </div>
-            </form>
+            <details id="note-editor-details" class="editor-disclosure">
+              <summary>
+                <span class="editor-disclosure-title">Add a paper note</span>
+                <span class="editor-disclosure-hint">Capture ideas manually</span>
+              </summary>
+              <form id="note-form" class="note-form editor-disclosure-body">
+                <label>Paper title *<input id="note-title" type="text" placeholder="Enter paper title..." required /></label>
+                <div class="two-cols">
+                  <label>Authors<input id="note-authors" type="text" placeholder="Author A, Author B..." /></label>
+                  <label>Year<input id="note-year" type="number" placeholder="2026" /></label>
+                </div>
+                <label>Key ideas &amp; method<textarea id="note-key-points" placeholder="Main idea, method, assumptions..."></textarea></label>
+                <label>Questions &amp; thoughts<textarea id="note-questions" placeholder="Open questions, limitations, links with your work..."></textarea></label>
+                <label>Tags<input id="note-tags" type="text" placeholder="key-words" /></label>
+                <details class="note-extras">
+                  <summary>More fields (URL, DOI, abstract)</summary>
+                  <label>URL<input id="note-url" type="url" placeholder="https://..." /></label>
+                  <label>DOI<input id="note-doi" type="text" placeholder="10.xxxx/..." /></label>
+                  <label>Abstract<textarea id="note-abstract" placeholder="Paper abstract..."></textarea></label>
+                </details>
+                <label>Reading status
+                  <select id="note-reading-status">
+                    <option value="inbox">Inbox</option>
+                    <option value="reading">Reading</option>
+                    <option value="summarized">Summarized</option>
+                    <option value="revisit">Revisit</option>
+                  </select>
+                </label>
+                <label>Linked Feynman record<select id="note-feynman-link"><option value="">None</option></select></label>
+                <div id="note-project-picker" class="note-project-picker"></div>
+                <div class="button-row">
+                  <button type="submit" id="note-submit-button">Add note</button>
+                  <button type="button" id="note-cancel-button" class="secondary hidden">Cancel edit</button>
+                </div>
+              </form>
+            </details>
             <p id="note-message" class="message"></p>
           </section>
           <section class="card">
@@ -291,21 +297,27 @@ const APP_HTML = `
 
         <div id="feynman-view" class="hidden">
           <section class="card">
-            <h2>Feynman method</h2>
-            <p class="hint">Build a compact understanding record in four steps.</p>
-            <div class="steps-bar" id="feynman-steps"></div>
-            <div class="feynman-editor">
-              <h3 id="feynman-step-title"></h3>
-              <p id="feynman-step-description" class="hint"></p>
-              <div id="feynman-source-note" class="feynman-source-note hidden"></div>
-              <label><span id="feynman-field-label"></span><textarea id="feynman-input"></textarea></label>
-              <div class="button-row">
-                <button type="button" id="feynman-prev-button" class="secondary">Previous</button>
-                <button type="button" id="feynman-next-button">Next</button>
-                <button type="button" id="feynman-reset-button" class="secondary">Reset</button>
+            <details id="feynman-editor-details" class="editor-disclosure">
+              <summary>
+                <span class="editor-disclosure-title">Start a Feynman record</span>
+                <span class="editor-disclosure-hint">Build understanding in four steps</span>
+              </summary>
+              <div class="editor-disclosure-body">
+                <div class="steps-bar" id="feynman-steps"></div>
+                <div class="feynman-editor">
+                  <h3 id="feynman-step-title"></h3>
+                  <p id="feynman-step-description" class="hint"></p>
+                  <div id="feynman-source-note" class="feynman-source-note hidden"></div>
+                  <label><span id="feynman-field-label"></span><textarea id="feynman-input"></textarea></label>
+                  <div class="button-row">
+                    <button type="button" id="feynman-prev-button" class="secondary">Previous</button>
+                    <button type="button" id="feynman-next-button">Next</button>
+                    <button type="button" id="feynman-reset-button" class="secondary">Reset</button>
+                  </div>
+                  <p id="feynman-message" class="message"></p>
+                </div>
               </div>
-              <p id="feynman-message" class="message"></p>
-            </div>
+            </details>
           </section>
           <section class="card">
             <h2>Feynman records</h2>
@@ -376,16 +388,23 @@ const APP_HTML = `
           <div id="project-dashboard-container" class="hidden"></div>
           <div id="projects-list-container">
           <section class="card">
-            <h2>Projects / research threads</h2>
-            <p class="hint">Group related daily tasks, paper notes, and Feynman entries under a named project. Work sessions inherit their project from the linked task.</p>
-            <form id="project-form" class="form">
-              <div class="two-cols">
-                <label>Name <input id="project-name-input" type="text" maxlength="100" placeholder="e.g. DiffusionPolicy" /></label>
-                <label>Color <input id="project-color-input" type="color" value="#6366f1" /></label>
+            <details id="project-editor-details" class="editor-disclosure">
+              <summary>
+                <span class="editor-disclosure-title">Add a project / research thread</span>
+                <span class="editor-disclosure-hint">Group tasks, papers, and Feynman records</span>
+              </summary>
+              <div class="editor-disclosure-body">
+                <p class="hint">Work sessions inherit their project from the linked task.</p>
+                <form id="project-form" class="form">
+                  <div class="two-cols">
+                    <label>Name <input id="project-name-input" type="text" maxlength="100" placeholder="e.g. DiffusionPolicy" /></label>
+                    <label>Color <input id="project-color-input" type="color" value="#6366f1" /></label>
+                  </div>
+                  <div class="button-row"><button type="submit">Add project</button></div>
+                </form>
               </div>
-              <div class="button-row"><button type="submit">Add project</button></div>
-              <p id="project-message" class="message"></p>
-            </form>
+            </details>
+            <p id="project-message" class="message"></p>
           </section>
           <section class="card">
             <h2>Your projects</h2>

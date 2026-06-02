@@ -21,6 +21,7 @@ const FEYNMAN_STEPS = [
 ] as const;
 
 let feynmanStepsEl: HTMLDivElement;
+let feynmanEditorDetails: HTMLDetailsElement;
 let feynmanStepTitle: HTMLHeadingElement;
 let feynmanStepDescription: HTMLParagraphElement;
 let feynmanFieldLabel: HTMLSpanElement;
@@ -172,6 +173,7 @@ export async function loadForEdit(entryId: number): Promise<void> {
   editedFeynmanId = entry.id;
   feynmanStep = 0;
   feynmanDraft = [entry.concept, entry.explanation, entry.gaps, entry.analogy];
+  feynmanEditorDetails.open = true;
   switchToViewFn?.("feynman");
   renderStep();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -179,6 +181,7 @@ export async function loadForEdit(entryId: number): Promise<void> {
 
 export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: string) => void): void {
   switchToViewFn = switchToView;
+  feynmanEditorDetails = document.querySelector<HTMLDetailsElement>("#feynman-editor-details")!;
   feynmanStepsEl = document.querySelector<HTMLDivElement>("#feynman-steps")!;
   feynmanStepTitle = document.querySelector<HTMLHeadingElement>("#feynman-step-title")!;
   feynmanStepDescription = document.querySelector<HTMLParagraphElement>("#feynman-step-description")!;
@@ -212,6 +215,7 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
         setMessage(feynmanMessage, "Feynman record updated.", "success");
       }
       clearDraft();
+      feynmanEditorDetails.open = false;
       await onRefreshNeeded();
     } catch (error) {
       console.error(error);
@@ -230,6 +234,7 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
     if (action === "edit") {
       editedFeynmanId = entry.id; feynmanStep = 0;
       feynmanDraft = [entry.concept, entry.explanation, entry.gaps, entry.analogy];
+      feynmanEditorDetails.open = true;
       switchToView("feynman"); renderStep(); window.scrollTo({ top: 0, behavior: "smooth" });
     } else if (action === "review") {
       try {

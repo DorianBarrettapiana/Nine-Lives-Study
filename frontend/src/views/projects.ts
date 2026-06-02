@@ -23,6 +23,7 @@ import {
 
 let listEl: HTMLDivElement;
 let formEl: HTMLFormElement;
+let projectEditorDetails: HTMLDetailsElement;
 let nameInput: HTMLInputElement;
 let colorInput: HTMLInputElement;
 let messageEl: HTMLParagraphElement;
@@ -278,6 +279,7 @@ export function init(onChanged?: () => Promise<void>): void {
   onChangedCb = onChanged ?? null;
   listEl = document.querySelector<HTMLDivElement>("#projects-list")!;
   formEl = document.querySelector<HTMLFormElement>("#project-form")!;
+  projectEditorDetails = document.querySelector<HTMLDetailsElement>("#project-editor-details")!;
   nameInput = document.querySelector<HTMLInputElement>("#project-name-input")!;
   colorInput = document.querySelector<HTMLInputElement>("#project-color-input")!;
   messageEl = document.querySelector<HTMLParagraphElement>("#project-message")!;
@@ -323,6 +325,7 @@ export function init(onChanged?: () => Promise<void>): void {
     try {
       await createProject({ name, color: colorInput.value || undefined });
       nameInput.value = "";
+      projectEditorDetails.open = false;
       // Don't clear color — most users want to keep their palette in mind.
       setMessage(messageEl, "Project created.", "success");
       notifyProjectsUpdated();

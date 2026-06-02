@@ -39,6 +39,7 @@ import { mountTagInput, refreshTagCache, type TagInputController } from "./tagIn
 
 let notesList: HTMLDivElement;
 let noteForm: HTMLFormElement;
+let noteEditorDetails: HTMLDetailsElement;
 let noteTitleInput: HTMLInputElement;
 let noteAuthorsInput: HTMLInputElement;
 let noteYearInput: HTMLInputElement;
@@ -92,6 +93,7 @@ function clearNoteForm(): void {
   void rerenderNoteProjectPicker();
   noteSubmitButton.textContent = "Add note";
   noteCancelButton.classList.add("hidden");
+  noteEditorDetails.open = false;
 }
 
 async function rerenderNoteProjectPicker(): Promise<void> {
@@ -291,6 +293,7 @@ async function refreshZoteroState(): Promise<void> {
 export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: string) => void): void {
   notesList = document.querySelector<HTMLDivElement>("#notes-list")!;
   noteForm = document.querySelector<HTMLFormElement>("#note-form")!;
+  noteEditorDetails = document.querySelector<HTMLDetailsElement>("#note-editor-details")!;
   noteTitleInput = document.querySelector<HTMLInputElement>("#note-title")!;
   noteAuthorsInput = document.querySelector<HTMLInputElement>("#note-authors")!;
   noteYearInput = document.querySelector<HTMLInputElement>("#note-year")!;
@@ -453,6 +456,7 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
       noteReadingStatus.value = note.reading_status;
       noteSubmitButton.textContent = "Update note";
       noteCancelButton.classList.remove("hidden");
+      noteEditorDetails.open = true;
       switchToView("notes");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else if (action === "read-today") {
