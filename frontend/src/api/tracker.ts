@@ -52,6 +52,9 @@ export interface DailyTaskCreate {
   project_id?: number | null;
   paper_note_id?: number | null;
   tag_names?: string[];
+  // When true (and no date is supplied), the task is created in the backlog
+  // (no planned_date) — it won't appear in any day's Today until scheduled.
+  unplanned?: boolean;
 }
 
 export interface DailyTaskUpdate {

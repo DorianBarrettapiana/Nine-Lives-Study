@@ -75,15 +75,18 @@ def get_stats(
         return (ts.astimezone(timezone.utc) + tz_delta).strftime("%Y-%m-%d")
 
     # --- Tasks per planning day: completion ratio includes unfinished work --
+    # Keyed on planned_date (authoritative scheduling day). Backlog tasks
+    # (planned_date NULL) aren't scheduled for any day, so they're excluded.
     task_rows = db.scalars(
         select(DailyTask)
         .where(DailyTask.user_id == user_id)
-        .where(DailyTask.task_date >= since)
-        .where(DailyTask.task_date <= today_local)
+        .where(DailyTask.planned_date.is_not(None))
+        .where(DailyTask.planned_date >= since)
+        .where(DailyTask.planned_date <= today_local)
     ).all()
     task_counts: dict[str, dict[str, int]] = {}
     for task in task_rows:
-        day = task.task_date.isoformat()
+        day = task.planned_date.isoformat()
         counts = task_counts.setdefault(day, {"total": 0, "done": 0})
         counts["total"] += 1
         if task.is_done:

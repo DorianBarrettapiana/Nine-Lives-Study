@@ -9,18 +9,28 @@ from app.api.routes import summaries
 from app.core.ai import SummaryResult, gather_weekly
 
 
-def test_unfinished_task_can_be_carried_forward_once(auth_client: TestClient):
+def test_unfinished_task_carry_forward_moves_in_place(auth_client: TestClient):
+    """Carry-forward re-schedules the existing row (move), it does not create
+    a copy — so the same task never shows up twice (e.g. inside a project)."""
     task = auth_client.post(
         "/daily/tasks", json={"text": "Revise introduction", "task_date": "2026-05-31"},
     ).json()
 
     first = auth_client.post(f"/daily/tasks/{task['id']}/carry-forward")
-    second = auth_client.post(f"/daily/tasks/{task['id']}/carry-forward")
-
-    assert first.status_code == 201
+    assert first.status_code == 200
+    assert first.json()["id"] == task["id"]
     assert first.json()["task_date"] == "2026-06-01"
-    assert second.status_code == 201
-    assert second.json()["id"] == first.json()["id"]
+    assert first.json()["planned_date"] == "2026-06-01"
+
+    # It has left its original day entirely (no duplicate left behind).
+    assert auth_client.get("/daily?date=2026-05-31").json()["total_count"] == 0
+    assert auth_client.get("/daily?date=2026-06-01").json()["total_count"] == 1
+
+    # Carrying again moves the same row one more day forward.
+    second = auth_client.post(f"/daily/tasks/{task['id']}/carry-forward")
+    assert second.status_code == 200
+    assert second.json()["id"] == task["id"]
+    assert second.json()["task_date"] == "2026-06-02"
 
 
 def test_completed_task_is_not_carried_forward(auth_client: TestClient):

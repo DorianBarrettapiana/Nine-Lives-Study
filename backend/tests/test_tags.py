@@ -205,16 +205,18 @@ def test_daily_task_update_replaces_tags(auth_client: TestClient):
     assert {t["name"] for t in r.json()["tag_list"]} == {"b"}
 
 
-def test_carry_forward_copies_tags(auth_client: TestClient):
+def test_carry_forward_keeps_tags(auth_client: TestClient):
     rid = auth_client.post("/daily/tasks", json={
         "text": "T", "tag_names": ["alpha"],
     }).json()["id"]
     r = auth_client.post(f"/daily/tasks/{rid}/carry-forward")
-    assert r.status_code == 201
+    # Carry-forward moves the row (200) rather than copying it (201), so the
+    # same task keeps its tag and there is still only one tagged task.
+    assert r.status_code == 200
+    assert r.json()["id"] == rid
     assert {t["name"] for t in r.json()["tag_list"]} == {"alpha"}
-    # Source still has its tag too.
     by_name = {t["name"]: t for t in auth_client.get("/tags").json()}
-    assert by_name["alpha"]["daily_task_count"] == 2
+    assert by_name["alpha"]["daily_task_count"] == 1
 
 
 def test_tag_items_drilldown_covers_all_types(auth_client: TestClient):

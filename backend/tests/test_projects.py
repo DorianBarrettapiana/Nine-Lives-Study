@@ -315,3 +315,49 @@ def test_dashboard_saves_context_and_surfaces_reading_insight(auth_client: TestC
     assert body["project"]["milestone"] == "Draft related work"
     assert body["project"]["advisor_meeting_date"] == "2026-06-12"
     assert body["recent_insights"][0]["next_step"] == "Compare scaled and unscaled logits."
+
+
+def test_backlog_task_attached_to_project_not_in_today(auth_client: TestClient):
+    """A task created from a project as 'unplanned' belongs to the project
+    but has no planned_date, so it stays out of every day's Today list."""
+    from datetime import date
+
+    pid = _make_project(auth_client, "Backlog thread")
+    r = auth_client.post(
+        "/daily/tasks",
+        json={"text": "someday", "project_id": pid, "unplanned": True},
+    )
+    assert r.status_code == 201, r.text
+    task = r.json()
+    assert task["planned_date"] is None
+    assert task["project_id"] == pid
+
+    # Absent from today's list...
+    today_state = auth_client.get("/daily").json()
+    assert task["id"] not in [t["id"] for t in today_state["tasks"]]
+
+    # ...but visible in the project's open work.
+    body = auth_client.get(f"/projects/{pid}/dashboard").json()
+    assert task["id"] in [t["id"] for t in body["open_tasks"]]
+
+    # Scheduling it (set planned_date) surfaces it in that day's Today.
+    auth_client.patch(f"/daily/tasks/{task['id']}", json={"planned_date": date.today().isoformat()})
+    today_state = auth_client.get("/daily").json()
+    assert task["id"] in [t["id"] for t in today_state["tasks"]]
+
+
+def test_carry_forward_does_not_duplicate_task_in_project(auth_client: TestClient):
+    """Regression: carrying an unfinished task to the next day must move it,
+    not copy it — otherwise the project shows the same task twice."""
+    pid = _make_project(auth_client, "No dupes")
+    task = auth_client.post(
+        "/daily/tasks",
+        json={"text": "carry me", "project_id": pid, "task_date": "2026-05-31"},
+    ).json()
+
+    auth_client.post(f"/daily/tasks/{task['id']}/carry-forward")
+
+    body = auth_client.get(f"/projects/{pid}/dashboard").json()
+    matching = [t for t in body["open_tasks"] if t["text"] == "carry me"]
+    assert len(matching) == 1
+    assert body["open_tasks_count"] == 1

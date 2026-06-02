@@ -73,11 +73,12 @@ def get_xp(
     #   4. At least 1 completed work session today (today_minutes > 0).
     today_local_date = (datetime.now(timezone.utc) + timedelta(minutes=tz_offset)).date()
 
-    # Tasks: DailyTask has an explicit task_date — query directly.
+    # Tasks scheduled for today, keyed on planned_date (authoritative).
+    # Backlog tasks (planned_date NULL) don't count toward today's plan.
     task_rows = db.execute(
         select(DailyTask.is_done)
         .where(DailyTask.user_id == current_user.id)
-        .where(DailyTask.task_date == today_local_date)
+        .where(DailyTask.planned_date == today_local_date)
     ).all()
     total_today = len(task_rows)
     undone_today = sum(1 for (is_done,) in task_rows if not is_done)

@@ -110,7 +110,9 @@ def get_daily_state(
     tasks_statement = (
         select(DailyTask)
         .where(DailyTask.user_id == current_user.id)
-        .where(DailyTask.task_date == day)
+        # planned_date is authoritative for "shows up on day X". Backlog
+        # tasks (planned_date NULL) are intentionally excluded here.
+        .where(DailyTask.planned_date == day)
         # Manual sort_order first (drag-reorder), creation time as tie-breaker.
         .order_by(DailyTask.sort_order.asc(), DailyTask.created_at.asc())
     )
@@ -142,20 +144,35 @@ def create_daily_task(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DailyTaskRead:
-    # Dual-write date semantics: the canonical "when do I work on this"
-    # is `planned_date`. Old clients still send `task_date`; new clients
-    # can send either / both. Resolution order:
-    #   explicit planned_date  >  explicit task_date  >  today
-    # Both columns are written so legacy queries keep functioning.
-    day = payload.planned_date or resolve_target_date(payload.task_date)
+    # Scheduling semantics. `planned_date` is the canonical "when do I work
+    # on this" and now drives every day-scoped query (Today, stats, daily
+    # goal). Resolution order:
+    #   explicit planned_date / task_date  >  unplanned backlog  >  today
+    # A backlog task (planned_date NULL) is attached to a project but doesn't
+    # surface in any day's list until it gets scheduled. `task_date` is the
+    # legacy NOT-NULL column; we mirror planned_date into it (falling back to
+    # today for backlog rows so the column always has a value).
+    explicit_day = payload.planned_date or payload.task_date
+    if explicit_day is not None:
+        planned_day: date | None = explicit_day
+    elif payload.unplanned:
+        planned_day = None
+    else:
+        planned_day = date.today()
+    legacy_task_date = planned_day or date.today()
+
     _validate_paper_note_link(payload.paper_note_id, current_user, db)
-    # New tasks land at the bottom of the day's list. Compute as
-    # (current max sort_order for the day) + 1, defaulting to 1.0 for the
-    # very first task.
+    # New tasks land at the bottom of their scheduling group (the day they're
+    # planned for, or the backlog). Compute (max sort_order in group) + 1.
+    group_filter = (
+        DailyTask.planned_date == planned_day
+        if planned_day is not None
+        else DailyTask.planned_date.is_(None)
+    )
     max_so = db.scalar(
         select(DailyTask.sort_order)
         .where(DailyTask.user_id == current_user.id)
-        .where(DailyTask.task_date == day)
+        .where(group_filter)
         .order_by(DailyTask.sort_order.desc())
         .limit(1)
     )
@@ -163,8 +180,8 @@ def create_daily_task(
     _validate_project_id(payload.project_id, current_user, db)
     task = DailyTask(
         user_id=current_user.id,
-        task_date=day,
-        planned_date=day,
+        task_date=legacy_task_date,
+        planned_date=planned_day,
         due_date=payload.due_date,
         text=payload.text,
         is_done=False,
@@ -276,58 +293,39 @@ def list_upcoming_tasks(
     return _serialize_tasks_with_tags(list(db.scalars(stmt).all()), current_user, db)
 
 
-@router.post("/tasks/{task_id}/carry-forward", response_model=DailyTaskRead, status_code=201)
+@router.post("/tasks/{task_id}/carry-forward", response_model=DailyTaskRead)
 def carry_daily_task_forward(
     task_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DailyTaskRead:
-    """Copy an unfinished task to the following day, without duplicates."""
+    """Move an unfinished task to the following day.
+
+    Re-schedules the existing row (planned_date += 1 day) rather than
+    creating a copy. This keeps one row per logical task, so a task carried
+    over to the next day no longer shows up twice inside its project. Tags
+    ride along automatically since the row itself is preserved.
+    """
     task = _get_owned_task(task_id, current_user, db)
     if task.is_done:
         raise HTTPException(status_code=400, detail="Completed tasks do not need to be carried forward.")
-    target_date = task.task_date + timedelta(days=1)
-    existing = db.scalar(
-        select(DailyTask)
-        .where(DailyTask.user_id == current_user.id)
-        .where(DailyTask.task_date == target_date)
-        .where(DailyTask.text == task.text)
-    )
-    if existing is not None:
-        return _serialize_tasks_with_tags([existing], current_user, db)[0]
+    base_date = task.planned_date or task.task_date
+    target_date = base_date + timedelta(days=1)
 
     max_so = db.scalar(
         select(DailyTask.sort_order)
         .where(DailyTask.user_id == current_user.id)
-        .where(DailyTask.task_date == target_date)
+        .where(DailyTask.planned_date == target_date)
+        .where(DailyTask.id != task.id)
         .order_by(DailyTask.sort_order.desc())
         .limit(1)
     )
-    copied = DailyTask(
-        user_id=current_user.id,
-        task_date=target_date,
-        planned_date=target_date,
-        due_date=task.due_date,
-        text=task.text,
-        is_done=False,
-        sort_order=(max_so or 0.0) + 1.0,
-        project_id=task.project_id,
-        paper_note_id=task.paper_note_id,
-    )
-    db.add(copied)
-    db.flush()
-    # Carry the tags along too — same conceptual task moving forward.
-    src_tag_map = fetch_tags_for_items(
-        current_user.id, TAG_ITEM_DAILY_TASK, [task.id], db,
-    )
-    src_names = [t.name for t in src_tag_map.get(task.id, [])]
-    if src_names:
-        replace_item_tags(
-            current_user.id, TAG_ITEM_DAILY_TASK, copied.id, src_names, db,
-        )
+    task.planned_date = target_date
+    task.task_date = target_date
+    task.sort_order = (max_so or 0.0) + 1.0
     db.commit()
-    db.refresh(copied)
-    return _serialize_tasks_with_tags([copied], current_user, db)[0]
+    db.refresh(task)
+    return _serialize_tasks_with_tags([task], current_user, db)[0]
 
 
 @router.put("/log", response_model=DailyLogRead)

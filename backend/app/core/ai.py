@@ -137,12 +137,13 @@ def gather_weekly(
             continue
         minutes_by_day[ts.date().isoformat()] += ev.amount
 
-    # Daily tasks completed in the window (carry-over completion counts).
+    # Daily tasks planned in the window (carry-over completion counts).
+    # Keyed on planned_date; backlog tasks (NULL) are excluded by the range.
     tasks = db.scalars(
         select(DailyTask)
         .where(DailyTask.user_id == user_id)
-        .where(DailyTask.task_date >= week_start_utc.date())
-        .where(DailyTask.task_date < week_end_utc.date())
+        .where(DailyTask.planned_date >= week_start_utc.date())
+        .where(DailyTask.planned_date < week_end_utc.date())
     ).all()
     tasks_done = sum(1 for t in tasks if t.is_done)
     tasks_total = len(tasks)
