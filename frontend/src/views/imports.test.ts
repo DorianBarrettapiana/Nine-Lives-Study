@@ -20,6 +20,11 @@ describe("view modules import cleanly", () => {
     expect(typeof mod.refresh).toBe("function");
   });
 
+  it("reading insight", async () => {
+    const mod = await import("./reading-insight");
+    expect(typeof mod.initReadingInsightPrompts).toBe("function");
+  });
+
   it("feynman", async () => {
     const mod = await import("./feynman");
     expect(typeof mod.init).toBe("function");

@@ -11,9 +11,9 @@ NULL via ON DELETE SET NULL: the user's tasks/notes don't vanish when
 they delete a project; they just become unassigned.
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -41,6 +41,10 @@ class Project(Base):
     # Optional 7-char hex (e.g. "#4f46e5") for the project chip in the UI.
     # Empty string = picker assigns a stable color by hash of the name.
     color: Mapped[str] = mapped_column(String(7), default="", nullable=False)
+    research_question: Mapped[str] = mapped_column(Text, default="", server_default="", nullable=False)
+    milestone: Mapped[str] = mapped_column(Text, default="", server_default="", nullable=False)
+    advisor_meeting_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    blocker: Mapped[str] = mapped_column(Text, default="", server_default="", nullable=False)
     # Archived projects stay in the DB and on existing tasks/notes but are
     # hidden from the active picker. Lets the user wind down a thread
     # without losing history.

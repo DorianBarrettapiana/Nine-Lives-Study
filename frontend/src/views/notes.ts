@@ -147,6 +147,16 @@ export function render(): void {
     const abstractHtml = note.abstract
       ? `<details class="note-abstract"><summary>Abstract</summary><p>${escapeHtml(note.abstract)}</p></details>`
       : "";
+    const latestInsight = note.latest_insight;
+    const insightHtml = latestInsight
+      ? `<div class="note-insight">
+          <strong>Latest reading insight</strong>
+          ${latestInsight.key_idea ? `<p>${escapeHtml(latestInsight.key_idea)}</p>` : ""}
+          ${latestInsight.question ? `<p class="hint">Question: ${escapeHtml(latestInsight.question)}</p>` : ""}
+          ${latestInsight.next_step ? `<p class="hint">Next: ${escapeHtml(latestInsight.next_step)}</p>` : ""}
+          ${note.insight_count > 1 ? `<span class="hint">${note.insight_count} insights captured</span>` : ""}
+        </div>`
+      : "";
     return `
       <article class="note-card">
         <div class="note-header">
@@ -173,6 +183,7 @@ export function render(): void {
         ${note.key_points ? `<p class="note-text"><strong>Key ideas:</strong> ${escapeHtml(note.key_points)}</p>` : ""}
         ${note.questions ? `<p class="note-text"><strong>Questions:</strong> ${escapeHtml(note.questions)}</p>` : ""}
         ${note.feynman_entry_id ? `<p class="note-meta"><strong>Feynman link:</strong> ${escapeHtml(feynmanEntries.find((entry) => entry.id === note.feynman_entry_id)?.concept ?? "Linked record")}</p>` : ""}
+        ${insightHtml}
         ${abstractHtml}
         ${tags ? `<div class="tags">${tags}</div>` : ""}
       </article>`;
@@ -368,6 +379,7 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
   void rerenderNoteProjectPicker();
   // Re-render cards when project metadata changes so chips reflect renames.
   window.addEventListener("projects:updated", () => render());
+  window.addEventListener("paper-insights:updated", () => void refresh());
 }
 
 // ---------------------------------------------------------------------------

@@ -60,6 +60,19 @@ def test_rename_project(auth_client: TestClient):
     assert r.json()["name"] == "New"
 
 
+def test_project_dashboard_context_can_be_saved(auth_client: TestClient):
+    pid = _make_project(auth_client, "Thesis")
+    r = auth_client.patch(f"/projects/{pid}", json={
+        "research_question": "Which intervention improves calibration?",
+        "milestone": "Draft methods section",
+        "advisor_meeting_date": "2026-06-12",
+        "blocker": "Need baseline results",
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["research_question"] == "Which intervention improves calibration?"
+    assert r.json()["advisor_meeting_date"] == "2026-06-12"
+
+
 def test_cross_user_isolation(auth_client: TestClient, second_auth_client: TestClient):
     pid = _make_project(auth_client, "Owner's")
     # Other user cannot read / patch / delete by id
@@ -210,3 +223,38 @@ def test_stats_time_per_project_aggregates_via_linked_task(auth_client: TestClie
     assert by_name.get("(no project)", 0) == 25
     # "(no project)" sits at the tail of the sorted list.
     assert rows[-1]["name"] == "(no project)"
+
+
+def test_project_dashboard_collects_steering_signals(auth_client: TestClient):
+    pid = _make_project(auth_client, "Survey")
+    note = auth_client.post("/notes", json={
+        "title": "Attention Is All You Need", "authors": "", "year": 2017,
+        "key_points": "", "questions": "", "tags": "", "project_id": pid,
+    }).json()
+    reading_task = auth_client.post(f"/notes/{note['id']}/add-to-today").json()
+    auth_client.post("/daily/tasks", json={"text": "Draft related work", "project_id": pid})
+    auth_client.post("/feynman", json={
+        "concept": "Self-attention", "explanation": "", "gaps": "Why scale logits?",
+        "analogy": "", "project_id": pid,
+    })
+    session = auth_client.post("/pomodoro", json={
+        "session_type": "work", "duration_minutes": 25,
+        "linked_task_id": reading_task["id"],
+    }).json()
+    auth_client.patch(f"/pomodoro/{session['id']}/complete", json={})
+    auth_client.post(f"/notes/{note['id']}/insights", json={
+        "key_idea": "Attention replaces recurrence with token interactions.",
+        "question": "How much does scaling affect stability?",
+        "next_step": "Compare scaled and unscaled logits.",
+    })
+
+    r = auth_client.get(f"/projects/{pid}/dashboard")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["weekly_focus_minutes"] == 25
+    assert {task["text"] for task in body["open_tasks"]} == {
+        "Read: Attention Is All You Need", "Draft related work",
+    }
+    assert body["reading_queue"][0]["reading_minutes"] == 25
+    assert body["unresolved_gaps"][0]["concept"] == "Self-attention"
+    assert body["recent_insights"][0]["next_step"] == "Compare scaled and unscaled logits."

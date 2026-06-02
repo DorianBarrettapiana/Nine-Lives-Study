@@ -406,7 +406,7 @@ async function onComplete(): Promise<void> {
 
   if (activeSessionId !== null) {
     try {
-      await completeSession(activeSessionId);
+      const completedSession = await completeSession(activeSessionId);
       const earnedXp = modeDurationSeconds(finished) / 60;
       const msg = finished === "work"
         ? `Work session done! +${earnedXp} XP`
@@ -415,6 +415,11 @@ async function onComplete(): Promise<void> {
       // doesn't carry stale text into the next session.
       flashMessage(pomodoroMessage, msg, "success");
       await refresh();  // refresh the session list (used for stats counting too)
+      if (finished === "work" && completedSession.linked_task_id !== null) {
+        window.dispatchEvent(new CustomEvent("reading-focus:completed", {
+          detail: { linkedTaskId: completedSession.linked_task_id },
+        }));
+      }
     } catch (error) {
       console.error(error);
       setMessage(pomodoroMessage, "Could not save completed session.", "error");

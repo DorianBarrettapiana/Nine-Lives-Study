@@ -9,10 +9,12 @@
 import {
   createProject,
   deleteProject,
+  getProjectDashboard,
   updateProject,
+  type ProjectDashboard,
   type ProjectRead,
 } from "../api/projects";
-import { escapeHtml, setMessage } from "../utils";
+import { escapeHtml, fmtMinutes, setMessage } from "../utils";
 import {
   getCachedProjects,
   notifyProjectsUpdated,
@@ -24,7 +26,12 @@ let formEl: HTMLFormElement;
 let nameInput: HTMLInputElement;
 let colorInput: HTMLInputElement;
 let messageEl: HTMLParagraphElement;
+let dashboardCardEl: HTMLElement;
+let dashboardContentEl: HTMLDivElement;
+let dashboardMessageEl: HTMLParagraphElement;
 let onChangedCb: (() => Promise<void>) | null = null;
+let selectedDashboardId: number | null = null;
+let dashboard: ProjectDashboard | null = null;
 
 function render(): void {
   const projects = getCachedProjects();
@@ -58,6 +65,7 @@ function renderRow(p: ProjectRead): string {
       <span class="project-swatch"${swatchStyle}></span>
       <span class="project-name" data-action="edit-name" title="Double-click to rename">${escapeHtml(p.name)}</span>
       <div class="project-row-actions">
+        <button type="button" class="link-btn" data-action="dashboard">Dashboard</button>
         <button type="button" class="link-btn" data-action="toggle-archive">
           ${p.is_archived ? "Unarchive" : "Archive"}
         </button>
@@ -71,9 +79,103 @@ export async function refresh(): Promise<void> {
   try {
     await refreshProjects(true);
     render();
+    if (selectedDashboardId !== null) await loadDashboard(selectedDashboardId);
   } catch (e) {
     console.warn("refreshProjects failed", e);
     if (messageEl) setMessage(messageEl, "Could not load projects.", "error");
+  }
+}
+
+function listOrEmpty(items: string[], empty: string): string {
+  return items.length > 0 ? items.join("") : `<div class="empty-state compact">${escapeHtml(empty)}</div>`;
+}
+
+function escapeAttr(value: string): string {
+  return escapeHtml(value).replace(/"/g, "&quot;");
+}
+
+function renderDashboard(): void {
+  if (!dashboard) return;
+  const p = dashboard.project;
+  dashboardCardEl.classList.remove("hidden");
+  dashboardContentEl.innerHTML = `
+    <div class="section-header">
+      <div>
+        <p class="eyebrow">Research thread</p>
+        <h2>${escapeHtml(p.name)} dashboard</h2>
+      </div>
+      <button type="button" class="secondary compact-btn" data-dashboard-action="close">Close</button>
+    </div>
+    <div class="project-dashboard-stats">
+      <div class="stat-card"><strong>${fmtMinutes(dashboard.weekly_focus_minutes)}</strong><span>focused this week</span></div>
+      <div class="stat-card"><strong>${dashboard.open_tasks.length}</strong><span>open tasks</span></div>
+      <div class="stat-card"><strong>${dashboard.reading_queue.length}</strong><span>papers in queue</span></div>
+      <div class="stat-card"><strong>${dashboard.unresolved_gaps.length}</strong><span>open gaps</span></div>
+    </div>
+    <form id="project-dashboard-form" class="form project-context-form">
+      <label>Current research question
+        <textarea id="project-research-question" placeholder="What are you trying to answer right now?">${escapeHtml(p.research_question)}</textarea>
+      </label>
+      <label>Current milestone
+        <input id="project-milestone" type="text" value="${escapeAttr(p.milestone)}" placeholder="e.g. Draft methods section" />
+      </label>
+      <div class="two-cols">
+        <label>Next advisor meeting
+          <input id="project-advisor-meeting" type="date" value="${escapeAttr(p.advisor_meeting_date ?? "")}" />
+        </label>
+        <label>Current blocker
+          <input id="project-blocker" type="text" value="${escapeAttr(p.blocker)}" placeholder="What is slowing this thread down?" />
+        </label>
+      </div>
+      <div class="button-row"><button type="submit">Save research context</button></div>
+    </form>
+    <div class="project-dashboard-grid">
+      <section>
+        <h3>Open tasks</h3>
+        ${listOrEmpty(dashboard.open_tasks.map((task) => `
+          <div class="dashboard-list-row">
+            <span>${escapeHtml(task.text)}</span>
+            ${task.due_date ? `<span class="hint">Due ${escapeHtml(task.due_date)}</span>` : ""}
+          </div>`), "No open task in this thread.")}
+      </section>
+      <section>
+        <h3>Reading queue</h3>
+        ${listOrEmpty(dashboard.reading_queue.map((note) => `
+          <div class="dashboard-list-row">
+            <span>${escapeHtml(note.title)}</span>
+            <span class="hint">${escapeHtml(note.reading_status)} · ${fmtMinutes(note.reading_minutes)}</span>
+          </div>`), "No paper waiting for attention.")}
+      </section>
+      <section>
+        <h3>Unresolved Feynman gaps</h3>
+        ${listOrEmpty(dashboard.unresolved_gaps.map((gap) => `
+          <div class="dashboard-list-row stacked">
+            <strong>${escapeHtml(gap.concept)}</strong>
+            <span class="hint">${escapeHtml(gap.gaps)}</span>
+          </div>`), "No unresolved gap recorded.")}
+      </section>
+      <section>
+        <h3>Recent reading insights</h3>
+        ${listOrEmpty(dashboard.recent_insights.map((insight) => `
+          <div class="dashboard-list-row stacked">
+            <strong>${escapeHtml(insight.key_idea || insight.question || insight.next_step)}</strong>
+            ${insight.next_step ? `<span class="hint">Next: ${escapeHtml(insight.next_step)}</span>` : ""}
+          </div>`), "Complete a reading focus to capture an insight.")}
+      </section>
+    </div>
+  `;
+}
+
+async function loadDashboard(projectId: number): Promise<void> {
+  selectedDashboardId = projectId;
+  dashboardCardEl.classList.remove("hidden");
+  dashboardContentEl.innerHTML = `<div class="hint">Loading dashboard...</div>`;
+  try {
+    dashboard = await getProjectDashboard(projectId);
+    renderDashboard();
+  } catch (e) {
+    console.error(e);
+    setMessage(dashboardMessageEl, "Could not load project dashboard.", "error");
   }
 }
 
@@ -128,6 +230,9 @@ export function init(onChanged?: () => Promise<void>): void {
   nameInput = document.querySelector<HTMLInputElement>("#project-name-input")!;
   colorInput = document.querySelector<HTMLInputElement>("#project-color-input")!;
   messageEl = document.querySelector<HTMLParagraphElement>("#project-message")!;
+  dashboardCardEl = document.querySelector<HTMLElement>("#project-dashboard-card")!;
+  dashboardContentEl = document.querySelector<HTMLDivElement>("#project-dashboard-content")!;
+  dashboardMessageEl = document.querySelector<HTMLParagraphElement>("#project-dashboard-message")!;
 
   formEl.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -169,7 +274,9 @@ export function init(onChanged?: () => Promise<void>): void {
     const project = getCachedProjects().find((p) => p.id === id);
     if (!project) return;
 
-    if (action === "toggle-archive") {
+    if (action === "dashboard") {
+      await loadDashboard(id);
+    } else if (action === "toggle-archive") {
       try {
         await updateProject(id, { is_archived: !project.is_archived });
         notifyProjectsUpdated();
@@ -187,6 +294,11 @@ export function init(onChanged?: () => Promise<void>): void {
       )) return;
       try {
         await deleteProject(id);
+        if (selectedDashboardId === id) {
+          selectedDashboardId = null;
+          dashboard = null;
+          dashboardCardEl.classList.add("hidden");
+        }
         notifyProjectsUpdated();
         await refresh();
         await onChangedCb?.();
@@ -195,5 +307,42 @@ export function init(onChanged?: () => Promise<void>): void {
         setMessage(messageEl, "Could not delete project.", "error");
       }
     }
+  });
+
+  dashboardContentEl.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || target.dataset.dashboardAction !== "close") return;
+    selectedDashboardId = null;
+    dashboard = null;
+    dashboardCardEl.classList.add("hidden");
+  });
+
+  dashboardContentEl.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (selectedDashboardId === null) return;
+    const researchQuestion = dashboardContentEl.querySelector<HTMLTextAreaElement>("#project-research-question")!;
+    const milestone = dashboardContentEl.querySelector<HTMLInputElement>("#project-milestone")!;
+    const advisorMeeting = dashboardContentEl.querySelector<HTMLInputElement>("#project-advisor-meeting")!;
+    const blocker = dashboardContentEl.querySelector<HTMLInputElement>("#project-blocker")!;
+    try {
+      await updateProject(selectedDashboardId, {
+        research_question: researchQuestion.value.trim(),
+        milestone: milestone.value.trim(),
+        advisor_meeting_date: advisorMeeting.value || null,
+        blocker: blocker.value.trim(),
+      });
+      setMessage(dashboardMessageEl, "Research context saved.", "success");
+      notifyProjectsUpdated();
+      await refreshProjects(true);
+      render();
+      await loadDashboard(selectedDashboardId);
+      await onChangedCb?.();
+    } catch (e) {
+      console.error(e);
+      setMessage(dashboardMessageEl, "Could not save research context.", "error");
+    }
+  });
+  window.addEventListener("paper-insights:updated", () => {
+    if (selectedDashboardId !== null) void loadDashboard(selectedDashboardId);
   });
 }

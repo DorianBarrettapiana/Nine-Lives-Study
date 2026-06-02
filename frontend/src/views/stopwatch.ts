@@ -244,6 +244,11 @@ async function onEndClick(): Promise<void> {
       flashMessage(messageEl, `Session ended. +${minutes} XP`, "success");
       // Reuse the pomodoro completion bus: bounce the cat + refresh XP/streak.
       window.dispatchEvent(new CustomEvent("cat:cheer"));
+      if (finished.linked_task_id !== null) {
+        window.dispatchEvent(new CustomEvent("reading-focus:completed", {
+          detail: { linkedTaskId: finished.linked_task_id },
+        }));
+      }
     } else {
       flashMessage(messageEl, "Session ended (under 1 min, no XP).", "neutral");
     }

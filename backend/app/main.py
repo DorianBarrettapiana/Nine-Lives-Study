@@ -32,6 +32,7 @@ from app.models.feynman_entry import FeynmanEntry  # noqa: F401
 from app.models.friend_cheer import FriendCheer  # noqa: F401
 from app.models.friendship import Friendship  # noqa: F401
 from app.models.mood_entry import MoodEntry  # noqa: F401
+from app.models.paper_insight import PaperInsight  # noqa: F401
 from app.models.paper_note import PaperNote  # noqa: F401
 from app.models.pomodoro_session import PomodoroSession  # noqa: F401
 from app.models.project import Project  # noqa: F401

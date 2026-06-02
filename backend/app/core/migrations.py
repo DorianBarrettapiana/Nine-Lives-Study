@@ -64,6 +64,11 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     ("daily_tasks",     "planned_date",            "DATE"),
     ("daily_tasks",     "due_date",                "DATE"),
     ("daily_logs",      "main_goal_task_id",       "INTEGER"),
+    # Project dashboard context fields.
+    ("projects",        "research_question",        "TEXT NOT NULL DEFAULT ''"),
+    ("projects",        "milestone",                "TEXT NOT NULL DEFAULT ''"),
+    ("projects",        "advisor_meeting_date",     "DATE"),
+    ("projects",        "blocker",                  "TEXT NOT NULL DEFAULT ''"),
 ]
 
 # Backfill completed pomodoro work sessions into xp_events so that stats

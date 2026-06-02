@@ -23,6 +23,7 @@ import * as StatsView from "./views/stats";
 import * as StopwatchView from "./views/stopwatch";
 import * as FriendsView from "./views/friends";
 import * as TodayView from "./views/today";
+import { initReadingInsightPrompts } from "./views/reading-insight";
 
 type AppView = "today" | "notes" | "feynman" | "pomodoro" | "stats" | "mood" | "projects" | "friends";
 
@@ -362,6 +363,10 @@ const APP_HTML = `
             <h2>Your projects</h2>
             <div id="projects-list" class="projects-list"></div>
           </section>
+          <section class="card hidden" id="project-dashboard-card">
+            <div id="project-dashboard-content"></div>
+            <p id="project-dashboard-message" class="message"></p>
+          </section>
         </div>
 
         <div id="friends-view" class="hidden">
@@ -608,6 +613,7 @@ function mountApp(user: UserRead): void {
     async () => { await NotesView.refresh(); await StatsView.refresh(); },
     (v) => switchView(views, v as AppView),
   );
+  initReadingInsightPrompts();
   FeynmanView.init(
     async () => { await FeynmanView.refresh(); await StatsView.refresh(); },
     (v) => switchView(views, v as AppView),
