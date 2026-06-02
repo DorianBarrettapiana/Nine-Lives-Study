@@ -1,6 +1,7 @@
 """Tests for milestone backplanning (C: parent_milestone_id + suggest + bulk-create)."""
 
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -215,3 +216,121 @@ def test_milestone_read_includes_parent_field(auth_client: TestClient):
     m = _make_parent(auth_client, "Solo", weeks_out=4)
     assert "parent_milestone_id" in m
     assert m["parent_milestone_id"] is None
+
+
+# ---------------------------------------------------------------------------
+# LLM path — gated on ai_opt_in + ANTHROPIC_API_KEY, falls back to rules
+# ---------------------------------------------------------------------------
+
+
+def _enable_ai(client: TestClient) -> None:
+    """Flip the user's AI opt-in via the /summaries/opt-in endpoint."""
+    r = client.post("/summaries/opt-in", json={"opted_in": True})
+    assert r.status_code == 200, r.text
+
+
+def test_suggestions_use_llm_when_opted_in_and_configured(auth_client: TestClient):
+    _enable_ai(auth_client)
+    parent = _make_parent(auth_client, "NeurIPS abstract", weeks_out=6)
+    parent_due = date.fromisoformat(parent["due_date"])
+    fake_items = [
+        {"title": "AI: Outline", "due_date": (date.today() + timedelta(days=10)).isoformat()},
+        {"title": "AI: Draft", "due_date": (date.today() + timedelta(days=20)).isoformat()},
+        {"title": "AI: Submit", "due_date": (parent_due - timedelta(days=2)).isoformat()},
+    ]
+    with patch("app.core.ai.is_configured", return_value=True), \
+         patch("app.core.ai.suggest_backplan_via_llm", return_value=fake_items) as mock_ai:
+        r = auth_client.get(f"/milestones/{parent['id']}/suggest-children")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["source"] == "llm"
+    titles = [s["title"] for s in body["suggestions"]]
+    assert titles == ["AI: Outline", "AI: Draft", "AI: Submit"]
+    assert all(s["template_hint"] == "llm" for s in body["suggestions"])
+    mock_ai.assert_called_once()
+
+
+def test_suggestions_fall_back_to_rules_when_llm_returns_none(auth_client: TestClient):
+    _enable_ai(auth_client)
+    parent = _make_parent(auth_client, "NeurIPS abstract", weeks_out=6)
+    with patch("app.core.ai.is_configured", return_value=True), \
+         patch("app.core.ai.suggest_backplan_via_llm", return_value=None):
+        r = auth_client.get(f"/milestones/{parent['id']}/suggest-children")
+    body = r.json()
+    assert body["source"] == "rules"
+    assert body["suggestions"]  # rules engine still produced items
+
+
+def test_suggestions_skip_llm_when_not_opted_in(auth_client: TestClient):
+    parent = _make_parent(auth_client, "NeurIPS abstract", weeks_out=6)
+    # is_configured = True but the user hasn't opted in → don't call AI.
+    with patch("app.core.ai.is_configured", return_value=True), \
+         patch("app.core.ai.suggest_backplan_via_llm") as mock_ai:
+        r = auth_client.get(f"/milestones/{parent['id']}/suggest-children")
+    assert r.json()["source"] == "rules"
+    mock_ai.assert_not_called()
+
+
+def test_force_rules_overrides_llm(auth_client: TestClient):
+    _enable_ai(auth_client)
+    parent = _make_parent(auth_client, "Abstract", weeks_out=6)
+    with patch("app.core.ai.is_configured", return_value=True), \
+         patch("app.core.ai.suggest_backplan_via_llm") as mock_ai:
+        r = auth_client.get(f"/milestones/{parent['id']}/suggest-children?force_rules=true")
+    assert r.json()["source"] == "rules"
+    mock_ai.assert_not_called()
+
+
+def test_llm_items_outside_window_are_dropped(auth_client: TestClient):
+    _enable_ai(auth_client)
+    parent = _make_parent(auth_client, "Abstract", weeks_out=4)
+    parent_due = date.fromisoformat(parent["due_date"])
+    fake_items = [
+        # Past
+        {"title": "Past", "due_date": (date.today() - timedelta(days=1)).isoformat()},
+        # On parent date — must be strictly before
+        {"title": "Collide", "due_date": parent_due.isoformat()},
+        # After parent
+        {"title": "After", "due_date": (parent_due + timedelta(days=3)).isoformat()},
+        # Two valid items — minimum for the LLM path to be accepted
+        {"title": "OK 1", "due_date": (date.today() + timedelta(days=7)).isoformat()},
+        {"title": "OK 2", "due_date": (parent_due - timedelta(days=2)).isoformat()},
+    ]
+    with patch("app.core.ai.is_configured", return_value=True), \
+         patch("app.core.ai.suggest_backplan_via_llm", return_value=fake_items):
+        r = auth_client.get(f"/milestones/{parent['id']}/suggest-children")
+    body = r.json()
+    assert body["source"] == "llm"
+    titles = [s["title"] for s in body["suggestions"]]
+    assert titles == ["OK 1", "OK 2"]
+
+
+def test_llm_degenerate_response_falls_back(auth_client: TestClient):
+    """If <2 LLM items pass validation, fall back to rules rather than
+    showing the user a one-item list with the LLM badge."""
+    _enable_ai(auth_client)
+    parent = _make_parent(auth_client, "Abstract", weeks_out=6)
+    parent_due = date.fromisoformat(parent["due_date"])
+    fake_items = [
+        # Only one valid item — caller treats as "degenerate, use rules"
+        {"title": "Lonely", "due_date": (parent_due - timedelta(days=2)).isoformat()},
+        {"title": "Bad date", "due_date": "not-a-date"},
+    ]
+    with patch("app.core.ai.is_configured", return_value=True), \
+         patch("app.core.ai.suggest_backplan_via_llm", return_value=fake_items):
+        r = auth_client.get(f"/milestones/{parent['id']}/suggest-children")
+    assert r.json()["source"] == "rules"
+
+
+def test_parse_backplan_json_strips_code_fence():
+    from app.core.ai import _parse_backplan_json
+    raw = '```json\n{"suggestions": [{"title": "T", "due_date": "2026-06-15"}]}\n```'
+    items = _parse_backplan_json(raw)
+    assert items == [{"title": "T", "due_date": "2026-06-15"}]
+
+
+def test_parse_backplan_json_returns_none_on_garbage():
+    from app.core.ai import _parse_backplan_json
+    assert _parse_backplan_json("not json at all") is None
+    assert _parse_backplan_json('{"other_key": []}') is None
+    assert _parse_backplan_json("[]") is None  # top-level must be dict

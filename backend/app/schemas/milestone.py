@@ -73,8 +73,13 @@ class MilestoneSuggestionsRead(BaseModel):
     """Response payload for GET /milestones/{id}/suggest-children."""
 
     suggestions: list[MilestoneSuggestion]
-    template: str  # which template matched the parent title
+    template: str  # which template matched the parent title (rules path)
     weeks_remaining: int
+    # Which engine produced the list. "llm" = the user has AI opt-in and
+    # the call succeeded; "rules" = deterministic fallback. The frontend
+    # can show a small badge so the user understands what they're seeing
+    # and can re-roll if they prefer the other engine.
+    source: str = "rules"
 
 
 class BackplanChildren(BaseModel):
