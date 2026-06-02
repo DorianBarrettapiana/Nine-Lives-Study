@@ -2,7 +2,7 @@
  * Paper note API functions, plus the Zotero integration endpoints.
  */
 
-import { apiFetch } from "./client";
+import { ApiError, apiFetch } from "./client";
 import type { TagSummary } from "./tags";
 
 export type PaperReadingStatus = "inbox" | "reading" | "summarized" | "revisit";
@@ -28,6 +28,8 @@ export interface PaperNoteRead {
   project_id: number | null;
   reading_status: PaperReadingStatus;
   reading_minutes: number;
+  insight_count: number;
+  latest_insight: PaperInsightRead | null;
   created_at: string;
   updated_at: string;
 }
@@ -50,6 +52,21 @@ export interface PaperNoteCreate {
 }
 
 export type PaperNoteUpdate = Partial<PaperNoteCreate>;
+
+export interface PaperInsightRead {
+  id: number;
+  paper_note_id: number;
+  key_idea: string;
+  question: string;
+  next_step: string;
+  created_at: string;
+}
+
+export interface ReadingContext {
+  note_id: number;
+  title: string;
+  project_id: number | null;
+}
 
 export async function listNotes(): Promise<PaperNoteRead[]> {
   return apiFetch<PaperNoteRead[]>("/notes");
@@ -80,6 +97,25 @@ export async function deleteNote(noteId: number): Promise<void> {
 
 export async function addNoteToToday(noteId: number): Promise<void> {
   await apiFetch(`/notes/${noteId}/add-to-today`, { method: "POST" });
+}
+
+export async function getReadingContext(taskId: number): Promise<ReadingContext | null> {
+  try {
+    return await apiFetch<ReadingContext>(`/notes/reading-context/${taskId}`);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+export async function createPaperInsight(
+  noteId: number,
+  payload: { key_idea: string; question: string; next_step: string },
+): Promise<PaperInsightRead> {
+  return apiFetch<PaperInsightRead>(`/notes/${noteId}/insights`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 // --- Zotero ----------------------------------------------------------------

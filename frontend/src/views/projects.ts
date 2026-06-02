@@ -31,6 +31,10 @@ let listContainer: HTMLDivElement;
 let onChangedCb: (() => Promise<void>) | null = null;
 let openDashboardId: number | null = null;
 
+function escapeAttr(value: string): string {
+  return escapeHtml(value).replace(/"/g, "&quot;");
+}
+
 function render(): void {
   const projects = getCachedProjects();
   if (projects.length === 0) {
@@ -95,7 +99,7 @@ function dashboardHtml(d: ProjectDashboardRead): string {
     : d.paper_notes.map((n) => `
         <div class="dashboard-knowledge-row">
           <strong>${escapeHtml(n.title)}</strong>
-          <span class="hint">${escapeHtml(n.authors || "—")}${n.year ? ` (${n.year})` : ""}</span>
+          <span class="hint">${escapeHtml(n.authors || "—")}${n.year ? ` (${n.year})` : ""} · ${fmtMinutes(n.reading_minutes)}</span>
         </div>
       `).join("");
 
@@ -116,6 +120,16 @@ function dashboardHtml(d: ProjectDashboardRead): string {
         </div>
       `).join("");
 
+  const insightsHtml = d.recent_insights.length === 0
+    ? `<p class="hint">Complete a focused reading session to capture an insight.</p>`
+    : d.recent_insights.map((insight) => `
+        <div class="dashboard-knowledge-row">
+          <strong>${escapeHtml(insight.key_idea || insight.question || insight.next_step)}</strong>
+          ${insight.question ? `<span class="hint">Question: ${escapeHtml(insight.question)}</span>` : ""}
+          ${insight.next_step ? `<span class="hint">Next: ${escapeHtml(insight.next_step)}</span>` : ""}
+        </div>
+      `).join("");
+
   return `
     <section class="card">
       <div class="section-header">
@@ -129,6 +143,28 @@ function dashboardHtml(d: ProjectDashboardRead): string {
         <div class="dashboard-stat"><span class="dashboard-stat-num">${d.open_tasks_count}</span><span class="hint">open tasks</span></div>
         <div class="dashboard-stat"><span class="dashboard-stat-num dashboard-stat-small">${escapeHtml(lastSeen)}</span><span class="hint">last activity</span></div>
       </div>
+    </section>
+
+    <section class="card">
+      <h2>Research context</h2>
+      <form id="project-dashboard-form" class="form">
+        <label>Current research question
+          <textarea id="project-research-question" placeholder="What are you trying to answer right now?">${escapeHtml(d.project.research_question)}</textarea>
+        </label>
+        <label>Current milestone
+          <input id="project-milestone" type="text" value="${escapeAttr(d.project.milestone)}" placeholder="e.g. Draft methods section" />
+        </label>
+        <div class="two-cols">
+          <label>Next advisor meeting
+            <input id="project-advisor-meeting" type="date" value="${escapeAttr(d.project.advisor_meeting_date ?? "")}" />
+          </label>
+          <label>Current blocker
+            <input id="project-blocker" type="text" value="${escapeAttr(d.project.blocker)}" placeholder="What is slowing this thread down?" />
+          </label>
+        </div>
+        <div class="button-row"><button type="submit">Save research context</button></div>
+        <p id="project-dashboard-message" class="message"></p>
+      </form>
     </section>
 
     <section class="card">
@@ -154,6 +190,11 @@ function dashboardHtml(d: ProjectDashboardRead): string {
       <h2>Mentions in reflection</h2>
       <p class="hint">Last 30 days, where your daily reflections mention "${escapeHtml(d.project.name)}".</p>
       <div class="dashboard-block">${mentionsHtml}</div>
+    </section>
+
+    <section class="card">
+      <h2>Recent reading insights</h2>
+      <div class="dashboard-block">${insightsHtml}</div>
     </section>
   `;
 }
@@ -249,6 +290,31 @@ export function init(onChanged?: () => Promise<void>): void {
     if (!(target instanceof HTMLElement)) return;
     if (target.dataset.dashboardAction === "back") closeDashboard();
   });
+  dashboardContainer.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (openDashboardId === null) return;
+    const researchQuestion = dashboardContainer.querySelector<HTMLTextAreaElement>("#project-research-question")!;
+    const milestone = dashboardContainer.querySelector<HTMLInputElement>("#project-milestone")!;
+    const advisorMeeting = dashboardContainer.querySelector<HTMLInputElement>("#project-advisor-meeting")!;
+    const blocker = dashboardContainer.querySelector<HTMLInputElement>("#project-blocker")!;
+    const formMessage = dashboardContainer.querySelector<HTMLParagraphElement>("#project-dashboard-message")!;
+    try {
+      await updateProject(openDashboardId, {
+        research_question: researchQuestion.value.trim(),
+        milestone: milestone.value.trim(),
+        advisor_meeting_date: advisorMeeting.value || null,
+        blocker: blocker.value.trim(),
+      });
+      setMessage(formMessage, "Research context saved.", "success");
+      notifyProjectsUpdated();
+      await refreshProjects(true);
+      await openDashboard(openDashboardId);
+      await onChangedCb?.();
+    } catch (e) {
+      console.error(e);
+      setMessage(formMessage, "Could not save research context.", "error");
+    }
+  });
 
   formEl.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -324,5 +390,8 @@ export function init(onChanged?: () => Promise<void>): void {
         setMessage(messageEl, "Could not delete project.", "error");
       }
     }
+  });
+  window.addEventListener("paper-insights:updated", () => {
+    if (openDashboardId !== null) void openDashboard(openDashboardId);
   });
 }

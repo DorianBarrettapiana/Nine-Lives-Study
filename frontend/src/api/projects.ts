@@ -10,6 +10,10 @@ export interface ProjectRead {
   name: string;
   color: string;
   is_archived: boolean;
+  research_question: string;
+  milestone: string;
+  advisor_meeting_date: string | null;
+  blocker: string;
   created_at: string;
   updated_at: string;
 }
@@ -17,12 +21,20 @@ export interface ProjectRead {
 export interface ProjectCreate {
   name: string;
   color?: string;
+  research_question?: string;
+  milestone?: string;
+  advisor_meeting_date?: string | null;
+  blocker?: string;
 }
 
 export interface ProjectUpdate {
   name?: string;
   color?: string;
   is_archived?: boolean;
+  research_question?: string;
+  milestone?: string;
+  advisor_meeting_date?: string | null;
+  blocker?: string;
 }
 
 // --- Dashboard ----------------------------------------------------------
@@ -47,6 +59,14 @@ export interface ProjectDashboardRead {
   paper_notes: PaperNoteRead[];
   feynman_entries: FeynmanEntryRead[];
   recent_reflections: ReflectionMention[];
+  recent_insights: Array<{
+    id: number;
+    paper_note_id: number;
+    key_idea: string;
+    question: string;
+    next_step: string;
+    created_at: string;
+  }>;
 }
 
 export async function getProjectDashboard(projectId: number): Promise<ProjectDashboardRead> {

@@ -235,6 +235,7 @@ def test_dashboard_basic_shape(auth_client: TestClient):
     assert body["paper_notes"] == []
     assert body["feynman_entries"] == []
     assert body["recent_reflections"] == []
+    assert body["recent_insights"] == []
 
 
 def test_dashboard_aggregates_work_minutes_and_open_tasks(auth_client: TestClient):
@@ -286,3 +287,31 @@ def test_dashboard_includes_paper_notes_and_feynman(auth_client: TestClient):
     assert body["paper_notes"][0]["title"] == "Smith 2024"
     assert len(body["feynman_entries"]) == 1
     assert body["feynman_entries"][0]["concept"] == "Backprop"
+
+
+def test_dashboard_saves_context_and_surfaces_reading_insight(auth_client: TestClient):
+    pid = _make_project(auth_client, "Survey")
+    patched = auth_client.patch(f"/projects/{pid}", json={
+        "research_question": "  Which methods transfer?  ",
+        "milestone": "  Draft related work  ",
+        "advisor_meeting_date": "2026-06-12",
+        "blocker": "  Missing ablations  ",
+    })
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["research_question"] == "Which methods transfer?"
+
+    note = auth_client.post("/notes", json={
+        "title": "Attention Is All You Need", "authors": "", "year": 2017,
+        "key_points": "", "questions": "", "tags": "", "project_id": pid,
+    }).json()
+    insight = auth_client.post(f"/notes/{note['id']}/insights", json={
+        "key_idea": "Attention replaces recurrence with token interactions.",
+        "question": "How much does scaling affect stability?",
+        "next_step": "Compare scaled and unscaled logits.",
+    })
+    assert insight.status_code == 201, insight.text
+
+    body = auth_client.get(f"/projects/{pid}/dashboard").json()
+    assert body["project"]["milestone"] == "Draft related work"
+    assert body["project"]["advisor_meeting_date"] == "2026-06-12"
+    assert body["recent_insights"][0]["next_step"] == "Compare scaled and unscaled logits."

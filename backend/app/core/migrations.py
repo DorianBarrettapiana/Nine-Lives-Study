@@ -65,6 +65,11 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     ("daily_tasks",     "planned_date",            "DATE"),
     ("daily_tasks",     "due_date",                "DATE"),
     ("daily_logs",      "main_goal_task_id",       "INTEGER"),
+    # Research-thread steering context.
+    ("projects",        "research_question",        "TEXT NOT NULL DEFAULT ''"),
+    ("projects",        "milestone",                "TEXT NOT NULL DEFAULT ''"),
+    ("projects",        "advisor_meeting_date",     "DATE"),
+    ("projects",        "blocker",                  "TEXT NOT NULL DEFAULT ''"),
     # Self-FK for backplanned check-points; NULL on existing rows means
     # "top-level milestone", which is what every legacy row already was.
     ("milestones",      "parent_milestone_id",     "INTEGER"),

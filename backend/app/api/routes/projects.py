@@ -22,6 +22,7 @@ from app.core.xp import ENTITY_POMODORO, ENTITY_STOPWATCH, EVENT_POMODORO, EVENT
 from app.models.daily_tracker import DailyLog, DailyTask
 from app.models.feynman_entry import FeynmanEntry
 from app.models.milestone import Milestone
+from app.models.paper_insight import PaperInsight
 from app.models.paper_note import PaperNote
 from app.models.pomodoro_session import PomodoroSession
 from app.models.project import Project
@@ -77,6 +78,10 @@ def create_project(
         user_id=current_user.id,
         name=payload.name.strip(),
         color=payload.color,
+        research_question=payload.research_question.strip(),
+        milestone=payload.milestone.strip(),
+        advisor_meeting_date=payload.advisor_meeting_date,
+        blocker=payload.blocker.strip(),
     )
     db.add(project)
     db.commit()
@@ -93,8 +98,9 @@ def update_project(
 ) -> Project:
     project = _get_owned_project(project_id, current_user, db)
     data = payload.model_dump(exclude_unset=True)
-    if "name" in data and data["name"] is not None:
-        data["name"] = data["name"].strip()
+    for field in ("name", "research_question", "milestone", "blocker"):
+        if field in data and data[field] is not None:
+            data[field] = data[field].strip()
     for field, value in data.items():
         setattr(project, field, value)
     db.commit()
@@ -241,6 +247,15 @@ def get_project_dashboard(
         .order_by(FeynmanEntry.updated_at.desc())
     ).all())
 
+    recent_insights = list(db.scalars(
+        select(PaperInsight)
+        .join(PaperNote, PaperNote.id == PaperInsight.paper_note_id)
+        .where(PaperInsight.user_id == user_id)
+        .where(PaperNote.project_id == project_id)
+        .order_by(PaperInsight.created_at.desc())
+        .limit(6)
+    ).all())
+
     # --- Reflection mentions --------------------------------------------------
     # Case-insensitive substring match against the project's name. Cheap
     # MVP heuristic — false positives possible if the user has a short or
@@ -283,4 +298,5 @@ def get_project_dashboard(
         paper_notes=[n for n in paper_notes],
         feynman_entries=[e for e in feynman_entries],
         recent_reflections=mentions,
+        recent_insights=recent_insights,
     )

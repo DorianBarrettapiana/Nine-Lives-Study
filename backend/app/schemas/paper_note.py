@@ -55,6 +55,27 @@ class PaperNoteUpdate(BaseModel):
     reading_status: PaperReadingStatus | None = None
 
 
+class PaperInsightCreate(BaseModel):
+    key_idea: str = ""
+    question: str = ""
+    next_step: str = ""
+
+
+class PaperInsightRead(BaseSchema):
+    id: int
+    paper_note_id: int
+    key_idea: str
+    question: str
+    next_step: str
+    created_at: UtcDateTime
+
+
+class ReadingContextRead(BaseModel):
+    note_id: int
+    title: str
+    project_id: int | None = None
+
+
 class PaperNoteRead(BaseSchema):
     """Public representation of a paper note."""
 
@@ -84,5 +105,7 @@ class PaperNoteRead(BaseSchema):
     project_id: int | None = None
     reading_status: PaperReadingStatus = "inbox"
     reading_minutes: int = 0
+    insight_count: int = 0
+    latest_insight: PaperInsightRead | None = None
     created_at: UtcDateTime
     updated_at: UtcDateTime

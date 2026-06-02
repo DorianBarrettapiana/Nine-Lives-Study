@@ -78,3 +78,39 @@ def test_cross_user_cannot_read_or_modify(auth_client: TestClient, second_auth_c
     # Note still exists for the owner
     notes = auth_client.get("/notes").json()
     assert notes[0]["title"] == "Private"
+
+
+def test_reading_task_resolves_context_and_captures_insight(auth_client: TestClient):
+    note_id = _make_note(auth_client, title="Useful paper")
+    task = auth_client.post(f"/notes/{note_id}/add-to-today").json()
+
+    context = auth_client.get(f"/notes/reading-context/{task['id']}")
+    assert context.status_code == 200
+    assert context.json()["note_id"] == note_id
+    assert context.json()["title"] == "Useful paper"
+
+    created = auth_client.post(f"/notes/{note_id}/insights", json={
+        "key_idea": "A sharper result",
+        "question": "Does it generalize?",
+        "next_step": "Check the appendix",
+    })
+    assert created.status_code == 201, created.text
+    assert created.json()["next_step"] == "Check the appendix"
+
+    note = auth_client.get("/notes").json()[0]
+    assert note["insight_count"] == 1
+    assert note["latest_insight"]["key_idea"] == "A sharper result"
+
+
+def test_empty_reading_insight_is_rejected(auth_client: TestClient):
+    note_id = _make_note(auth_client)
+    r = auth_client.post(f"/notes/{note_id}/insights", json={
+        "key_idea": " ", "question": "", "next_step": "",
+    })
+    assert r.status_code == 400
+
+
+def test_other_user_cannot_capture_insight(auth_client: TestClient, second_auth_client: TestClient):
+    note_id = _make_note(auth_client, title="Private reading")
+    r = second_auth_client.post(f"/notes/{note_id}/insights", json={"key_idea": "stolen"})
+    assert r.status_code == 404

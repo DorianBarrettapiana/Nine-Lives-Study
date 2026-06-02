@@ -13,7 +13,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
@@ -49,6 +49,7 @@ from app.core.zotero import (
 from app.models.daily_tracker import DailyTask
 from app.models.feynman_entry import FeynmanEntry
 from app.models.note_link import LINK_ITEM_PAPER_NOTE
+from app.models.paper_insight import PaperInsight
 from app.models.paper_note import PaperNote
 from app.models.pomodoro_session import PomodoroSession
 from app.models.project import Project
@@ -57,7 +58,14 @@ from app.models.tag import TAG_ITEM_PAPER_NOTE
 from app.models.user import User
 from app.models.xp_event import XpEvent
 from app.schemas.daily_tracker import DailyTaskRead
-from app.schemas.paper_note import PaperNoteCreate, PaperNoteRead, PaperNoteUpdate
+from app.schemas.paper_note import (
+    PaperInsightCreate,
+    PaperInsightRead,
+    PaperNoteCreate,
+    PaperNoteRead,
+    PaperNoteUpdate,
+    ReadingContextRead,
+)
 
 router = APIRouter(prefix="/notes", tags=["paper-notes"])
 
@@ -120,10 +128,18 @@ def _reading_minutes_by_note(user_id: int, db: Session) -> dict[int, int]:
     return totals
 
 
-def _attach_reading_minutes(notes: list[PaperNote], current_user: User, db: Session) -> list[PaperNote]:
+def _attach_note_metadata(notes: list[PaperNote], current_user: User, db: Session) -> list[PaperNote]:
     totals = _reading_minutes_by_note(current_user.id, db)
     for note in notes:
         note.reading_minutes = totals.get(note.id, 0)
+        insight_rows = db.scalars(
+            select(PaperInsight)
+            .where(PaperInsight.user_id == current_user.id)
+            .where(PaperInsight.paper_note_id == note.id)
+            .order_by(PaperInsight.created_at.desc())
+        ).all()
+        note.insight_count = len(insight_rows)
+        note.latest_insight = insight_rows[0] if insight_rows else None
     return notes
 
 
@@ -156,7 +172,7 @@ def _serialize_with_tags(
     reads: list[PaperNoteRead] = []
     for note in notes:
         # `reading_minutes` is a derived field set ad-hoc by
-        # _attach_reading_minutes; ensure it exists so model_validate
+        # _attach_note_metadata; ensure it exists so model_validate
         # doesn't fall back to the default for callers that forgot to
         # attribute it (e.g. Zotero importer).
         if not hasattr(note, "reading_minutes"):
@@ -239,7 +255,7 @@ def list_notes(
         .where(PaperNote.user_id == current_user.id)
         .order_by(PaperNote.updated_at.desc())
     )
-    notes = _attach_reading_minutes(list(db.scalars(statement).all()), current_user, db)
+    notes = _attach_note_metadata(list(db.scalars(statement).all()), current_user, db)
     return _serialize_with_tags(notes, current_user, db)
 
 
@@ -295,6 +311,8 @@ def create_note(
     db.commit()
     db.refresh(note)
     note.reading_minutes = 0
+    note.insight_count = 0
+    note.latest_insight = None
     return _serialize_with_tags([note], current_user, db)[0]
 
 
@@ -353,7 +371,7 @@ def update_note(
 
     db.commit()
     db.refresh(note)
-    _attach_reading_minutes([note], current_user, db)
+    _attach_note_metadata([note], current_user, db)
     return _serialize_with_tags([note], current_user, db)[0]
 
 
@@ -394,6 +412,59 @@ def add_note_to_today(
     return task
 
 
+@router.get("/reading-context/{task_id}", response_model=ReadingContextRead)
+def get_reading_context(
+    task_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ReadingContextRead:
+    """Resolve a focused daily task to its paper, if it is a reading task."""
+    task = db.get(DailyTask, task_id)
+    if task is None or task.user_id != current_user.id or task.paper_note_id is None:
+        raise HTTPException(status_code=404, detail="Reading task not found.")
+    note = _get_owned_note(task.paper_note_id, current_user, db)
+    return ReadingContextRead(note_id=note.id, title=note.title, project_id=note.project_id)
+
+
+@router.get("/{note_id}/insights", response_model=list[PaperInsightRead])
+def list_insights(
+    note_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[PaperInsight]:
+    _get_owned_note(note_id, current_user, db)
+    return list(db.scalars(
+        select(PaperInsight)
+        .where(PaperInsight.user_id == current_user.id)
+        .where(PaperInsight.paper_note_id == note_id)
+        .order_by(PaperInsight.created_at.desc())
+    ).all())
+
+
+@router.post("/{note_id}/insights", response_model=PaperInsightRead, status_code=201)
+def create_insight(
+    note_id: int,
+    payload: PaperInsightCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PaperInsight:
+    note = _get_owned_note(note_id, current_user, db)
+    values = {
+        "key_idea": payload.key_idea.strip(),
+        "question": payload.question.strip(),
+        "next_step": payload.next_step.strip(),
+    }
+    if not any(values.values()):
+        raise HTTPException(status_code=400, detail="Add at least one reading insight.")
+    insight = PaperInsight(user_id=current_user.id, paper_note_id=note.id, **values)
+    if note.reading_status == "inbox":
+        note.reading_status = "reading"
+    db.add(insight)
+    db.commit()
+    db.refresh(insight)
+    return insight
+
+
 @router.delete("/{note_id}", status_code=204)
 def delete_note(
     note_id: int,
@@ -409,6 +480,11 @@ def delete_note(
         .where(DailyTask.user_id == current_user.id)
         .where(DailyTask.paper_note_id == note.id)
         .values(paper_note_id=None)
+    )
+    db.execute(
+        delete(PaperInsight)
+        .where(PaperInsight.user_id == current_user.id)
+        .where(PaperInsight.paper_note_id == note.id)
     )
     delete_links_for_item(TAG_ITEM_PAPER_NOTE, note.id, db)
     # Clean both directions: this note may have linked out to others,
@@ -674,5 +750,5 @@ def import_zotero_items(
         imported=imported,
         updated=updated,
         skipped=max(0, skipped),
-        notes=_serialize_with_tags(out, current_user, db),
+        notes=_serialize_with_tags(_attach_note_metadata(out, current_user, db), current_user, db),
     )

@@ -24,6 +24,7 @@ import * as StopwatchView from "./views/stopwatch";
 import * as TimerMode from "./views/timerMode";
 import * as FriendsView from "./views/friends";
 import * as TodayView from "./views/today";
+import { initReadingInsightPrompts } from "./views/reading-insight";
 
 type AppView = "today" | "notes" | "feynman" | "stats" | "projects" | "friends";
 
@@ -639,6 +640,7 @@ function mountApp(user: UserRead): void {
     async () => { await NotesView.refresh(); await StatsView.refresh(); },
     (v) => switchView(views, v as AppView),
   );
+  initReadingInsightPrompts();
   FeynmanView.init(
     async () => { await FeynmanView.refresh(); await StatsView.refresh(); },
     (v) => switchView(views, v as AppView),
