@@ -44,13 +44,30 @@ export async function listSummaries(kind: SummaryKind): Promise<AiSummaryRead[]>
 export interface WeeklyAvailability {
   can_generate: boolean;
   // Present when can_generate=true: human label of the current slot.
-  slot?: "Tuesday" | "Friday";
+  // After the Tuesday slot was dropped, this is always "Friday" — kept
+  // as a string for forward-compat with future slot additions.
+  slot?: string;
   // Present in most responses: which (kind, period_key) this slot would write.
   period_key?: string;
-  // "off_day" — today isn't Tue/Fri; `next_slot` names the next available day.
+  // "off_day" — today isn't a slot day; `next_slot` names the next available.
   // "already_generated" — this slot's row already exists in the DB.
   reason?: "off_day" | "already_generated";
-  next_slot?: "Tuesday" | "Friday";
+  next_slot?: string;
+}
+
+export interface MonthlyAvailability {
+  can_generate: boolean;
+  period_key?: string;          // YYYY-MM
+  reason?: "off_window" | "already_generated";
+  next_available?: string;      // YYYY-MM-DD — first day the window reopens
+  window_days?: number;         // how many end-of-month days are eligible
+}
+
+export interface StageAvailability {
+  can_generate: boolean;
+  reason?: "cooldown";
+  next_available?: string;      // YYYY-MM-DD — when the 90-day cooldown ends
+  cooldown_days: number;
 }
 
 export async function getWeeklyAvailability(
@@ -59,6 +76,18 @@ export async function getWeeklyAvailability(
   return apiFetch<WeeklyAvailability>(
     `/summaries/weekly/availability?tz_offset=${tzOffsetMinutes}`,
   );
+}
+
+export async function getMonthlyAvailability(
+  tzOffsetMinutes: number,
+): Promise<MonthlyAvailability> {
+  return apiFetch<MonthlyAvailability>(
+    `/summaries/monthly/availability?tz_offset=${tzOffsetMinutes}`,
+  );
+}
+
+export async function getStageAvailability(): Promise<StageAvailability> {
+  return apiFetch<StageAvailability>("/summaries/stage/availability");
 }
 
 export async function generateWeekly(tzOffsetMinutes: number): Promise<AiSummaryRead> {
