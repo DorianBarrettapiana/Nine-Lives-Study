@@ -63,6 +63,17 @@ class Milestone(Base):
     # Free-text notes / context for the milestone. Optional.
     notes: Mapped[str] = mapped_column(Text, default="", server_default="", nullable=False)
 
+    # Self-referential parent for backplanned check-points. NULL = this
+    # is a top-level milestone (the conference, the defense). A non-NULL
+    # value points at a sibling row owned by the same user — the
+    # /milestones DELETE route cascades manually since SQLite FK
+    # enforcement is off in this app, matching the project_id pattern.
+    parent_milestone_id: Mapped[int | None] = mapped_column(
+        ForeignKey("milestones.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
     # Archived milestones drop out of the sidebar countdown but stay in
     # the DB and can be unarchived. Same pattern as Project.
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

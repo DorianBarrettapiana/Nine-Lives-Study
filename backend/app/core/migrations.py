@@ -65,6 +65,9 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     ("daily_tasks",     "planned_date",            "DATE"),
     ("daily_tasks",     "due_date",                "DATE"),
     ("daily_logs",      "main_goal_task_id",       "INTEGER"),
+    # Self-FK for backplanned check-points; NULL on existing rows means
+    # "top-level milestone", which is what every legacy row already was.
+    ("milestones",      "parent_milestone_id",     "INTEGER"),
 ]
 
 # Backfill completed pomodoro work sessions into xp_events so that stats
