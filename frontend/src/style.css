@@ -1591,6 +1591,12 @@ h3 {
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   font-size: 0.86rem;
+  /* Flex items default to min-width:auto, which makes them refuse to
+   * shrink below their intrinsic content width. Without these two
+   * lines a long milestone title bleeds past the card's right edge
+   * instead of getting the .milestone-title ellipsis below. */
+  min-width: 0;
+  overflow: hidden;
 }
 .milestone-row.milestone-soon {
   border-left: 3px solid #ef4444;
@@ -1672,6 +1678,70 @@ h3 {
 }
 .milestone-edit-form input { padding: 0.35rem 0.5rem; font-size: 0.85rem; }
 .milestone-edit-form .button-row button { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+
+/* Backplan wizard — appears between the add form and the active list
+ * after a parent milestone is created with enough runway. */
+.milestone-backplan-wrap {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.6rem;
+  margin: 0.4rem 0 0.6rem 0;
+  background: var(--bg-item);
+  border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+}
+.backplan-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  /* The parent title can be long; same min-width fix as .milestone-row. */
+  min-width: 0;
+}
+.backplan-header strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.backplan-badge {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--bg-muted);
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.backplan-hint { font-size: 0.78rem; margin: 0; }
+.backplan-rows { display: flex; flex-direction: column; gap: 0.3rem; }
+.backplan-row {
+  display: grid;
+  grid-template-columns: 1fr 8rem auto;
+  gap: 0.3rem;
+  align-items: center;
+}
+.backplan-row input {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.82rem;
+  min-width: 0;
+}
+.backplan-drop {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
+.backplan-drop:hover { color: #ef4444; background: transparent; }
+.backplan-buttons { flex-wrap: wrap; gap: 0.4rem; }
+.backplan-buttons button { font-size: 0.82rem; padding: 0.3rem 0.7rem; }
 
 .milestones-past { margin-top: 0.6rem; }
 .milestones-past > summary {

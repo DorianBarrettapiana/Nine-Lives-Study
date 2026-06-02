@@ -20,8 +20,12 @@
  */
 
 import {
-  createMilestone, deleteMilestone, listMilestones, updateMilestone,
+  createChildMilestones,
+  createMilestone, deleteMilestone, getMilestoneSuggestions, listMilestones,
+  updateMilestone,
   type MilestoneRead,
+  type MilestoneSuggestion,
+  type MilestoneSuggestionsRead,
 } from "../api/milestones";
 import { escapeHtml, setMessage } from "../utils";
 import {
@@ -62,6 +66,17 @@ const MAX_VISIBLE = 3;
 // helpers
 // ---------------------------------------------------------------------------
 
+function halfwayDate(today: string, due: string): string {
+  // Return YYYY-MM-DD halfway between two ISO dates (local interpretation).
+  // Used to seed a freshly-added wizard row at a sensible default.
+  const [ty, tm, td] = today.split("-").map(Number);
+  const [dy, dm, dd] = due.split("-").map(Number);
+  const a = new Date(ty, tm - 1, td).getTime();
+  const b = new Date(dy, dm - 1, dd).getTime();
+  const mid = new Date(a + (b - a) / 2);
+  return `${mid.getFullYear()}-${String(mid.getMonth() + 1).padStart(2, "0")}-${String(mid.getDate()).padStart(2, "0")}`;
+}
+
 function todayStr(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -101,6 +116,135 @@ function projectChip(projectId: number | null): string {
     ? ` style="background:${escapeHtml(project.color)};"`
     : "";
   return `<span class="milestone-project-chip" title="${escapeHtml(project.name)}"${color}></span>`;
+}
+
+// ---------------------------------------------------------------------------
+// Backplan wizard — inline panel that appears after a parent is created
+// and lets the user accept / edit / drop the suggested intermediate
+// check-points before they're saved. Built dynamically (no static
+// markup) so we don't bloat the sidebar template for users who never
+// see the wizard.
+// ---------------------------------------------------------------------------
+
+let backplanWrapEl: HTMLDivElement | null = null;
+// Hold the *editable* working set in memory rather than re-reading the
+// DOM on each interaction. Same shape as MilestoneSuggestion plus a
+// stable id used as the row key during add/delete.
+interface DraftSuggestion extends MilestoneSuggestion { _key: number }
+let backplanDrafts: DraftSuggestion[] = [];
+let backplanParent: MilestoneRead | null = null;
+let backplanMeta: { source: "llm" | "rules"; weeks_remaining: number } | null = null;
+let backplanKeyCounter = 0;
+
+function ensureBackplanContainer(): HTMLDivElement {
+  if (backplanWrapEl !== null) return backplanWrapEl;
+  const el = document.createElement("div");
+  el.className = "milestone-backplan-wrap hidden";
+  // Drop it into the milestones card right after the add form so it
+  // appears under the parent the user just typed.
+  addForm.insertAdjacentElement("afterend", el);
+  backplanWrapEl = el;
+  return el;
+}
+
+function backplanRowHtml(d: DraftSuggestion): string {
+  return `
+    <div class="backplan-row" data-key="${d._key}">
+      <input class="backplan-title" type="text" maxlength="200"
+             value="${escapeHtml(d.title)}" placeholder="Step title" />
+      <input class="backplan-date" type="date" value="${escapeHtml(d.due_date)}" />
+      <button type="button" class="backplan-drop" data-key="${d._key}"
+              title="Drop this check-point">×</button>
+    </div>`;
+}
+
+function renderBackplanWizard(): void {
+  const el = ensureBackplanContainer();
+  if (backplanParent === null || backplanMeta === null) {
+    el.classList.add("hidden");
+    el.innerHTML = "";
+    return;
+  }
+  const badge = backplanMeta.source === "llm" ? "✨ AI" : "Suggested";
+  const wk = backplanMeta.weeks_remaining;
+  const rows = backplanDrafts.map(backplanRowHtml).join("");
+  const parentTitle = escapeHtml(backplanParent.title);
+  el.innerHTML = `
+    <div class="backplan-header">
+      <strong>Backplan ${parentTitle}</strong>
+      <span class="backplan-badge" title="Which engine produced these">${badge}</span>
+    </div>
+    <p class="hint backplan-hint">
+      ${wk} week${wk === 1 ? "" : "s"} to go. Edit / drop any step, then save.
+    </p>
+    <div class="backplan-rows">${rows}</div>
+    <div class="button-row backplan-buttons">
+      <button type="button" class="link-btn backplan-add-row">+ Add step</button>
+      <button type="button" class="link-btn backplan-reroll"
+              title="Generate a new set of suggestions${backplanMeta.source === "llm" ? " (without AI)" : ""}">
+        ↻ ${backplanMeta.source === "llm" ? "Use rules" : "Re-roll"}
+      </button>
+      <button type="button" class="secondary backplan-skip">Skip</button>
+      <button type="button" class="backplan-save">Save check-points</button>
+    </div>
+    <p class="message backplan-msg"></p>`;
+  el.classList.remove("hidden");
+}
+
+function hideBackplanWizard(): void {
+  backplanParent = null;
+  backplanMeta = null;
+  backplanDrafts = [];
+  if (backplanWrapEl !== null) {
+    backplanWrapEl.classList.add("hidden");
+    backplanWrapEl.innerHTML = "";
+  }
+}
+
+function readBackplanDrafts(): DraftSuggestion[] {
+  // Sync DOM → drafts so the Save handler picks up edits made after
+  // the last full render.
+  if (backplanWrapEl === null) return [];
+  const rows = backplanWrapEl.querySelectorAll<HTMLDivElement>(".backplan-row");
+  const out: DraftSuggestion[] = [];
+  rows.forEach((row) => {
+    const key = Number(row.dataset.key);
+    const titleEl = row.querySelector<HTMLInputElement>(".backplan-title");
+    const dateEl = row.querySelector<HTMLInputElement>(".backplan-date");
+    if (titleEl === null || dateEl === null) return;
+    out.push({
+      _key: Number.isFinite(key) ? key : ++backplanKeyCounter,
+      title: titleEl.value.trim(),
+      due_date: dateEl.value,
+      template_hint: backplanDrafts.find((d) => d._key === key)?.template_hint ?? "",
+    });
+  });
+  return out;
+}
+
+async function loadBackplanForParent(
+  parent: MilestoneRead, forceRules = false,
+): Promise<void> {
+  backplanParent = parent;
+  try {
+    const data: MilestoneSuggestionsRead = await getMilestoneSuggestions(
+      parent.id, { forceRules },
+    );
+    backplanMeta = { source: data.source, weeks_remaining: data.weeks_remaining };
+    backplanDrafts = data.suggestions.map((s) => ({
+      _key: ++backplanKeyCounter, ...s,
+    }));
+    if (backplanDrafts.length === 0) {
+      // Parent is too close (< 14 days). Skip the wizard — no value in
+      // asking the user to backplan a near-deadline.
+      hideBackplanWizard();
+      return;
+    }
+    renderBackplanWizard();
+  } catch (err) {
+    console.error("backplan fetch failed", err);
+    hideBackplanWizard();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -347,9 +491,78 @@ export function init(): void {
       setMessage(addMsgEl, "Milestone added.", "success");
       addForm.classList.add("hidden");
       renderList();
+      // Offer backplan wizard for parents far enough out. The helper
+      // hides itself if the API returns zero suggestions (parent too
+      // close), so users always see a clean state.
+      void loadBackplanForParent(created);
     } catch (err) {
       console.error(err);
       setMessage(addMsgEl, "Could not save milestone.", "error");
+    }
+  });
+
+  // --- Backplan wizard interactions ---
+  // Delegated on the card so we don't re-attach handlers each render.
+  cardEl.addEventListener("click", async (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLElement)) return;
+    if (backplanParent === null || backplanWrapEl === null) return;
+
+    if (t.classList.contains("backplan-drop")) {
+      const key = Number(t.dataset.key);
+      // Sync first so any pending edits survive the re-render.
+      backplanDrafts = readBackplanDrafts().filter((d) => d._key !== key);
+      renderBackplanWizard();
+      return;
+    }
+    if (t.classList.contains("backplan-add-row")) {
+      backplanDrafts = readBackplanDrafts();
+      // Default the new row to halfway between today and the parent.
+      const half = halfwayDate(todayStr(), backplanParent.due_date);
+      backplanDrafts.push({
+        _key: ++backplanKeyCounter,
+        title: "",
+        due_date: half,
+        template_hint: "",
+      });
+      renderBackplanWizard();
+      return;
+    }
+    if (t.classList.contains("backplan-skip")) {
+      hideBackplanWizard();
+      return;
+    }
+    if (t.classList.contains("backplan-reroll")) {
+      // If we used LLM, switch to rules; if we used rules, fetch again
+      // (in case the user wants a fresh roll). Cheap either way.
+      const forceRules = backplanMeta?.source === "llm";
+      await loadBackplanForParent(backplanParent, forceRules);
+      return;
+    }
+    if (t.classList.contains("backplan-save")) {
+      const drafts = readBackplanDrafts();
+      const cleaned: MilestoneSuggestion[] = drafts
+        .filter((d) => d.title.length > 0 && d.due_date.length > 0)
+        .map((d) => ({
+          title: d.title,
+          due_date: d.due_date,
+          template_hint: d.template_hint,
+        }));
+      const msgEl = backplanWrapEl.querySelector<HTMLParagraphElement>(".backplan-msg");
+      if (cleaned.length === 0) {
+        if (msgEl !== null) setMessage(msgEl, "Nothing to save — add at least one step or hit Skip.", "error");
+        return;
+      }
+      try {
+        const created = await createChildMilestones(backplanParent.id, cleaned);
+        active.push(...created);
+        active.sort((a, b) => a.due_date.localeCompare(b.due_date));
+        renderList();
+        hideBackplanWizard();
+      } catch (err) {
+        console.error(err);
+        if (msgEl !== null) setMessage(msgEl, "Could not save check-points.", "error");
+      }
     }
   });
 
