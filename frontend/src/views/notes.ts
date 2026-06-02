@@ -30,6 +30,7 @@ import {
 } from "../api/notes";
 import { ApiError } from "../api/client";
 import { createFeynmanEntry, listFeynmanEntries, type FeynmanEntryRead } from "../api/feynman";
+import { getLinks, type BacklinksRead } from "../api/links";
 import * as FeynmanView from "./feynman";
 import { escapeHtml, setMessage } from "../utils";
 import { renderEmptyStateWithCat } from "./icons";
@@ -207,8 +208,27 @@ export function render(): void {
         ${note.feynman_entry_id ? `<p class="note-meta"><strong>Feynman link:</strong> ${escapeHtml(feynmanEntries.find((entry) => entry.id === note.feynman_entry_id)?.concept ?? "Linked record")}</p>` : ""}
         ${abstractHtml}
         ${tags ? `<div class="tags">${tags}</div>` : ""}
+        <details class="note-backlinks" data-backlinks="${note.id}">
+          <summary>🔗 Links</summary>
+          <div class="note-backlinks-body"><p class="hint">Open to load.</p></div>
+        </details>
       </article>`;
   }).join("");
+}
+
+function renderBacklinksHtml(data: BacklinksRead): string {
+  if (data.backlinks.length === 0 && data.outgoing.length === 0) {
+    return `<p class="hint">No links yet. Mention another note as <code>[[Its title]]</code> in the body to create one.</p>`;
+  }
+  const fmtRef = (label: string, title: string, kind: string): string =>
+    `<li><span class="link-kind tag-chip" data-kind="${kind}">${kind === "feynman_entry" ? "Feynman" : "Paper"}</span> <strong>${escapeHtml(title)}</strong>${label && label.toLowerCase() !== title.toLowerCase() ? ` <span class="hint">(as “${escapeHtml(label)}”)</span>` : ""}</li>`;
+  const inHtml = data.backlinks.length
+    ? `<div class="note-backlinks-section"><h4>Backlinks (${data.backlinks.length})</h4><ul class="link-list">${data.backlinks.map((b) => fmtRef(b.label, b.source.title, b.source.item_type)).join("")}</ul></div>`
+    : "";
+  const outHtml = data.outgoing.length
+    ? `<div class="note-backlinks-section"><h4>Outgoing (${data.outgoing.length})</h4><ul class="link-list">${data.outgoing.map((o) => fmtRef(o.label, o.target.title, o.target.item_type)).join("")}</ul></div>`
+    : "";
+  return inHtml + outHtml;
 }
 
 function humanReadingStatus(status: PaperReadingStatus): string {
@@ -358,6 +378,30 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
   notesList.addEventListener("click", async (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
+    // Lazy-load the backlinks panel on first open. The <summary> click
+    // is what toggles the <details>; we hook before the default action
+    // so the fetch starts immediately, then the user sees the spinner
+    // when the panel opens. Loaded marker dedupes re-clicks (close+open).
+    if (target.tagName === "SUMMARY") {
+      const details = target.closest<HTMLDetailsElement>("details.note-backlinks");
+      if (details && details.dataset.loaded !== "true") {
+        const noteId = Number(details.dataset.backlinks);
+        const body = details.querySelector<HTMLDivElement>(".note-backlinks-body");
+        if (Number.isFinite(noteId) && body) {
+          details.dataset.loaded = "true";
+          body.innerHTML = `<p class="hint">Loading…</p>`;
+          try {
+            const data = await getLinks("paper_note", noteId);
+            body.innerHTML = renderBacklinksHtml(data);
+          } catch (e) {
+            console.error(e);
+            details.dataset.loaded = "";  // allow retry
+            body.innerHTML = `<p class="message error">Could not load links.</p>`;
+          }
+        }
+      }
+      // Fall through — we don't return so the native toggle still happens.
+    }
     const action = target.dataset.action;
     // Tag-filter actions don't need a note id — handle them before the
     // generic per-note dispatch.
