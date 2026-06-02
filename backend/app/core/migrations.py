@@ -65,6 +65,9 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     ("daily_tasks",     "planned_date",            "DATE"),
     ("daily_tasks",     "due_date",                "DATE"),
     ("daily_logs",      "main_goal_task_id",       "INTEGER"),
+    # Optional one-level task breakdown. Children inherit project context
+    # from their parent in the route layer.
+    ("daily_tasks",     "parent_task_id",          "INTEGER"),
     # Research-thread steering context.
     ("projects",        "research_question",        "TEXT NOT NULL DEFAULT ''"),
     ("projects",        "milestone",                "TEXT NOT NULL DEFAULT ''"),

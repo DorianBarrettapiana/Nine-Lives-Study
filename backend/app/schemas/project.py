@@ -56,6 +56,26 @@ class ReflectionMention(BaseModel):
     snippet: str
 
 
+class ProjectTaskChildTime(BaseModel):
+    """Direct focus time for one optional step under a parent task."""
+
+    id: int
+    text: str
+    is_done: bool
+    minutes: int
+
+
+class ProjectTaskTime(BaseModel):
+    """Rolled-up focus time for one top-level task and its steps."""
+
+    id: int
+    text: str
+    is_done: bool
+    direct_minutes: int
+    total_minutes: int
+    children: list[ProjectTaskChildTime]
+
+
 class ProjectDashboardRead(BaseModel):
     """Aggregated "research thread status" for a single project.
 
@@ -73,6 +93,7 @@ class ProjectDashboardRead(BaseModel):
     open_tasks_count: int
     last_activity_at: UtcDateTime | None = None
     open_tasks: list[DailyTaskRead]
+    task_time_breakdown: list[ProjectTaskTime]
     paper_notes: list[PaperNoteRead]
     feynman_entries: list[FeynmanEntryRead]
     recent_reflections: list[ReflectionMention]

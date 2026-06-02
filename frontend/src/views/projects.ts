@@ -104,6 +104,37 @@ function dashboardHtml(d: ProjectDashboardRead): string {
         </div>
       `).join("");
 
+  const taskTimeHtml = d.task_time_breakdown.length === 0
+    ? `<p class="hint">No focused task yet.</p>`
+    : d.task_time_breakdown.map((task) => {
+        const direct = task.direct_minutes > 0
+          ? `<span class="hint">Direct work: ${fmtMinutes(task.direct_minutes)}</span>`
+          : "";
+        if (task.children.length === 0) {
+          return `
+            <div class="dashboard-task-time-row">
+              <span>${escapeHtml(task.text)}</span>
+              <strong>${fmtMinutes(task.total_minutes)}</strong>
+            </div>`;
+        }
+        return `
+          <details class="dashboard-task-time-details">
+            <summary>
+              <span>${escapeHtml(task.text)}</span>
+              <strong>${fmtMinutes(task.total_minutes)}</strong>
+            </summary>
+            <div class="dashboard-task-time-children">
+              ${direct}
+              ${task.children.map((child) => `
+                <div class="dashboard-task-time-row child">
+                  <span>${escapeHtml(child.text)}</span>
+                  <strong>${fmtMinutes(child.minutes)}</strong>
+                </div>
+              `).join("")}
+            </div>
+          </details>`;
+      }).join("");
+
   const feynmanHtml = d.feynman_entries.length === 0
     ? `<p class="hint">No Feynman entry yet.</p>`
     : d.feynman_entries.map((f) => `
@@ -171,6 +202,12 @@ function dashboardHtml(d: ProjectDashboardRead): string {
     <section class="card">
       <h2>Open work</h2>
       <div class="dashboard-block">${openTasksHtml}</div>
+    </section>
+
+    <section class="card">
+      <h2>Time by task</h2>
+      <p class="hint">Parent tasks include the time recorded on their individual steps. Expand a parent to inspect the breakdown.</p>
+      <div class="dashboard-block">${taskTimeHtml}</div>
     </section>
 
     <section class="card">

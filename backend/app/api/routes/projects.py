@@ -33,6 +33,8 @@ from app.schemas.project import (
     ProjectCreate,
     ProjectDashboardRead,
     ProjectRead,
+    ProjectTaskChildTime,
+    ProjectTaskTime,
     ProjectUpdate,
     ReflectionMention,
 )
@@ -173,6 +175,7 @@ def get_project_dashboard(
     ).all())
     task_ids = {t.id for t in tasks}
     open_tasks = [t for t in tasks if not t.is_done]
+    open_root_tasks = [t for t in open_tasks if t.parent_task_id is None]
     done_tasks_7d = sum(
         1 for t in tasks
         if t.is_done and t.updated_at and t.updated_at.replace(tzinfo=timezone.utc) >= cutoff_7d
@@ -220,8 +223,18 @@ def get_project_dashboard(
 
     minutes_7d = 0
     minutes_30d = 0
+    task_minutes_by_id: dict[int, int] = {}
     last_activity_at: datetime | None = None
+    pomo_task_ids = {s.id: s.linked_task_id for s in pomodoros}
+    stopwatch_task_ids = {s.id: s.linked_task_id for s in stopwatches}
     for ev in work_events:
+        linked_task_id = (
+            pomo_task_ids.get(ev.entity_id)
+            if ev.entity_type == ENTITY_POMODORO
+            else stopwatch_task_ids.get(ev.entity_id)
+        )
+        if linked_task_id is not None:
+            task_minutes_by_id[linked_task_id] = task_minutes_by_id.get(linked_task_id, 0) + ev.amount
         ts = ev.created_at.replace(tzinfo=timezone.utc) if ev.created_at and ev.created_at.tzinfo is None else ev.created_at
         if ts is None:
             continue
@@ -255,6 +268,32 @@ def get_project_dashboard(
         .order_by(PaperInsight.created_at.desc())
         .limit(6)
     ).all())
+
+    children_by_parent: dict[int, list[DailyTask]] = {}
+    for task in tasks:
+        if task.parent_task_id is not None:
+            children_by_parent.setdefault(task.parent_task_id, []).append(task)
+    task_time_breakdown = []
+    for task in (t for t in tasks if t.parent_task_id is None):
+        children = children_by_parent.get(task.id, [])
+        child_rows = [
+            ProjectTaskChildTime(
+                id=child.id,
+                text=child.text,
+                is_done=child.is_done,
+                minutes=task_minutes_by_id.get(child.id, 0),
+            )
+            for child in children
+        ]
+        direct_minutes = task_minutes_by_id.get(task.id, 0)
+        task_time_breakdown.append(ProjectTaskTime(
+            id=task.id,
+            text=task.text,
+            is_done=task.is_done,
+            direct_minutes=direct_minutes,
+            total_minutes=direct_minutes + sum(child.minutes for child in child_rows),
+            children=child_rows,
+        ))
 
     # --- Reflection mentions --------------------------------------------------
     # Case-insensitive substring match against the project's name. Cheap
@@ -294,7 +333,8 @@ def get_project_dashboard(
         done_tasks_7d=done_tasks_7d,
         open_tasks_count=len(open_tasks),
         last_activity_at=last_activity_at,
-        open_tasks=[t for t in open_tasks],
+        open_tasks=[t for t in open_root_tasks],
+        task_time_breakdown=task_time_breakdown,
         paper_notes=[n for n in paper_notes],
         feynman_entries=[e for e in feynman_entries],
         recent_reflections=mentions,
