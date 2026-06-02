@@ -251,18 +251,55 @@ async function loadBackplanForParent(
 // rendering
 // ---------------------------------------------------------------------------
 
-function milestoneRowHtml(m: MilestoneRead): string {
+// Parent IDs the user has expanded. Tracked client-side so re-rendering
+// (after a save, a delete, an edit, etc.) preserves the open/closed
+// state instead of snapping everything back to collapsed.
+const expandedParents: Set<number> = new Set();
+
+function childrenOf(parentId: number, pool: MilestoneRead[]): MilestoneRead[] {
+  return pool
+    .filter((m) => m.parent_milestone_id === parentId)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date));
+}
+
+function milestoneRowHtml(
+  m: MilestoneRead,
+  opts: { childCount?: number; isChild?: boolean } = {},
+): string {
   const days = daysUntil(m.due_date);
+  const isChild = opts.isChild === true;
+  const childCount = opts.childCount ?? 0;
+  const expanded = expandedParents.has(m.id);
+  const expander = childCount > 0
+    ? `<span class="milestone-expand${expanded ? " expanded" : ""}"
+             data-milestone-action="toggle-children" data-id="${m.id}"
+             title="${expanded ? "Collapse" : "Expand"} sub-milestones">▶</span>`
+    : "";
+  const childBadge = childCount > 0
+    ? `<span class="milestone-child-count" title="${childCount} sub-milestone${childCount === 1 ? "" : "s"}">${childCount}</span>`
+    : "";
   return `
-    <div class="milestone-row ${urgencyClass(days)}" data-id="${m.id}">
+    <div class="milestone-row ${urgencyClass(days)}${isChild ? " milestone-child" : ""}" data-id="${m.id}">
+      ${expander}
       ${projectChip(m.project_id)}
       <span class="milestone-title" data-milestone-action="edit" data-id="${m.id}"
             title="Click to edit">${escapeHtml(m.title)}</span>
+      ${childBadge}
       <span class="milestone-countdown" title="${escapeHtml(m.due_date)}">${countdownLabel(days)}</span>
       <button class="milestone-delete" data-milestone-action="delete" data-id="${m.id}"
               title="Delete">×</button>
     </div>
   `;
+}
+
+function milestoneGroupHtml(m: MilestoneRead, pool: MilestoneRead[]): string {
+  const kids = childrenOf(m.id, pool);
+  const parentHtml = milestoneRowHtml(m, { childCount: kids.length });
+  if (kids.length === 0) return parentHtml;
+  const hidden = expandedParents.has(m.id) ? "" : " hidden";
+  const childRows = kids.map((c) => milestoneRowHtml(c, { isChild: true })).join("");
+  return `${parentHtml}
+    <div class="milestone-children${hidden}" data-parent="${m.id}">${childRows}</div>`;
 }
 
 function renderList(): void {
@@ -279,17 +316,26 @@ function renderList(): void {
   // already returned them due-date-ascending.
   const visibleOrder = [...overdue, ...upcoming];
 
-  if (visibleOrder.length === 0) {
+  // Split into top-level vs nested. A child whose parent is also in the
+  // active list gets folded under it; a child whose parent has been
+  // archived / completed / never existed is promoted to top-level so the
+  // user doesn't lose sight of it.
+  const idsInPool = new Set(visibleOrder.map((m) => m.id));
+  const topLevel = visibleOrder.filter(
+    (m) => m.parent_milestone_id === null || !idsInPool.has(m.parent_milestone_id),
+  );
+
+  if (topLevel.length === 0) {
     listEl.innerHTML = `<p class="hint milestone-empty">No upcoming milestone. Click + Add to track a deadline.</p>`;
     showMoreBtn.classList.add("hidden");
   } else {
-    const shown = showAll ? visibleOrder : visibleOrder.slice(0, MAX_VISIBLE);
-    listEl.innerHTML = shown.map(milestoneRowHtml).join("");
-    const hidden = visibleOrder.length - shown.length;
+    const shown = showAll ? topLevel : topLevel.slice(0, MAX_VISIBLE);
+    listEl.innerHTML = shown.map((m) => milestoneGroupHtml(m, visibleOrder)).join("");
+    const hidden = topLevel.length - shown.length;
     if (hidden > 0) {
       showMoreBtn.textContent = `Show ${hidden} more`;
       showMoreBtn.classList.remove("hidden");
-    } else if (showAll && visibleOrder.length > MAX_VISIBLE) {
+    } else if (showAll && topLevel.length > MAX_VISIBLE) {
       showMoreBtn.textContent = "Show less";
       showMoreBtn.classList.remove("hidden");
     } else {
@@ -298,12 +344,13 @@ function renderList(): void {
   }
 
   // Past / archived disclosure. Only rendered when the user opens it
-  // (lazy fetch in onPastToggle).
+  // (lazy fetch in onPastToggle). Past/archived items render flat —
+  // we don't bother grouping them since they're already secondary.
   if (pastLoaded) {
     if (pastIncludingArchived.length === 0) {
       pastListEl.innerHTML = `<p class="hint">Nothing to show.</p>`;
     } else {
-      pastListEl.innerHTML = pastIncludingArchived.map(milestoneRowHtml).join("");
+      pastListEl.innerHTML = pastIncludingArchived.map((m) => milestoneRowHtml(m)).join("");
     }
   }
 
@@ -557,6 +604,9 @@ export function init(): void {
         const created = await createChildMilestones(backplanParent.id, cleaned);
         active.push(...created);
         active.sort((a, b) => a.due_date.localeCompare(b.due_date));
+        // Auto-expand the parent the user just backplanned so they see
+        // the result instead of a chevron they have to click.
+        expandedParents.add(backplanParent.id);
         renderList();
         hideBackplanWizard();
       } catch (err) {
@@ -584,13 +634,32 @@ export function init(): void {
     const row = t.closest<HTMLElement>(".milestone-row");
     if (row === null) return;
 
-    if (action === "edit") {
+    if (action === "toggle-children") {
+      // Toggle the set, then re-render. Cheaper than mutating the DOM
+      // by hand and keeps renderList as the single source of truth.
+      if (expandedParents.has(id)) {
+        expandedParents.delete(id);
+      } else {
+        expandedParents.add(id);
+      }
+      renderList();
+    } else if (action === "edit") {
       startInlineEdit(row, m);
     } else if (action === "delete") {
-      if (!window.confirm(`Delete milestone "${m.title}"?`)) return;
+      // Warn explicitly when a parent will take children with it —
+      // backend cascades, so the count matters.
+      const kids = active.filter((x) => x.parent_milestone_id === id);
+      const prompt = kids.length > 0
+        ? `Delete "${m.title}" and its ${kids.length} sub-milestone${kids.length === 1 ? "" : "s"}?`
+        : `Delete milestone "${m.title}"?`;
+      if (!window.confirm(prompt)) return;
       try {
         await deleteMilestone(m.id);
-        active = active.filter((x) => x.id !== id);
+        // Drop the parent and any cascaded children from the local cache
+        // so the re-render matches what the server now holds.
+        const cascadedIds = new Set([m.id, ...kids.map((k) => k.id)]);
+        active = active.filter((x) => !cascadedIds.has(x.id));
+        expandedParents.delete(m.id);
         renderList();
       } catch (err) {
         console.error(err);
