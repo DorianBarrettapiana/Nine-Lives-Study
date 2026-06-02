@@ -2233,6 +2233,50 @@ h3 {
   margin-top: 0.5rem;
 }
 
+.note-backlinks {
+  margin-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+  padding-top: 0.5rem;
+}
+.note-backlinks > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-soft);
+  user-select: none;
+  padding: 0.2rem 0;
+}
+.note-backlinks-section {
+  margin-top: 0.4rem;
+}
+.note-backlinks-section h4 {
+  margin: 0 0 0.25rem 0;
+  font-size: 0.75rem;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.link-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.link-list li {
+  font-size: 0.85rem;
+}
+.link-kind {
+  font-size: 0.65rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--bg-muted);
+  color: var(--text-soft);
+  margin-right: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .source-badge {
   display: inline-block;
   font-size: 0.7rem;

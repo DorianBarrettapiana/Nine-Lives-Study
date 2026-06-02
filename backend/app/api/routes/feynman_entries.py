@@ -6,6 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
 from app.core.database import get_db
+from app.core.links import (
+    delete_links_touching_item,
+    extract_link_tokens,
+    replace_links_for_item,
+)
 from app.core.tags import (
     delete_links_for_item,
     fetch_tags_for_items,
@@ -14,6 +19,7 @@ from app.core.tags import (
 )
 from app.core.xp import ENTITY_FEYNMAN, EVENT_FEYNMAN, XP_FEYNMAN_CREATE, award_xp_event
 from app.models.feynman_entry import FeynmanEntry
+from app.models.note_link import LINK_ITEM_FEYNMAN_ENTRY
 from app.models.project import Project
 from app.models.tag import TAG_ITEM_FEYNMAN_ENTRY
 from app.models.user import User
@@ -92,6 +98,10 @@ def create_feynman_entry(
         parse_tag_input(payload.tag_names) if payload.tag_names is not None else [],
         db,
     )
+    replace_links_for_item(
+        current_user.id, LINK_ITEM_FEYNMAN_ENTRY, entry.id,
+        extract_link_tokens(entry.explanation, entry.gaps, entry.analogy), db,
+    )
     award_xp_event(
         user_id=current_user.id,
         event_type=EVENT_FEYNMAN,
@@ -128,6 +138,10 @@ def update_feynman_entry(
             parse_tag_input(tag_payload) if tag_payload is not None else [],
             db,
         )
+    replace_links_for_item(
+        current_user.id, LINK_ITEM_FEYNMAN_ENTRY, entry.id,
+        extract_link_tokens(entry.explanation, entry.gaps, entry.analogy), db,
+    )
     db.commit()
     db.refresh(entry)
     return _serialize_with_tags([entry], current_user, db)[0]
@@ -141,5 +155,6 @@ def delete_feynman_entry(
 ) -> None:
     entry = _get_owned_entry(entry_id, current_user, db)
     delete_links_for_item(TAG_ITEM_FEYNMAN_ENTRY, entry.id, db)
+    delete_links_touching_item(LINK_ITEM_FEYNMAN_ENTRY, entry.id, db)
     db.delete(entry)
     db.commit()

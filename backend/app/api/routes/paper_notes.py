@@ -19,6 +19,11 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.core.crypto import decrypt_str, encrypt_str
 from app.core.database import get_db
+from app.core.links import (
+    delete_links_touching_item,
+    extract_link_tokens,
+    replace_links_for_item,
+)
 from app.core.tags import (
     delete_links_for_item,
     fetch_tags_for_items,
@@ -43,6 +48,7 @@ from app.core.zotero import (
 )
 from app.models.daily_tracker import DailyTask
 from app.models.feynman_entry import FeynmanEntry
+from app.models.note_link import LINK_ITEM_PAPER_NOTE
 from app.models.paper_note import PaperNote
 from app.models.pomodoro_session import PomodoroSession
 from app.models.project import Project
@@ -270,6 +276,14 @@ def create_note(
     db.add(note)
     db.flush()  # populate note.id so we can pin the XP event to it
     replace_item_tags(current_user.id, TAG_ITEM_PAPER_NOTE, note.id, tag_names, db)
+    # Parse `[[Title]]` tokens out of the free-text body so the
+    # backlinks panel reflects what the user just wrote. Title and
+    # abstract are excluded — links live where the user *thinks*, not
+    # where they cite metadata.
+    replace_links_for_item(
+        current_user.id, LINK_ITEM_PAPER_NOTE, note.id,
+        extract_link_tokens(note.key_points, note.questions), db,
+    )
     award_xp_event(
         user_id=current_user.id,
         event_type=EVENT_NOTE,
@@ -318,6 +332,14 @@ def update_note(
     if tag_names is not None:
         replace_item_tags(current_user.id, TAG_ITEM_PAPER_NOTE, note.id, tag_names, db)
         note.tags = _tags_csv_from_names(tag_names)
+
+    # Re-scan link tokens whenever the body fields could have changed.
+    # Cheap and unconditional rather than tracking which subset moved,
+    # so callers that PATCH only `key_points` still rebuild correctly.
+    replace_links_for_item(
+        current_user.id, LINK_ITEM_PAPER_NOTE, note.id,
+        extract_link_tokens(note.key_points, note.questions), db,
+    )
 
     if note.source == "zotero" and not had_reading_notes and _has_reading_notes(note):
         award_xp_event(
@@ -389,6 +411,9 @@ def delete_note(
         .values(paper_note_id=None)
     )
     delete_links_for_item(TAG_ITEM_PAPER_NOTE, note.id, db)
+    # Clean both directions: this note may have linked out to others,
+    # and may have been the target of incoming `[[Title]]` refs.
+    delete_links_touching_item(LINK_ITEM_PAPER_NOTE, note.id, db)
     db.delete(note)
     db.commit()
 
