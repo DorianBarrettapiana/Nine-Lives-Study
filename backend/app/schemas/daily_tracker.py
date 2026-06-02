@@ -22,6 +22,11 @@ class DailyTaskCreate(BaseModel):
     paper_note_id: int | None = None
     parent_task_id: int | None = None
     tag_names: list[str] | None = None
+    # Backlog flag: when True the task is created with no planned_date (it
+    # doesn't show up in any day's Today list until scheduled). Used by the
+    # "add a task from a project" flow. Ignored if planned_date/task_date is
+    # also supplied — an explicit date always wins.
+    unplanned: bool = False
 
 
 class DailyTaskUpdate(BaseModel):

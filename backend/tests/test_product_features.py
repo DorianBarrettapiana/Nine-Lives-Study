@@ -9,18 +9,28 @@ from app.api.routes import summaries
 from app.core.ai import SummaryResult, gather_weekly
 
 
-def test_unfinished_task_can_be_carried_forward_once(auth_client: TestClient):
+def test_unfinished_task_carry_forward_moves_in_place(auth_client: TestClient):
+    """Carry-forward re-schedules the existing row (move), it does not create
+    a copy — so the same task never shows up twice (e.g. inside a project)."""
     task = auth_client.post(
         "/daily/tasks", json={"text": "Revise introduction", "task_date": "2026-05-31"},
     ).json()
 
     first = auth_client.post(f"/daily/tasks/{task['id']}/carry-forward")
-    second = auth_client.post(f"/daily/tasks/{task['id']}/carry-forward")
-
-    assert first.status_code == 201
+    assert first.status_code == 200
+    assert first.json()["id"] == task["id"]
     assert first.json()["task_date"] == "2026-06-01"
-    assert second.status_code == 201
-    assert second.json()["id"] == first.json()["id"]
+    assert first.json()["planned_date"] == "2026-06-01"
+
+    # It has left its original day entirely (no duplicate left behind).
+    assert auth_client.get("/daily?date=2026-05-31").json()["total_count"] == 0
+    assert auth_client.get("/daily?date=2026-06-01").json()["total_count"] == 1
+
+    # Carrying again moves the same row one more day forward.
+    second = auth_client.post(f"/daily/tasks/{task['id']}/carry-forward")
+    assert second.status_code == 200
+    assert second.json()["id"] == task["id"]
+    assert second.json()["task_date"] == "2026-06-02"
 
 
 def test_completed_task_is_not_carried_forward(auth_client: TestClient):
@@ -45,13 +55,16 @@ def test_parent_task_carries_unfinished_subtasks_forward(auth_client: TestClient
     auth_client.patch(f"/daily/tasks/{done_child['id']}", json={"is_done": True})
 
     response = auth_client.post(f"/daily/tasks/{parent['id']}/carry-forward")
-    assert response.status_code == 201, response.text
+    # Carry-forward moves rows instead of copying them, so the response is
+    # 200 (updated) and the parent/child kept their original ids.
+    assert response.status_code == 200, response.text
+    assert response.json()["id"] == parent["id"]
 
     next_day = auth_client.get("/daily?date=2026-06-01").json()["tasks"]
-    copied_parent = next(task for task in next_day if task["parent_task_id"] is None)
-    copied_children = [task for task in next_day if task["parent_task_id"] == copied_parent["id"]]
-    assert copied_parent["text"] == "Process data"
-    assert [task["text"] for task in copied_children] == [child["text"]]
+    moved_parent = next(task for task in next_day if task["parent_task_id"] is None)
+    moved_children = [task for task in next_day if task["parent_task_id"] == moved_parent["id"]]
+    assert moved_parent["id"] == parent["id"]
+    assert [task["id"] for task in moved_children] == [child["id"]]
 
 
 def test_subtasks_inherit_project_and_stop_at_one_level(auth_client: TestClient):

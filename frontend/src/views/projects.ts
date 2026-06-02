@@ -14,6 +14,7 @@ import {
   type ProjectDashboardRead,
   type ProjectRead,
 } from "../api/projects";
+import { createDailyTask, updateDailyTask } from "../api/tracker";
 import { escapeHtml, fmtMinutes, formatDate, setMessage } from "../utils";
 import {
   getCachedProjects,
@@ -89,9 +90,14 @@ function dashboardHtml(d: ProjectDashboardRead): string {
   const openTasksHtml = d.open_tasks.length === 0
     ? `<p class="hint">No open task.</p>`
     : d.open_tasks.map((t) => `
-        <div class="dashboard-task-row">
+        <div class="dashboard-task-row" data-task-id="${t.id}">
           <span class="dashboard-task-text">${escapeHtml(t.text)}</span>
           ${t.due_date ? `<span class="hint">📅 ${escapeHtml(t.due_date)}</span>` : ""}
+          ${t.planned_date
+            ? `<span class="hint dashboard-task-planned">🗓 ${escapeHtml(t.planned_date)}</span>`
+            : `<span class="tag dashboard-task-backlog">📥 Backlog</span>
+               <button type="button" class="link-btn" data-dashboard-action="schedule-today"
+                       data-task-id="${t.id}" title="Plan this task for today">Schedule today</button>`}
         </div>
       `).join("");
 
@@ -202,6 +208,14 @@ function dashboardHtml(d: ProjectDashboardRead): string {
     <section class="card">
       <h2>Open work</h2>
       <div class="dashboard-block">${openTasksHtml}</div>
+      <form class="task-form dashboard-add-task" data-project-id="${d.project.id}">
+        <input type="text" class="dashboard-task-input" maxlength="500"
+               placeholder="Add a task to this project…" required />
+        <input type="date" class="dashboard-task-due" title="Optional deadline" />
+        <button type="submit">Add task</button>
+      </form>
+      <p class="hint">New tasks land in this project's backlog (no day). Use “Schedule today” to bring one into Today.</p>
+      <p class="message dashboard-task-message"></p>
     </section>
 
     <section class="card">
@@ -235,6 +249,11 @@ function dashboardHtml(d: ProjectDashboardRead): string {
       <div class="dashboard-block">${insightsHtml}</div>
     </section>
   `;
+}
+
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 async function openDashboard(projectId: number): Promise<void> {
@@ -324,10 +343,55 @@ export function init(onChanged?: () => Promise<void>): void {
   listContainer = document.querySelector<HTMLDivElement>("#projects-list-container")!;
 
   // Dashboard back / actions (delegated on the container).
-  dashboardContainer.addEventListener("click", (event) => {
+  dashboardContainer.addEventListener("click", async (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    if (target.dataset.dashboardAction === "back") closeDashboard();
+    const action = target.dataset.dashboardAction;
+    if (action === "back") {
+      closeDashboard();
+    } else if (action === "schedule-today") {
+      const taskId = Number(target.dataset.taskId);
+      if (!taskId || openDashboardId === null) return;
+      target.setAttribute("disabled", "true");
+      try {
+        await updateDailyTask(taskId, { planned_date: localToday() });
+        await openDashboard(openDashboardId);
+        await onChangedCb?.();
+      } catch (e) {
+        console.error(e);
+        target.removeAttribute("disabled");
+      }
+    }
+  });
+
+  // Add a task to the open project (lands in the project's backlog).
+  dashboardContainer.addEventListener("submit", async (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    if (!form.classList.contains("dashboard-add-task")) return;
+    event.preventDefault();
+    const projectId = Number(form.dataset.projectId);
+    const textInput = form.querySelector<HTMLInputElement>(".dashboard-task-input");
+    const dueInput = form.querySelector<HTMLInputElement>(".dashboard-task-due");
+    const msgEl = dashboardContainer.querySelector<HTMLParagraphElement>(".dashboard-task-message");
+    const text = textInput?.value.trim() ?? "";
+    if (!projectId || !text) return;
+    try {
+      await createDailyTask({
+        text,
+        project_id: projectId,
+        due_date: dueInput?.value || null,
+        unplanned: true,
+      });
+      if (openDashboardId !== null) await openDashboard(openDashboardId);
+      notifyProjectsUpdated();
+      await onChangedCb?.();
+      const refreshedMsg = dashboardContainer.querySelector<HTMLParagraphElement>(".dashboard-task-message");
+      if (refreshedMsg) setMessage(refreshedMsg, "Task added to backlog.", "success");
+    } catch (e) {
+      console.error(e);
+      if (msgEl) setMessage(msgEl, "Could not add task.", "error");
+    }
   });
   dashboardContainer.addEventListener("submit", async (event) => {
     event.preventDefault();

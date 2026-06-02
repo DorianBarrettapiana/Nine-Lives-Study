@@ -171,7 +171,9 @@ def get_project_dashboard(
         select(DailyTask)
         .where(DailyTask.user_id == user_id)
         .where(DailyTask.project_id == project_id)
-        .order_by(DailyTask.is_done.asc(), DailyTask.task_date.desc())
+        # Open first; most recently touched first. created_at avoids NULL
+        # ordering surprises now that backlog tasks have no planned_date.
+        .order_by(DailyTask.is_done.asc(), DailyTask.created_at.desc())
     ).all())
     task_ids = {t.id for t in tasks}
     open_tasks = [t for t in tasks if not t.is_done]

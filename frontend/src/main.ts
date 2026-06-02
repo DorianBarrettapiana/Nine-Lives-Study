@@ -471,6 +471,36 @@ const APP_HTML = `
 let currentUser: UserRead | null = null;
 let currentView: AppView = "today";
 
+// Background polling so friends' activity (likes, cheers, new feed items,
+// notifications) shows up without a manual page refresh. Visibility-aware:
+// we skip ticks while the tab is hidden and fire one immediately on return.
+const POLL_INTERVAL_MS = 15_000;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let visibilityHandler: (() => void) | null = null;
+
+function pollTick(): void {
+  if (document.hidden || !currentUser) return;
+  void FriendsView.refresh().catch((error) => {
+    if (error instanceof UnauthorizedError) void handleSignedOut();
+    else console.error(error);
+  });
+}
+
+function startPolling(): void {
+  stopPolling();
+  pollTimer = setInterval(pollTick, POLL_INTERVAL_MS);
+  visibilityHandler = () => { if (!document.hidden) pollTick(); };
+  document.addEventListener("visibilitychange", visibilityHandler);
+}
+
+function stopPolling(): void {
+  if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null; }
+  if (visibilityHandler) {
+    document.removeEventListener("visibilitychange", visibilityHandler);
+    visibilityHandler = null;
+  }
+}
+
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("Could not find #app root element.");
 
@@ -516,6 +546,7 @@ async function refreshAll(): Promise<void> {
 
 async function handleSignedOut(): Promise<void> {
   currentUser = null;
+  stopPolling();
   await bootstrap();
 }
 
@@ -706,6 +737,7 @@ function mountApp(user: UserRead): void {
   FeynmanView.renderInitial();
   switchView(views, currentView);
   void refreshAll();
+  startPolling();
 }
 
 async function bootstrap(): Promise<void> {
