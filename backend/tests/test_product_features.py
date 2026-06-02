@@ -253,6 +253,10 @@ def test_monthly_progress_recap_route_is_exposed(auth_client: TestClient, monkey
         "summarise_progress_recap",
         lambda *_args: SummaryResult("Advisor-ready recap", "test-model", 10, 5),
     )
+    # Monthly recap is now restricted to the last 3 days of the calendar
+    # month — freeze "now" to a date in that window so this route smoke
+    # test isn't time-of-month dependent.
+    monkeypatch.setattr(summaries, "_utc_now", lambda: datetime(2026, 6, 30, 12, tzinfo=timezone.utc))
 
     response = auth_client.post("/summaries/progress/monthly/generate")
 

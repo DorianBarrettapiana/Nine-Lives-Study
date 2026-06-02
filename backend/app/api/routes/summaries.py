@@ -13,7 +13,7 @@ repeating Generate for the *same* week overwrites instead of stacking
 rows — so cost is bounded by distinct periods, not click count.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -34,18 +34,35 @@ from app.schemas.ai_summary import (
 
 router = APIRouter(prefix="/summaries", tags=["summaries"])
 
-# Weekly recap has TWO slots: Tuesday and Friday. Together they cap weekly
-# Claude spend at 2 * cost-per-call regardless of how many times the user
-# clicks Generate — the prior "1/day rolling 24h" cap let a determined user
-# rack up 21 calls/week. Each slot writes a distinct period_key
-# (`2026-W22-T` vs `2026-W22-F`), so they don't UPSERT-overwrite each other,
-# and the DB UNIQUE on (user_id, kind, period_key) makes a second click on
-# the same slot a no-op-with-429.
+# Weekly recap: Friday only. We dropped Tuesday after collecting user
+# feedback that one ritual day per week is enough — twice was hitting
+# fatigue and inflating the Claude bill. Friday now produces a
+# retrospective on the just-closed week (Mon-Sun) rather than the prior
+# "pulse on the current week so far" semantics, which matches the
+# "Generate last week recap" button label users expect.
+#
+# Each user can still only generate once per ISO week per kind, because
+# the unique (user_id, kind, period_key) constraint is the structural
+# cost cap. Pre-existing `-T` rows from before this change stay in the
+# DB so the user's history doesn't regress.
 _WEEKLY_SLOTS: dict[int, str] = {
-    1: "T",  # Tuesday  → "...-T"
-    4: "F",  # Friday   → "...-F"
+    4: "F",  # Friday → "...-F"
 }
-_SLOT_LABEL = {"T": "Tuesday", "F": "Friday"}
+_SLOT_LABEL = {"F": "Friday"}
+
+# Monthly recap is restricted to the LAST 3 DAYS of the month so users
+# write a retrospective at month-end, not mid-month. We use "last 3
+# calendar days" instead of literally "29-31" so February still has 3
+# eligible days regardless of leap year. The DB unique constraint on
+# (kind, period_key) where period_key = "YYYY-MM" already caps to one
+# per month — this restriction adds an end-of-month *window*.
+_MONTHLY_WINDOW_DAYS = 3
+
+# Stage (rolling) recap is once per 90 days per user. Unlike weekly /
+# monthly, its period_key changes every call (it embeds today's date),
+# so the unique constraint can't enforce the cooldown. We do it
+# application-side by looking for any recent "stage" row.
+_STAGE_COOLDOWN_DAYS = 90
 
 
 def _utc_now() -> datetime:
@@ -260,19 +277,69 @@ def weekly_availability(
     }
 
 
+@router.get("/monthly/availability", response_model=dict)
+def monthly_availability(
+    tz_offset: int = Query(default=0, ge=-720, le=840),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Whether the Monthly Generate button should be enabled right now."""
+    if not _is_in_monthly_window(tz_offset):
+        return {
+            "can_generate": False,
+            "reason": "off_window",
+            "next_available": _monthly_next_open_iso(tz_offset),
+            "window_days": _MONTHLY_WINDOW_DAYS,
+        }
+    start = _local_month_start_utc(tz_offset)
+    period_key = start.strftime("%Y-%m")
+    existing = db.scalar(
+        select(AiSummary.id)
+        .where(AiSummary.user_id == current_user.id)
+        .where(AiSummary.kind == "monthly")
+        .where(AiSummary.period_key == period_key)
+    )
+    if existing is not None:
+        return {
+            "can_generate": False,
+            "reason": "already_generated",
+            "period_key": period_key,
+        }
+    return {"can_generate": True, "period_key": period_key}
+
+
+@router.get("/stage/availability", response_model=dict)
+def stage_availability(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Whether the Stage Generate button should be enabled right now."""
+    cooldown_until = _stage_cooldown_until(current_user.id, db)
+    if cooldown_until is not None:
+        return {
+            "can_generate": False,
+            "reason": "cooldown",
+            "next_available": cooldown_until.date().isoformat(),
+            "cooldown_days": _STAGE_COOLDOWN_DAYS,
+        }
+    return {"can_generate": True, "cooldown_days": _STAGE_COOLDOWN_DAYS}
+
+
 def _period_key_for_slot(slot: str, tz_offset_minutes: int) -> str:
     """Period key the given slot would write right now.
 
-    Tuesday's period_key reflects the PREVIOUS week (the one being
-    retrospected on). Friday's reflects the CURRENT week (the one being
-    pulse-checked). This keeps each slot self-consistent — "Recap for
-    2026-W21" on Tuesday is genuinely about W21, not "the recap I made
-    in W22 about W21".
+    The (only) Friday slot is now retrospective: it summarises the
+    just-closed previous week (Mon-Sun). Anchoring the key on the
+    previous Monday keeps "Recap for 2026-W21" genuinely about W21.
+
+    The legacy `"T"` slot is retained for back-compat with any code
+    that still passes that letter; it uses the same previous-week
+    anchor (so a Tue UI hitting an unmigrated frontend would still
+    produce a sensible period_key, though the Tuesday slot is now
+    rejected at the route layer).
     """
     this_monday = _local_monday_utc(tz_offset_minutes)
-    # Tuesday → previous week's Monday (the retrospected week).
-    # Friday  → current week's Monday (the week being pulse-checked).
-    anchor = this_monday - timedelta(days=7) if slot == "T" else this_monday
+    anchor = this_monday - timedelta(days=7)  # previous week (Mon-Sun)
     return f"{_iso_week_key(anchor)}-{slot}"
 
 
@@ -283,7 +350,69 @@ def _next_slot_letter(today_weekday: int) -> str:
         candidate = (today_weekday + offset) % 7
         if candidate in _WEEKLY_SLOTS:
             return _WEEKLY_SLOTS[candidate]
-    return "T"  # unreachable — both slots are in the dict
+    return "F"  # unreachable — Friday is in the dict
+
+
+def _days_in_month(year: int, month: int) -> int:
+    """Number of calendar days in (year, month). Used by the monthly
+    end-of-month window — handles Feb / leap years without us hard-
+    coding the month → days table."""
+    if month == 12:
+        return 31
+    next_month_start = date(year, month + 1, 1)
+    return (next_month_start - date(year, month, 1)).days
+
+
+def _is_in_monthly_window(tz_offset_minutes: int) -> bool:
+    """True iff today (in caller's local TZ) is one of the last
+    `_MONTHLY_WINDOW_DAYS` days of its calendar month.
+
+    We use "last N days of the month" instead of literally "29/30/31"
+    so February has a usable window (26-28 non-leap, 27-29 leap).
+    """
+    local_now = (_utc_now() + timedelta(minutes=tz_offset_minutes)).date()
+    last_day = _days_in_month(local_now.year, local_now.month)
+    return local_now.day > last_day - _MONTHLY_WINDOW_DAYS
+
+
+def _monthly_next_open_iso(tz_offset_minutes: int) -> str:
+    """ISO date of the next day the monthly window opens (for UI hint)."""
+    local_now = (_utc_now() + timedelta(minutes=tz_offset_minutes)).date()
+    last_day = _days_in_month(local_now.year, local_now.month)
+    threshold = last_day - _MONTHLY_WINDOW_DAYS  # first eligible = threshold+1
+    if local_now.day <= threshold:
+        return date(local_now.year, local_now.month, threshold + 1).isoformat()
+    # We're already in the window; "next" really means "next month's window".
+    if local_now.month == 12:
+        next_y, next_m = local_now.year + 1, 1
+    else:
+        next_y, next_m = local_now.year, local_now.month + 1
+    next_last = _days_in_month(next_y, next_m)
+    return date(next_y, next_m, next_last - _MONTHLY_WINDOW_DAYS + 1).isoformat()
+
+
+def _stage_cooldown_until(user_id: int, db: Session) -> datetime | None:
+    """If the user generated a stage recap in the last 90 days, return
+    when the cooldown ends (UTC datetime). Otherwise None.
+
+    Looks at `generated_at` on the most recent `stage` row — period_key
+    can't carry the cooldown because it embeds the rolling window's
+    start/end dates and so changes every call.
+    """
+    latest = db.scalar(
+        select(AiSummary.generated_at)
+        .where(AiSummary.user_id == user_id)
+        .where(AiSummary.kind == "stage")
+        .order_by(AiSummary.generated_at.desc())
+        .limit(1)
+    )
+    if latest is None:
+        return None
+    latest_utc = latest if latest.tzinfo else latest.replace(tzinfo=timezone.utc)
+    cooldown_end = latest_utc + timedelta(days=_STAGE_COOLDOWN_DAYS)
+    if cooldown_end <= _utc_now():
+        return None
+    return cooldown_end
 
 
 @router.post("/weekly/generate", response_model=AiSummaryRead, status_code=201)
@@ -292,35 +421,30 @@ def generate_weekly(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AiSummary:
-    """Generate THIS week's recap — restricted to Tuesday and Friday slots.
+    """Generate the previous week's retrospective — Friday only.
 
-    Each slot writes its own period_key (`2026-W22-T` for Tue, `-F` for Fri)
-    so the two recaps coexist instead of overwriting each other. Together
-    they hard-cap weekly Claude spend at 2 calls per user per week.
-
-    `tz_offset` is minutes east of UTC (JS getTimezoneOffset convention with
-    sign flipped) — needed because "today is Tuesday" depends on the user's
-    local calendar, not the server's UTC clock."""
+    Caps weekly Claude spend at one call per user per ISO week through
+    the unique (user_id, kind, period_key) DB index. `tz_offset` is
+    minutes east of UTC (JS getTimezoneOffset convention with sign
+    flipped) — "today is Friday" is the user's local calendar, not the
+    server's UTC clock."""
     _check_base_preconditions(current_user)
     weekday = _local_weekday(tz_offset)
     slot = _WEEKLY_SLOTS.get(weekday)
     if slot is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Weekly recap can only be generated on Tuesdays and Fridays.",
+            detail="Weekly recap can only be generated on Fridays.",
         )
     period_key = _period_key_for_slot(slot, tz_offset)
     _check_period_not_yet_generated(current_user.id, "weekly", period_key, db)
     this_monday = _local_monday_utc(tz_offset)
     try:
-        if slot == "T":
-            # Tuesday: retrospective on last week (Mon-Sun, now closed).
-            result = ai.summarise_weekly_retrospective(
-                current_user.id, this_monday - timedelta(days=7), db,
-            )
-        else:  # "F"
-            # Friday: pulse on current week so far (Mon-now).
-            result = ai.summarise_weekly_pulse(current_user.id, this_monday, db)
+        # Friday: retrospective on the just-closed week (Mon-Sun). The
+        # week the recap covers ends on the Sunday before today's Friday.
+        result = ai.summarise_weekly_retrospective(
+            current_user.id, this_monday - timedelta(days=7), db,
+        )
     except Exception as exc:  # noqa: BLE001 — surface SDK errors as 502
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -337,14 +461,41 @@ def generate_progress_recap(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AiSummary:
-    """Generate an advisor-ready monthly or rolling stage recap."""
+    """Generate an advisor-ready monthly or rolling stage recap.
+
+    Monthly: only callable in the last 3 days of a calendar month (so
+    the user writes month-end retrospectives). The DB UNIQUE on
+    (kind, period_key=YYYY-MM) still caps to one per month.
+
+    Stage: callable at most once per 90 days per user; the cooldown is
+    enforced by looking at the latest stored stage row's `generated_at`.
+    """
     _check_base_preconditions(current_user)
     end = _utc_now()
     if period == "monthly":
+        if not _is_in_monthly_window(tz_offset):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Monthly recap can only be generated in the last "
+                    f"{_MONTHLY_WINDOW_DAYS} days of the month. "
+                    f"Next available: {_monthly_next_open_iso(tz_offset)}."
+                ),
+            )
         start = _local_month_start_utc(tz_offset)
         period_key = start.strftime("%Y-%m")
         label = f"current calendar month ({period_key})"
     else:
+        cooldown_until = _stage_cooldown_until(current_user.id, db)
+        if cooldown_until is not None:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    f"Stage recap can only be generated once every "
+                    f"{_STAGE_COOLDOWN_DAYS} days. "
+                    f"Next available: {cooldown_until.date().isoformat()}."
+                ),
+            )
         start = end - timedelta(days=days)
         period_key = f"{start.date().isoformat()}..{end.date().isoformat()}"
         label = f"rolling {days}-day research stage"
