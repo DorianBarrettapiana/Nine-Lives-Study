@@ -1584,19 +1584,21 @@ h3 {
 }
 .milestone-row {
   display: flex;
-  align-items: center;
+  /* Wrap long content to multiple lines rather than truncating —
+   * ellipsis on CJK reads as data-loss; multi-line is the better
+   * default for the kind of long descriptive titles users actually
+   * type (e.g. "迷迭香植物排放和SOA形成潜力实验的数据处理结果展示"). */
+  align-items: flex-start;
   gap: 0.5rem;
   padding: 0.4rem 0.55rem;
   background: var(--bg-item);
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   font-size: 0.86rem;
-  /* Flex items default to min-width:auto, which makes them refuse to
-   * shrink below their intrinsic content width. Without these two
-   * lines a long milestone title bleeds past the card's right edge
-   * instead of getting the .milestone-title ellipsis below. */
+  /* Flex items default to min-width:auto, which refuses to shrink
+   * below intrinsic content width — the row would bleed past the
+   * card. Setting min-width:0 lets the title wrap inside. */
   min-width: 0;
-  overflow: hidden;
 }
 .milestone-row.milestone-soon {
   border-left: 3px solid #ef4444;
@@ -1619,11 +1621,21 @@ h3 {
   flex: 1;
   min-width: 0;
   cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Long titles wrap to multiple lines. `anywhere` covers CJK plus
+   * very long URLs / hashes the user might paste in. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+  line-height: 1.3;
 }
 .milestone-title:hover { color: var(--accent); }
+.milestone-project-chip, .milestone-countdown, .milestone-delete,
+.milestone-expand {
+  /* Pin sidekick elements to the top of the row when the title wraps
+   * to multiple lines, so the chevron / countdown / delete stay
+   * vertically aligned with the first line of text. */
+  margin-top: 0.15rem;
+}
 .milestone-countdown {
   flex-shrink: 0;
   font-weight: 700;
@@ -1645,6 +1657,46 @@ h3 {
   flex-shrink: 0;
 }
 .milestone-delete:hover { color: #ef4444; background: transparent; }
+
+/* Collapsible parent → children grouping. The chevron rotates 90deg
+ * when its row is expanded so the user gets the standard tree-toggle
+ * affordance without us shipping an SVG. */
+.milestone-expand {
+  flex-shrink: 0;
+  width: 1rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1;
+  user-select: none;
+  transition: transform 0.12s ease;
+}
+.milestone-expand.expanded { transform: rotate(90deg); }
+.milestone-child-count {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  padding: 0.05rem 0.4rem;
+  background: var(--bg-muted);
+  border-radius: 999px;
+  margin-top: 0.15rem;
+}
+.milestone-children {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  /* Indent the whole block instead of each row, so the visual rail
+   * (the parent's left border colour) stays consistent. */
+  margin: 0.3rem 0 0.1rem 1rem;
+  padding-left: 0.5rem;
+  border-left: 2px dashed var(--border-soft);
+}
+.milestone-children.hidden { display: none; }
+.milestone-row.milestone-child {
+  font-size: 0.82rem;
+  background: transparent;
+  padding: 0.3rem 0.5rem;
+}
 
 .milestone-empty {
   margin: 0.3rem 0;
