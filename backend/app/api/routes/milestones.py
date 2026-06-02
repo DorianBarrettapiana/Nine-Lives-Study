@@ -13,10 +13,11 @@ common views.
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from app.core import ai
 from app.core.auth import get_current_user
 from app.core.backplanning import suggest_children, weeks_between
 from app.core.database import get_db
@@ -191,29 +192,137 @@ def delete_milestone(
 # ---------------------------------------------------------------------------
 
 
+def _llm_suggestions_if_opted_in(
+    parent: Milestone, today: date, current_user: User, db: Session,
+) -> list[MilestoneSuggestion] | None:
+    """Try the LLM path; return None on any reason to fall back.
+
+    Failure modes (all silent, all fall back):
+      * No ANTHROPIC_API_KEY on the server
+      * User hasn't opted in
+      * Parent too close (rules engine returns empty there anyway; the
+        LLM has no useful suggestions either)
+      * SDK / network exception
+      * Response unparseable or violates the schema
+    """
+    if not ai.is_configured() or not current_user.ai_opt_in:
+        return None
+    interval_days = (parent.due_date - today).days
+    if interval_days < 14:
+        return None
+
+    siblings = db.scalars(
+        select(Milestone)
+        .where(Milestone.user_id == current_user.id)
+        .where(Milestone.id != parent.id)
+        .where(Milestone.is_archived == False)  # noqa: E712
+        .order_by(Milestone.due_date.asc())
+    ).all()
+    sibling_payload = [
+        {"title": s.title, "due_date": s.due_date.isoformat()}
+        for s in siblings
+    ]
+
+    raw_items = ai.suggest_backplan_via_llm(
+        parent_title=parent.title,
+        parent_due_iso=parent.due_date.isoformat(),
+        today_iso=today.isoformat(),
+        sibling_milestones=sibling_payload,
+    )
+    if not raw_items:
+        return None
+
+    out: list[MilestoneSuggestion] = []
+    seen_days: set[date] = set()
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        title = (item.get("title") or "").strip()
+        date_str = item.get("due_date")
+        if not title or not isinstance(date_str, str):
+            continue
+        try:
+            due = date.fromisoformat(date_str)
+        except ValueError:
+            continue
+        # Enforce the same window the prompt asks for, in case the model
+        # ignored it. Self-defense.
+        if due <= today or due >= parent.due_date:
+            continue
+        if due in seen_days:
+            continue
+        seen_days.add(due)
+        out.append(MilestoneSuggestion(
+            title=title[:200], due_date=due, template_hint="llm",
+        ))
+    out.sort(key=lambda s: s.due_date)
+    # Cap to the same upper bound as the rules engine so UX stays
+    # consistent regardless of which path served the request.
+    out = out[:8]
+    # A degenerate response (e.g. all items outside the window) is
+    # indistinguishable from "no suggestions" — fall back rather than
+    # show the user an empty list with the LLM badge.
+    if len(out) < 2:
+        return None
+    return out
+
+
 @router.get("/{milestone_id}/suggest-children", response_model=MilestoneSuggestionsRead)
 def get_suggested_children(
     milestone_id: int,
+    force_rules: bool = Query(
+        default=False,
+        description=(
+            "Skip the LLM path even if the user is opted in. Used by the "
+            "frontend's 're-roll without AI' button."
+        ),
+    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MilestoneSuggestionsRead:
-    """Return deterministic check-point suggestions for a parent milestone.
+    """Return intermediate check-point suggestions for a parent milestone.
 
-    No persistence — these are previews. The frontend lets the user
-    edit / delete / add items, then POSTs `/children` to save the
-    final set. Server-side rules live in `app.core.backplanning`.
+    Two engines:
+      1. **LLM**: if `ANTHROPIC_API_KEY` is set and the user has
+         `ai_opt_in=True`, ask Claude to propose 3–6 dated check-points.
+         Strictly validated; any failure mode falls through silently.
+      2. **Rules**: deterministic templates (`app.core.backplanning`).
+         Always available, always fast.
+
+    `force_rules=true` skips the LLM path for users who want to compare.
+    Returns the engine used in `source` so the UI can badge it.
+
+    Suggestions are never persisted — the frontend lets the user
+    edit / delete / add items, then POSTs `/children` to save.
     """
     parent = _get_owned_milestone(milestone_id, current_user, db)
     today = date.today()
-    suggestions, template = suggest_children(today, parent.due_date, parent.title)
-    return MilestoneSuggestionsRead(
-        suggestions=[
+
+    rule_items, template = suggest_children(today, parent.due_date, parent.title)
+    suggestions: list[MilestoneSuggestion]
+    source = "rules"
+    if not force_rules:
+        llm_items = _llm_suggestions_if_opted_in(parent, today, current_user, db)
+        if llm_items is not None:
+            suggestions = llm_items
+            source = "llm"
+        else:
+            suggestions = [
+                MilestoneSuggestion(
+                    title=s.title, due_date=s.due_date, template_hint=s.template_hint,
+                ) for s in rule_items
+            ]
+    else:
+        suggestions = [
             MilestoneSuggestion(
                 title=s.title, due_date=s.due_date, template_hint=s.template_hint,
-            ) for s in suggestions
-        ],
+            ) for s in rule_items
+        ]
+    return MilestoneSuggestionsRead(
+        suggestions=suggestions,
         template=template,
         weeks_remaining=weeks_between(today, parent.due_date),
+        source=source,
     )
 
 
