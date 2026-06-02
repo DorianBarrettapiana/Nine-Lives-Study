@@ -9,7 +9,7 @@
  * old daily_logs.mood column is left untouched by this view.
  */
 
-import { createMoodEntry, listMoodEntries, type MoodEntryRead } from "../api/mood";
+import { createMoodEntry, deleteMoodEntry, listMoodEntries, type MoodEntryRead } from "../api/mood";
 import {
   carryDailyTask, createDailyTask, deleteDailyTask, getDailyState,
   listUpcomingTasks, saveDailyLog, updateDailyTask,
@@ -23,6 +23,7 @@ import {
 } from "./project-state";
 import { projectChipHtml } from "./project-picker";
 import * as StopwatchView from "./stopwatch";
+import * as TimerMode from "./timerMode";
 
 const MOODS = [
   { emoji: "😩", label: "Exhausted" },
@@ -47,13 +48,21 @@ let progressFill: HTMLDivElement;
 let projectBreakdownEl: HTMLParagraphElement;
 let upcomingCardEl: HTMLElement;
 let upcomingListEl: HTMLDivElement;
+let yesterdayCardEl: HTMLElement;
+let yesterdayBodyEl: HTMLDivElement;
+let yesterdayCarryAllBtn: HTMLButtonElement;
 let moodRow: HTMLDivElement;
-let moodStatusEl: HTMLElement;
+let moodReflectionInput: HTMLTextAreaElement;
+let moodSaveBtn: HTMLButtonElement;
+let moodMessageEl: HTMLParagraphElement;
+let moodListEl: HTMLDivElement;
 let reflectionInput: HTMLTextAreaElement;
 let messageEl: HTMLParagraphElement;
+let selectedMood = "";
 
 let state: DailyStateRead | null = null;
 let upcoming: DailyTaskRead[] = [];
+let yesterdayState: DailyStateRead | null = null;
 let todaysMoods: MoodEntryRead[] = [];
 let onDataChangedCb: (() => Promise<void>) | null = null;
 
@@ -246,6 +255,67 @@ function renderTaskList(): void {
   taskList.innerHTML = filtered.map((t) => taskHtml(t, readOnly)).join("");
 }
 
+function renderYesterdayCard(): void {
+  // Only relevant when looking at today. When navigating to a past date,
+  // hide the card entirely — the user is reviewing history, not planning.
+  if (!isToday() || yesterdayState === null) {
+    yesterdayCardEl.classList.add("hidden");
+    return;
+  }
+
+  const reflection = yesterdayState.log?.reflection?.trim() ?? "";
+  const unfinished = yesterdayState.tasks.filter((t) => !t.is_done);
+  const mainGoalId = yesterdayState.log?.main_goal_task_id ?? null;
+  const mainGoal = mainGoalId !== null
+    ? yesterdayState.tasks.find((t) => t.id === mainGoalId)
+    : null;
+  const mainGoalMissed = mainGoal !== null && mainGoal !== undefined && !mainGoal.is_done;
+
+  // Nothing to surface → keep the card out of the way so the page stays clean.
+  if (reflection === "" && unfinished.length === 0 && !mainGoalMissed) {
+    yesterdayCardEl.classList.add("hidden");
+    return;
+  }
+
+  yesterdayCardEl.classList.remove("hidden");
+
+  const SNIPPET_MAX = 240;
+  const reflectionHtml = reflection === ""
+    ? ""
+    : reflection.length <= SNIPPET_MAX
+      ? `<p class="yesterday-reflection">${escapeHtml(reflection)}</p>`
+      : `<details class="yesterday-reflection-details">
+           <summary>${escapeHtml(reflection.slice(0, SNIPPET_MAX))}…</summary>
+           <p class="yesterday-reflection">${escapeHtml(reflection)}</p>
+         </details>`;
+
+  const mainGoalHtml = mainGoalMissed
+    ? `<p class="yesterday-main-goal-warn">
+         ⭐ Yesterday's main goal wasn't finished:
+         <strong>${escapeHtml(mainGoal!.text)}</strong>
+         <button class="link-btn" data-yesterday-action="carry-main"
+                 data-id="${mainGoal!.id}" type="button">Carry to today</button>
+       </p>`
+    : "";
+
+  const unfinishedHtml = unfinished.length === 0
+    ? ""
+    : `<div class="yesterday-unfinished">
+         <p class="hint">${unfinished.length} unfinished task${unfinished.length === 1 ? "" : "s"}:</p>
+         ${unfinished.map((t) => `
+           <div class="yesterday-task-row" data-id="${t.id}">
+             <span class="yesterday-task-text">${escapeHtml(t.text)}</span>
+             ${projectChipHtml(t.project_id)}
+             <button class="link-btn" data-yesterday-action="carry" data-id="${t.id}"
+                     type="button" title="Bring to today">→ Today</button>
+           </div>
+         `).join("")}
+       </div>`;
+
+  yesterdayBodyEl.innerHTML = mainGoalHtml + reflectionHtml + unfinishedHtml;
+  yesterdayCarryAllBtn.classList.toggle("hidden", unfinished.length < 2);
+}
+
 function renderUpcoming(): void {
   // Upcoming is global (not date-scoped), so we keep showing it even
   // when the user has navigated to a past day — gives a "still
@@ -287,26 +357,37 @@ function humanWhen(date: string): string {
 function renderMood(): void {
   const readOnly = !isToday();
   moodRow.innerHTML = MOODS.map((m) => `
-    <button class="mood-button" type="button"
+    <button class="mood-button ${selectedMood === m.emoji ? "active" : ""}" type="button"
             data-today-mood="${m.emoji}" title="${m.label}"
             ${readOnly ? "disabled" : ""}>
       ${m.emoji}
     </button>
   `).join("");
+  moodReflectionInput.disabled = readOnly;
+  moodSaveBtn.disabled = readOnly;
+
   if (todaysMoods.length === 0) {
-    moodStatusEl.textContent = isToday() ? "No mood logged today." : "";
+    moodListEl.innerHTML = isToday()
+      ? `<p class="hint today-mood-empty">No mood logged today yet.</p>`
+      : "";
     return;
   }
-  const compact = todaysMoods
-    .slice(0, 5)
-    .map((m) => {
-      const t = parseApiDate(m.created_at).toLocaleTimeString(undefined, {
-        hour: "2-digit", minute: "2-digit",
-      });
-      return `${m.mood} ${t}`;
-    })
-    .join(" · ");
-  moodStatusEl.textContent = `Today: ${compact}`;
+  // One row per entry — emoji, time, optional reflection, delete.
+  moodListEl.innerHTML = todaysMoods.map((m) => {
+    const t = parseApiDate(m.created_at).toLocaleTimeString(undefined, {
+      hour: "2-digit", minute: "2-digit",
+    });
+    const reflection = m.reflection
+      ? `<span class="today-mood-entry-reflection">${escapeHtml(m.reflection)}</span>`
+      : "";
+    return `
+      <div class="today-mood-entry">
+        <span class="today-mood-entry-emoji">${m.mood}</span>
+        <span class="today-mood-entry-time hint">${t}</span>
+        ${reflection}
+        ${isToday() ? `<button type="button" class="today-mood-entry-delete" data-mood-delete="${m.id}" title="Delete">×</button>` : ""}
+      </div>`;
+  }).join("");
 }
 
 function renderReflection(): void {
@@ -331,6 +412,7 @@ export function render(): void {
   progressLabel.textContent = `${state.done_count} / ${state.total_count}`;
   progressFill.style.width = `${state.completion_percent}%`;
   renderProjectBreakdown();
+  renderYesterdayCard();
   renderTaskList();
   renderUpcoming();
   renderMood();
@@ -362,17 +444,24 @@ async function renderTaskProjectPicker(): Promise<void> {
 
 export async function refresh(): Promise<void> {
   try {
-    const [s, up, moods] = await Promise.all([
+    // Yesterday is only useful while planning today. When the user is
+    // browsing a past date, skip the extra fetch.
+    const yesterdayFetch: Promise<DailyStateRead | null> = isToday()
+      ? getDailyState(shiftDate(todayStr(), -1)).catch(() => null)
+      : Promise.resolve(null);
+    const [s, up, moods, y] = await Promise.all([
       getDailyState(viewedDate ?? undefined),
       // Upcoming is always for "from today onwards" — date navigation in
       // Today doesn't shift the looming-deadlines window.
       listUpcomingTasks().catch(() => [] as DailyTaskRead[]),
       // Today's mood stream (server scopes to caller). 1-day window is
-      // enough for the status strip; full history lives in Mood tab.
+      // enough for the inline list; multi-day history lives in Stats.
       listMoodEntries(1).catch(() => [] as MoodEntryRead[]),
+      yesterdayFetch,
     ]);
     state = s;
     upcoming = up;
+    yesterdayState = y;
     // Filter today's moods to actual today (the 1-day list can include
     // yesterday's tail-end depending on tz).
     const today = todayStr();
@@ -408,14 +497,36 @@ async function setMainGoal(taskId: number | null): Promise<void> {
   }
 }
 
-async function recordMood(mood: string): Promise<void> {
+async function recordMood(): Promise<void> {
+  if (!selectedMood) {
+    setMessage(moodMessageEl, "Pick a mood first.", "error");
+    return;
+  }
   try {
-    await createMoodEntry({ mood, reflection: "" });
+    await createMoodEntry({
+      mood: selectedMood,
+      reflection: moodReflectionInput.value.trim(),
+    });
+    selectedMood = "";
+    moodReflectionInput.value = "";
+    setMessage(moodMessageEl, "Mood recorded.", "success");
     await refresh();
     await onDataChangedCb?.();
   } catch (error) {
     console.error(error);
-    setMessage(messageEl, "Could not record mood.", "error");
+    setMessage(moodMessageEl, "Could not record mood.", "error");
+  }
+}
+
+async function removeMood(id: number): Promise<void> {
+  if (!window.confirm("Delete this mood entry?")) return;
+  try {
+    await deleteMoodEntry(id);
+    await refresh();
+    await onDataChangedCb?.();
+  } catch (error) {
+    console.error(error);
+    setMessage(moodMessageEl, "Could not delete entry.", "error");
   }
 }
 
@@ -552,8 +663,14 @@ export function init(onDataChanged: () => Promise<void>): void {
   projectBreakdownEl = document.querySelector<HTMLParagraphElement>("#today-project-breakdown")!;
   upcomingCardEl = document.querySelector<HTMLElement>("#today-upcoming-card")!;
   upcomingListEl = document.querySelector<HTMLDivElement>("#today-upcoming-list")!;
+  yesterdayCardEl = document.querySelector<HTMLElement>("#today-yesterday-card")!;
+  yesterdayBodyEl = document.querySelector<HTMLDivElement>("#today-yesterday-body")!;
+  yesterdayCarryAllBtn = document.querySelector<HTMLButtonElement>("#today-yesterday-carry-all")!;
   moodRow = document.querySelector<HTMLDivElement>("#today-mood-row")!;
-  moodStatusEl = document.querySelector<HTMLElement>("#today-mood-status")!;
+  moodReflectionInput = document.querySelector<HTMLTextAreaElement>("#today-mood-reflection")!;
+  moodSaveBtn = document.querySelector<HTMLButtonElement>("#today-mood-save")!;
+  moodMessageEl = document.querySelector<HTMLParagraphElement>("#today-mood-message")!;
+  moodListEl = document.querySelector<HTMLDivElement>("#today-mood-list")!;
   reflectionInput = document.querySelector<HTMLTextAreaElement>("#today-reflection")!;
   messageEl = document.querySelector<HTMLParagraphElement>("#today-message")!;
 
@@ -650,9 +767,11 @@ export function init(onDataChanged: () => Promise<void>): void {
         await onDataChangedCb?.();
         window.dispatchEvent(new CustomEvent("task-list:updated"));
       } else if (action === "stopwatch") {
+        TimerMode.setMode("free");
         await StopwatchView.startForFocus(id, task.text);
       } else if (action === "pomodoro") {
-        await PomodoroView.startForFocus(id, task.text);
+        TimerMode.setMode("pomodoro");
+        await PomodoroView.startForFocus(id);
       }
     } catch (error) {
       console.error(error);
@@ -674,6 +793,47 @@ export function init(onDataChanged: () => Promise<void>): void {
   new MutationObserver(() => attachDragHandlers())
     .observe(taskList, { childList: true, subtree: true });
 
+  // Yesterday review — per-task carry, main-goal carry, carry-all.
+  yesterdayBodyEl.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const action = target.dataset.yesterdayAction;
+    if (!action) return;
+    const id = Number(target.dataset.id);
+    if (!Number.isFinite(id)) return;
+    try {
+      await carryDailyTask(id);
+      setMessage(messageEl, "Carried to today.", "success");
+      await refresh();
+      await onDataChangedCb?.();
+      window.dispatchEvent(new CustomEvent("task-list:updated"));
+    } catch (error) {
+      console.error(error);
+      setMessage(messageEl, "Could not carry task.", "error");
+    }
+  });
+
+  yesterdayCarryAllBtn.addEventListener("click", async () => {
+    if (yesterdayState === null) return;
+    const unfinished = yesterdayState.tasks.filter((t) => !t.is_done);
+    if (unfinished.length === 0) return;
+    yesterdayCarryAllBtn.disabled = true;
+    try {
+      // carryDailyTask is server-side idempotent on (date, text), so
+      // even if the user clicks twice it won't duplicate.
+      await Promise.all(unfinished.map((t) => carryDailyTask(t.id)));
+      setMessage(messageEl, `Carried ${unfinished.length} task${unfinished.length === 1 ? "" : "s"} to today.`, "success");
+      await refresh();
+      await onDataChangedCb?.();
+      window.dispatchEvent(new CustomEvent("task-list:updated"));
+    } catch (error) {
+      console.error(error);
+      setMessage(messageEl, "Could not carry tasks.", "error");
+    } finally {
+      yesterdayCarryAllBtn.disabled = false;
+    }
+  });
+
   // Upcoming list — clicking jumps to that task's day.
   upcomingListEl.addEventListener("click", async (event) => {
     const target = event.target;
@@ -687,14 +847,30 @@ export function init(onDataChanged: () => Promise<void>): void {
     await refresh();
   });
 
-  // Mood — every click writes a new entry. No more daily_logs.mood from here.
-  moodRow.addEventListener("click", async (event) => {
+  // Mood emoji click — stage selection (Save button commits with optional
+  // reflection text). Keeps single-click recording out of the way of
+  // misclicks, and lets users add context before persisting.
+  moodRow.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
     const mood = target.dataset.todayMood;
     if (!mood || !isToday()) return;
-    await recordMood(mood);
+    selectedMood = selectedMood === mood ? "" : mood;
+    renderMood();
   });
+  moodSaveBtn.addEventListener("click", () => void recordMood());
+  moodListEl.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const id = Number(target.dataset.moodDelete);
+    if (!Number.isFinite(id)) return;
+    void removeMood(id);
+  });
+  // History link routes the user to Stats where the full timeline lives.
+  document.querySelector<HTMLButtonElement>("#today-mood-history-link")
+    ?.addEventListener("click", () => {
+      document.querySelector<HTMLButtonElement>('.feature-tab[data-view="stats"]')?.click();
+    });
 
   // Reflection save
   document.querySelector<HTMLButtonElement>("#today-save-reflection")!

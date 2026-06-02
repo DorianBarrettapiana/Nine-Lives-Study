@@ -6,6 +6,7 @@ import {
   createFeynmanEntry, deleteFeynmanEntry, listFeynmanEntries,
   updateFeynmanEntry, type FeynmanEntryRead,
 } from "../api/feynman";
+import { listNotes, type PaperNoteRead } from "../api/notes";
 import { generateFeynmanReview, listSummaries, type AiSummaryRead } from "../api/summaries";
 import { escapeHtml, formatDate, setMessage } from "../utils";
 import { aiErrorMessage, ensureAiConsent, isAiEnabled, renderAiMarkdown } from "./ai-tools";
@@ -36,6 +37,11 @@ let feynmanDraft = ["", "", "", ""];
 let editedFeynmanId: number | null = null;
 let aiEnabled = false;
 const aiReviews = new Map<number, AiSummaryRead>();
+// Reverse-index of paper_notes.feynman_entry_id → note. Populated on
+// refresh() so each Feynman card and the editor banner know whether they
+// were spawned from a paper, without re-fetching notes on every render.
+const sourceNoteByEntryId = new Map<number, PaperNoteRead>();
+let switchToViewFn: ((view: string) => void) | null = null;
 
 function renderStep(): void {
   const step = FEYNMAN_STEPS[feynmanStep];
@@ -52,6 +58,36 @@ function renderStep(): void {
   feynmanNextButton.textContent = feynmanStep === FEYNMAN_STEPS.length - 1
     ? (editedFeynmanId === null ? "Save entry" : "Update entry") : "Next";
   if (editedFeynmanId !== null) setMessage(feynmanMessage, "Editing an existing Feynman record.", "neutral");
+  renderSourceNoteBanner();
+}
+
+function renderSourceNoteBanner(): void {
+  // When the editor is bound to an entry that was spawned from a paper
+  // note, show the source paper's title + key ideas next to the input.
+  // Most useful at step 2 ("teach it simply"): the user can glance at
+  // the paper's own framing without context-switching tabs.
+  const banner = document.querySelector<HTMLDivElement>("#feynman-source-note");
+  if (banner === null) return;
+  const note = editedFeynmanId !== null ? sourceNoteByEntryId.get(editedFeynmanId) : undefined;
+  if (note === undefined) {
+    banner.classList.add("hidden");
+    banner.innerHTML = "";
+    return;
+  }
+  const keyIdeas = note.key_points.trim();
+  const meta = [note.authors, note.year ? String(note.year) : ""].filter(Boolean).join(" · ");
+  banner.classList.remove("hidden");
+  banner.innerHTML = `
+    <p class="eyebrow">📄 From paper</p>
+    <p class="feynman-source-title">${escapeHtml(note.title)}</p>
+    ${meta ? `<p class="hint">${escapeHtml(meta)}</p>` : ""}
+    ${keyIdeas
+      ? `<details class="feynman-source-key" open>
+           <summary>Key ideas (from the note)</summary>
+           <p>${escapeHtml(keyIdeas)}</p>
+         </details>`
+      : `<p class="hint">No key ideas captured yet on this note.</p>`}
+  `;
 }
 
 export function clearDraft(): void {
@@ -67,12 +103,14 @@ export function render(): void {
     feynmanList.innerHTML = renderEmptyStateWithCat("No Feynman record yet.");
     return;
   }
-  feynmanList.innerHTML = feynmanEntries.map((entry) => `
+  feynmanList.innerHTML = feynmanEntries.map((entry) => {
+    const source = sourceNoteByEntryId.get(entry.id);
+    return `
     <article class="feynman-card">
       <div class="note-header">
         <div>
           <h3>${escapeHtml(entry.concept)}${projectChipHtml(entry.project_id)}</h3>
-          <p class="note-meta">Updated ${formatDate(entry.updated_at)}</p>
+          <p class="note-meta">Updated ${formatDate(entry.updated_at)}${source ? ` · 📄 from <em>${escapeHtml(source.title)}</em>` : ""}</p>
         </div>
         <div class="note-actions">
           <button class="secondary" data-feynman-action="edit" data-id="${entry.id}">Edit</button>
@@ -84,12 +122,25 @@ export function render(): void {
       ${entry.gaps ? `<p class="note-text"><strong>Gaps:</strong> ${escapeHtml(entry.gaps)}</p>` : ""}
       ${entry.analogy ? `<p class="note-text"><strong>Analogy:</strong> ${escapeHtml(entry.analogy)}</p>` : ""}
       ${aiReviews.has(entry.id) ? `<div class="ai-summary-body">${renderAiMarkdown(aiReviews.get(entry.id)!.content)}</div>` : ""}
-    </article>`).join("");
+    </article>`;
+  }).join("");
 }
 
 export async function refresh(): Promise<void> {
   try {
-    feynmanEntries = await listFeynmanEntries();
+    const [entries, notes] = await Promise.all([
+      listFeynmanEntries(),
+      // Source-paper banner needs the notes' feynman_entry_id pointers.
+      // Failure is non-fatal: we just lose the cross-link decoration.
+      listNotes().catch(() => [] as PaperNoteRead[]),
+    ]);
+    feynmanEntries = entries;
+    sourceNoteByEntryId.clear();
+    for (const n of notes) {
+      if (n.feynman_entry_id !== null) {
+        sourceNoteByEntryId.set(n.feynman_entry_id, n);
+      }
+    }
     aiEnabled = await isAiEnabled();
     if (aiEnabled) {
       const summaries = await listSummaries("feynman_review");
@@ -106,7 +157,28 @@ export async function refresh(): Promise<void> {
   }
 }
 
+/**
+ * Open the editor on an existing Feynman entry. Used by the paper-note
+ * "Start Feynman from this paper" action so it can drive the same edit
+ * flow that the in-list Edit button uses, without duplicating logic.
+ */
+export async function loadForEdit(entryId: number): Promise<void> {
+  // Make sure the local cache (entries + source notes) reflects what the
+  // caller just mutated, otherwise the source banner would be empty on
+  // first paint.
+  await refresh();
+  const entry = feynmanEntries.find((e) => e.id === entryId);
+  if (entry === undefined) return;
+  editedFeynmanId = entry.id;
+  feynmanStep = 0;
+  feynmanDraft = [entry.concept, entry.explanation, entry.gaps, entry.analogy];
+  switchToViewFn?.("feynman");
+  renderStep();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: string) => void): void {
+  switchToViewFn = switchToView;
   feynmanStepsEl = document.querySelector<HTMLDivElement>("#feynman-steps")!;
   feynmanStepTitle = document.querySelector<HTMLHeadingElement>("#feynman-step-title")!;
   feynmanStepDescription = document.querySelector<HTMLParagraphElement>("#feynman-step-description")!;

@@ -5,7 +5,9 @@ from datetime import date
 from pydantic import BaseModel, Field
 
 from app.schemas._base import BaseSchema, UtcDateTime
-from app.schemas.paper_note import PaperInsightRead
+from app.schemas.daily_tracker import DailyTaskRead
+from app.schemas.feynman_entry import FeynmanEntryRead
+from app.schemas.paper_note import PaperInsightRead, PaperNoteRead
 
 
 class ProjectCreate(BaseModel):
@@ -47,30 +49,31 @@ class ProjectRead(BaseSchema):
     updated_at: UtcDateTime
 
 
-class ProjectDashboardTask(BaseSchema):
-    id: int
-    text: str
-    planned_date: date | None = None
-    due_date: date | None = None
+class ReflectionMention(BaseModel):
+    """One match of a project name in a daily reflection text."""
 
-
-class ProjectDashboardPaper(BaseSchema):
-    id: int
-    title: str
-    reading_status: str
-    reading_minutes: int = 0
-
-
-class ProjectDashboardGap(BaseSchema):
-    id: int
-    concept: str
-    gaps: str
+    log_date: date
+    snippet: str
 
 
 class ProjectDashboardRead(BaseModel):
+    """Aggregated "research thread status" for a single project.
+
+    All numeric windows are computed in UTC days — this is a rough
+    progress view, not a precise stats report (Stats tab covers that
+    in the caller's local timezone). The dashboard intentionally
+    duplicates a couple of fields from the stats endpoint rather than
+    forcing the UI to make two calls and stitch results.
+    """
+
     project: ProjectRead
-    weekly_focus_minutes: int
-    open_tasks: list[ProjectDashboardTask]
-    reading_queue: list[ProjectDashboardPaper]
-    unresolved_gaps: list[ProjectDashboardGap]
+    minutes_7d: int
+    minutes_30d: int
+    done_tasks_7d: int
+    open_tasks_count: int
+    last_activity_at: UtcDateTime | None = None
+    open_tasks: list[DailyTaskRead]
+    paper_notes: list[PaperNoteRead]
+    feynman_entries: list[FeynmanEntryRead]
+    recent_reflections: list[ReflectionMention]
     recent_insights: list[PaperInsightRead]

@@ -1,0 +1,709 @@
+/**
+ * Milestones sidebar view.
+ *
+ * Single compact card in the sidebar that doubles as countdown display
+ * and inline CRUD surface. PhD deadlines (conf abstracts, defense,
+ * chapter due) live at the week/month scale and don't belong inside
+ * Today's daily task list — surfacing them here keeps them in the user's
+ * peripheral vision without crowding the planning surface.
+ *
+ * Layout:
+ *   - Top: section header + "+ Add" toggle
+ *   - Add form: title + date + (optional) project, hidden by default
+ *   - Active list (truncated to the next 3 by default)
+ *   - "Show N more" toggle when there are more upcoming
+ *   - Collapsible details for past + archived
+ *
+ * Editing: click a row to flip into inline-edit (title + date). The
+ * pattern mirrors the Projects view's double-click-to-rename UX but
+ * uses a single click because rows aren't doing any other action.
+ */
+
+import {
+  createChildMilestones,
+  createMilestone, deleteMilestone, getMilestoneSuggestions, listMilestones,
+  updateMilestone,
+  type MilestoneRead,
+  type MilestoneSuggestion,
+  type MilestoneSuggestionsRead,
+} from "../api/milestones";
+import { escapeHtml, setMessage } from "../utils";
+import {
+  getActiveProjects, refreshProjects,
+} from "./project-state";
+
+let cardEl: HTMLElement;
+let toggleAddBtn: HTMLButtonElement;
+let addForm: HTMLFormElement;
+let addTitleInput: HTMLInputElement;
+let addDateInput: HTMLInputElement;
+let addProjectPickerEl: HTMLDivElement;
+let addCancelBtn: HTMLButtonElement;
+let addMsgEl: HTMLParagraphElement;
+let listEl: HTMLDivElement;
+let showMoreBtn: HTMLButtonElement;
+let pastDetailsEl: HTMLElement;
+let pastListEl: HTMLDivElement;
+
+// All non-archived milestones (the API filters archived by default).
+// We keep them client-side and partition into "upcoming" / "past" for
+// rendering. `pastIncludingArchived` is fetched separately on demand
+// when the user opens the "past / archived" disclosure.
+let active: MilestoneRead[] = [];
+let pastIncludingArchived: MilestoneRead[] = [];
+let pastLoaded = false;
+
+// Add form has its own pending project selection (sticky across saves so
+// the user can hammer out several milestones for the same project).
+let pendingAddProjectId: number | null = null;
+
+// Show-all flag: when true, render every upcoming milestone instead of
+// truncating to the first MAX_VISIBLE.
+let showAll = false;
+const MAX_VISIBLE = 3;
+
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
+
+function halfwayDate(today: string, due: string): string {
+  // Return YYYY-MM-DD halfway between two ISO dates (local interpretation).
+  // Used to seed a freshly-added wizard row at a sensible default.
+  const [ty, tm, td] = today.split("-").map(Number);
+  const [dy, dm, dd] = due.split("-").map(Number);
+  const a = new Date(ty, tm - 1, td).getTime();
+  const b = new Date(dy, dm - 1, dd).getTime();
+  const mid = new Date(a + (b - a) / 2);
+  return `${mid.getFullYear()}-${String(mid.getMonth() + 1).padStart(2, "0")}-${String(mid.getDate()).padStart(2, "0")}`;
+}
+
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function daysUntil(due: string): number {
+  // Plain calendar-day diff in the caller's local timezone. Both sides
+  // are anchored at 00:00 local so a midnight-ish "today" doesn't read
+  // as half a day off.
+  const today = todayStr();
+  const [ty, tm, td] = today.split("-").map(Number);
+  const [dy, dm, dd] = due.split("-").map(Number);
+  const a = new Date(ty, tm - 1, td).getTime();
+  const b = new Date(dy, dm - 1, dd).getTime();
+  return Math.round((b - a) / (24 * 3600 * 1000));
+}
+
+function urgencyClass(days: number): string {
+  if (days < 0) return "milestone-overdue";
+  if (days <= 3) return "milestone-soon";
+  if (days <= 7) return "milestone-near";
+  return "";
+}
+
+function countdownLabel(days: number): string {
+  if (days < 0) return `${-days}d ago`;
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  return `${days}d`;
+}
+
+function projectChip(projectId: number | null): string {
+  if (projectId === null) return "";
+  const project = getActiveProjects().find((p) => p.id === projectId);
+  if (project === undefined) return "";
+  const color = project.color
+    ? ` style="background:${escapeHtml(project.color)};"`
+    : "";
+  return `<span class="milestone-project-chip" title="${escapeHtml(project.name)}"${color}></span>`;
+}
+
+// ---------------------------------------------------------------------------
+// Backplan wizard — inline panel that appears after a parent is created
+// and lets the user accept / edit / drop the suggested intermediate
+// check-points before they're saved. Built dynamically (no static
+// markup) so we don't bloat the sidebar template for users who never
+// see the wizard.
+// ---------------------------------------------------------------------------
+
+let backplanWrapEl: HTMLDivElement | null = null;
+// Hold the *editable* working set in memory rather than re-reading the
+// DOM on each interaction. Same shape as MilestoneSuggestion plus a
+// stable id used as the row key during add/delete.
+interface DraftSuggestion extends MilestoneSuggestion { _key: number }
+let backplanDrafts: DraftSuggestion[] = [];
+let backplanParent: MilestoneRead | null = null;
+let backplanMeta: { source: "llm" | "rules"; weeks_remaining: number } | null = null;
+let backplanKeyCounter = 0;
+
+function ensureBackplanContainer(): HTMLDivElement {
+  if (backplanWrapEl !== null) return backplanWrapEl;
+  const el = document.createElement("div");
+  el.className = "milestone-backplan-wrap hidden";
+  // Drop it into the milestones card right after the add form so it
+  // appears under the parent the user just typed.
+  addForm.insertAdjacentElement("afterend", el);
+  backplanWrapEl = el;
+  return el;
+}
+
+function backplanRowHtml(d: DraftSuggestion): string {
+  return `
+    <div class="backplan-row" data-key="${d._key}">
+      <input class="backplan-title" type="text" maxlength="200"
+             value="${escapeHtml(d.title)}" placeholder="Step title" />
+      <input class="backplan-date" type="date" value="${escapeHtml(d.due_date)}" />
+      <button type="button" class="backplan-drop" data-key="${d._key}"
+              title="Drop this check-point">×</button>
+    </div>`;
+}
+
+function renderBackplanWizard(): void {
+  const el = ensureBackplanContainer();
+  if (backplanParent === null || backplanMeta === null) {
+    el.classList.add("hidden");
+    el.innerHTML = "";
+    return;
+  }
+  const badge = backplanMeta.source === "llm" ? "✨ AI" : "Suggested";
+  const wk = backplanMeta.weeks_remaining;
+  const rows = backplanDrafts.map(backplanRowHtml).join("");
+  const parentTitle = escapeHtml(backplanParent.title);
+  el.innerHTML = `
+    <div class="backplan-header">
+      <strong>Backplan ${parentTitle}</strong>
+      <span class="backplan-badge" title="Which engine produced these">${badge}</span>
+    </div>
+    <p class="hint backplan-hint">
+      ${wk} week${wk === 1 ? "" : "s"} to go. Edit / drop any step, then save.
+    </p>
+    <div class="backplan-rows">${rows}</div>
+    <div class="button-row backplan-buttons">
+      <button type="button" class="link-btn backplan-add-row">+ Add step</button>
+      <button type="button" class="link-btn backplan-reroll"
+              title="Generate a new set of suggestions${backplanMeta.source === "llm" ? " (without AI)" : ""}">
+        ↻ ${backplanMeta.source === "llm" ? "Use rules" : "Re-roll"}
+      </button>
+      <button type="button" class="secondary backplan-skip">Skip</button>
+      <button type="button" class="backplan-save">Save check-points</button>
+    </div>
+    <p class="message backplan-msg"></p>`;
+  el.classList.remove("hidden");
+}
+
+function hideBackplanWizard(): void {
+  backplanParent = null;
+  backplanMeta = null;
+  backplanDrafts = [];
+  if (backplanWrapEl !== null) {
+    backplanWrapEl.classList.add("hidden");
+    backplanWrapEl.innerHTML = "";
+  }
+}
+
+function readBackplanDrafts(): DraftSuggestion[] {
+  // Sync DOM → drafts so the Save handler picks up edits made after
+  // the last full render.
+  if (backplanWrapEl === null) return [];
+  const rows = backplanWrapEl.querySelectorAll<HTMLDivElement>(".backplan-row");
+  const out: DraftSuggestion[] = [];
+  rows.forEach((row) => {
+    const key = Number(row.dataset.key);
+    const titleEl = row.querySelector<HTMLInputElement>(".backplan-title");
+    const dateEl = row.querySelector<HTMLInputElement>(".backplan-date");
+    if (titleEl === null || dateEl === null) return;
+    out.push({
+      _key: Number.isFinite(key) ? key : ++backplanKeyCounter,
+      title: titleEl.value.trim(),
+      due_date: dateEl.value,
+      template_hint: backplanDrafts.find((d) => d._key === key)?.template_hint ?? "",
+    });
+  });
+  return out;
+}
+
+async function loadBackplanForParent(
+  parent: MilestoneRead, forceRules = false,
+): Promise<void> {
+  backplanParent = parent;
+  try {
+    const data: MilestoneSuggestionsRead = await getMilestoneSuggestions(
+      parent.id, { forceRules },
+    );
+    backplanMeta = { source: data.source, weeks_remaining: data.weeks_remaining };
+    backplanDrafts = data.suggestions.map((s) => ({
+      _key: ++backplanKeyCounter, ...s,
+    }));
+    if (backplanDrafts.length === 0) {
+      // Parent is too close (< 14 days). Skip the wizard — no value in
+      // asking the user to backplan a near-deadline.
+      hideBackplanWizard();
+      return;
+    }
+    renderBackplanWizard();
+  } catch (err) {
+    console.error("backplan fetch failed", err);
+    hideBackplanWizard();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// rendering
+// ---------------------------------------------------------------------------
+
+// Parent IDs the user has expanded. Tracked client-side so re-rendering
+// (after a save, a delete, an edit, etc.) preserves the open/closed
+// state instead of snapping everything back to collapsed.
+const expandedParents: Set<number> = new Set();
+
+function childrenOf(parentId: number, pool: MilestoneRead[]): MilestoneRead[] {
+  return pool
+    .filter((m) => m.parent_milestone_id === parentId)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date));
+}
+
+function milestoneRowHtml(
+  m: MilestoneRead,
+  opts: { childCount?: number; isChild?: boolean } = {},
+): string {
+  const days = daysUntil(m.due_date);
+  const isChild = opts.isChild === true;
+  const childCount = opts.childCount ?? 0;
+  const expanded = expandedParents.has(m.id);
+  const expander = childCount > 0
+    ? `<span class="milestone-expand${expanded ? " expanded" : ""}"
+             data-milestone-action="toggle-children" data-id="${m.id}"
+             title="${expanded ? "Collapse" : "Expand"} sub-milestones">▶</span>`
+    : "";
+  const childBadge = childCount > 0
+    ? `<span class="milestone-child-count" title="${childCount} sub-milestone${childCount === 1 ? "" : "s"}">${childCount}</span>`
+    : "";
+  return `
+    <div class="milestone-row ${urgencyClass(days)}${isChild ? " milestone-child" : ""}" data-id="${m.id}">
+      ${expander}
+      ${projectChip(m.project_id)}
+      <span class="milestone-title" data-milestone-action="edit" data-id="${m.id}"
+            title="Click to edit">${escapeHtml(m.title)}</span>
+      ${childBadge}
+      <span class="milestone-countdown" title="${escapeHtml(m.due_date)}">${countdownLabel(days)}</span>
+      <button class="milestone-delete" data-milestone-action="delete" data-id="${m.id}"
+              title="Delete">×</button>
+    </div>
+  `;
+}
+
+function milestoneGroupHtml(m: MilestoneRead, pool: MilestoneRead[]): string {
+  const kids = childrenOf(m.id, pool);
+  const parentHtml = milestoneRowHtml(m, { childCount: kids.length });
+  if (kids.length === 0) return parentHtml;
+  const hidden = expandedParents.has(m.id) ? "" : " hidden";
+  const childRows = kids.map((c) => milestoneRowHtml(c, { isChild: true })).join("");
+  return `${parentHtml}
+    <div class="milestone-children${hidden}" data-parent="${m.id}">${childRows}</div>`;
+}
+
+function renderList(): void {
+  // Active list = non-archived. Past = due in the past OR archived.
+  // The /milestones endpoint defaults to non-archived; we filter past
+  // out of the visible "upcoming" view client-side so they sit in the
+  // collapsible disclosure instead.
+  const today = todayStr();
+  const upcoming = active.filter((m) => m.due_date >= today);
+  const overdue  = active.filter((m) => m.due_date < today);
+
+  // Surface overdue items above the next-up future ones — they're more
+  // pressing than a milestone 30 days out. Within each band, the API
+  // already returned them due-date-ascending.
+  const visibleOrder = [...overdue, ...upcoming];
+
+  // Split into top-level vs nested. A child whose parent is also in the
+  // active list gets folded under it; a child whose parent has been
+  // archived / completed / never existed is promoted to top-level so the
+  // user doesn't lose sight of it.
+  const idsInPool = new Set(visibleOrder.map((m) => m.id));
+  const topLevel = visibleOrder.filter(
+    (m) => m.parent_milestone_id === null || !idsInPool.has(m.parent_milestone_id),
+  );
+
+  if (topLevel.length === 0) {
+    listEl.innerHTML = `<p class="hint milestone-empty">No upcoming milestone. Click + Add to track a deadline.</p>`;
+    showMoreBtn.classList.add("hidden");
+  } else {
+    const shown = showAll ? topLevel : topLevel.slice(0, MAX_VISIBLE);
+    listEl.innerHTML = shown.map((m) => milestoneGroupHtml(m, visibleOrder)).join("");
+    const hidden = topLevel.length - shown.length;
+    if (hidden > 0) {
+      showMoreBtn.textContent = `Show ${hidden} more`;
+      showMoreBtn.classList.remove("hidden");
+    } else if (showAll && topLevel.length > MAX_VISIBLE) {
+      showMoreBtn.textContent = "Show less";
+      showMoreBtn.classList.remove("hidden");
+    } else {
+      showMoreBtn.classList.add("hidden");
+    }
+  }
+
+  // Past / archived disclosure. Only rendered when the user opens it
+  // (lazy fetch in onPastToggle). Past/archived items render flat —
+  // we don't bother grouping them since they're already secondary.
+  if (pastLoaded) {
+    if (pastIncludingArchived.length === 0) {
+      pastListEl.innerHTML = `<p class="hint">Nothing to show.</p>`;
+    } else {
+      pastListEl.innerHTML = pastIncludingArchived.map((m) => milestoneRowHtml(m)).join("");
+    }
+  }
+
+  // Hide the disclosure entirely if there is *nothing* it could ever
+  // contain (no past-due actives + we know no archived exist yet). We
+  // can't know about archived without fetching, so keep the disclosure
+  // visible whenever the user might still have archived items to recover.
+  pastDetailsEl.classList.remove("hidden");
+}
+
+function renderAddProjectPicker(): void {
+  const projects = getActiveProjects();
+  const opts = [
+    `<option value="">(no project)</option>`,
+    ...projects.map((p) => `
+      <option value="${p.id}" ${pendingAddProjectId === p.id ? "selected" : ""}>
+        ${escapeHtml(p.name)}
+      </option>
+    `),
+  ].join("");
+  addProjectPickerEl.innerHTML = `<label>Project (optional)<select>${opts}</select></label>`;
+  const sel = addProjectPickerEl.querySelector<HTMLSelectElement>("select");
+  if (sel !== null) {
+    sel.addEventListener("change", () => {
+      pendingAddProjectId = sel.value === "" ? null : Number(sel.value);
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// data
+// ---------------------------------------------------------------------------
+
+export async function refresh(): Promise<void> {
+  try {
+    const [items] = await Promise.all([
+      listMilestones(),
+      // Project chips in milestone rows depend on the active-projects
+      // cache; warming it here means the chip color is right on first
+      // paint after this view loads.
+      getActiveProjects().length === 0 ? refreshProjects() : Promise.resolve(),
+    ]);
+    active = items;
+    renderList();
+  } catch (e) {
+    console.error("milestones refresh failed", e);
+    listEl.innerHTML = `<p class="message error">Could not load milestones.</p>`;
+  }
+}
+
+async function refreshPast(): Promise<void> {
+  try {
+    const all = await listMilestones({ includeArchived: true });
+    const today = todayStr();
+    pastIncludingArchived = all.filter((m) => m.is_archived || m.due_date < today);
+    pastLoaded = true;
+    renderList();
+  } catch (e) {
+    console.error("milestones past fetch failed", e);
+    pastListEl.innerHTML = `<p class="message error">Could not load past milestones.</p>`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// inline edit
+// ---------------------------------------------------------------------------
+
+function startInlineEdit(row: HTMLElement, m: MilestoneRead): void {
+  // Inline-edit replaces the whole row content with a compact form. We
+  // re-render the full list on commit / cancel rather than splicing the
+  // row back, because urgency class and ordering may change.
+  row.innerHTML = `
+    <form class="milestone-edit-form">
+      <input type="text" maxlength="200" value="${escapeHtml(m.title)}" />
+      <input type="date" value="${escapeHtml(m.due_date)}" />
+      <div class="button-row">
+        <button type="submit">Save</button>
+        <button type="button" class="link-btn" data-edit-action="cancel">Cancel</button>
+        <button type="button" class="link-btn" data-edit-action="archive">
+          ${m.is_archived ? "Unarchive" : "Archive"}
+        </button>
+      </div>
+    </form>
+  `;
+  const form = row.querySelector<HTMLFormElement>("form")!;
+  const inputs = form.querySelectorAll<HTMLInputElement>("input");
+  inputs[0].focus();
+  inputs[0].select();
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const newTitle = inputs[0].value.trim();
+    const newDate = inputs[1].value;
+    if (!newTitle || !newDate) return;
+    try {
+      const updated = await updateMilestone(m.id, { title: newTitle, due_date: newDate });
+      const idx = active.findIndex((x) => x.id === m.id);
+      if (idx >= 0) active[idx] = updated;
+      // Re-sort by due_date asc (matches server side ordering).
+      active.sort((a, b) => a.due_date.localeCompare(b.due_date));
+      renderList();
+    } catch (err) {
+      console.error(err);
+      renderList(); // revert UI; user can retry
+    }
+  });
+
+  form.addEventListener("click", async (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLElement)) return;
+    const editAction = t.dataset.editAction;
+    if (editAction === "cancel") {
+      renderList();
+    } else if (editAction === "archive") {
+      try {
+        await updateMilestone(m.id, { is_archived: !m.is_archived });
+        // Archiving removes it from the active list; refresh to re-sync.
+        await refresh();
+        if (pastLoaded) await refreshPast();
+      } catch (err) {
+        console.error(err);
+        renderList();
+      }
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// init
+// ---------------------------------------------------------------------------
+
+export function init(): void {
+  cardEl = document.querySelector<HTMLElement>("#milestones-card")!;
+  toggleAddBtn = document.querySelector<HTMLButtonElement>("#milestones-toggle-add")!;
+  addForm = document.querySelector<HTMLFormElement>("#milestones-add-form")!;
+  addTitleInput = document.querySelector<HTMLInputElement>("#milestones-add-title")!;
+  addDateInput = document.querySelector<HTMLInputElement>("#milestones-add-date")!;
+  addProjectPickerEl = document.querySelector<HTMLDivElement>("#milestones-add-project-picker")!;
+  addCancelBtn = document.querySelector<HTMLButtonElement>("#milestones-add-cancel")!;
+  addMsgEl = document.querySelector<HTMLParagraphElement>("#milestones-add-message")!;
+  listEl = document.querySelector<HTMLDivElement>("#milestones-list")!;
+  showMoreBtn = document.querySelector<HTMLButtonElement>("#milestones-show-more")!;
+  pastDetailsEl = document.querySelector<HTMLElement>("#milestones-past-details")!;
+  pastListEl = document.querySelector<HTMLDivElement>("#milestones-past-list")!;
+
+  void cardEl; // reserved for future hover/affordance hooks
+
+  // Suppress unused-warning so the build stays clean while we keep the
+  // import + state around for the inline form's project rendering.
+  void addMsgEl;
+
+  // --- "+ Add" toggle ---
+  toggleAddBtn.addEventListener("click", () => {
+    const showing = !addForm.classList.toggle("hidden");
+    if (showing) {
+      renderAddProjectPicker();
+      addTitleInput.focus();
+    }
+  });
+  addCancelBtn.addEventListener("click", () => {
+    addForm.classList.add("hidden");
+    addTitleInput.value = "";
+    addDateInput.value = "";
+    setMessage(addMsgEl, "", "neutral");
+  });
+
+  // --- Add submit ---
+  addForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const title = addTitleInput.value.trim();
+    const due = addDateInput.value;
+    if (!title || !due) {
+      setMessage(addMsgEl, "Title and date are required.", "error");
+      return;
+    }
+    try {
+      const created = await createMilestone({
+        title, due_date: due, project_id: pendingAddProjectId,
+      });
+      active.push(created);
+      active.sort((a, b) => a.due_date.localeCompare(b.due_date));
+      addTitleInput.value = "";
+      addDateInput.value = "";
+      // pendingAddProjectId stays sticky
+      setMessage(addMsgEl, "Milestone added.", "success");
+      addForm.classList.add("hidden");
+      renderList();
+      // Offer backplan wizard for parents far enough out. The helper
+      // hides itself if the API returns zero suggestions (parent too
+      // close), so users always see a clean state.
+      void loadBackplanForParent(created);
+    } catch (err) {
+      console.error(err);
+      setMessage(addMsgEl, "Could not save milestone.", "error");
+    }
+  });
+
+  // --- Backplan wizard interactions ---
+  // Delegated on the card so we don't re-attach handlers each render.
+  cardEl.addEventListener("click", async (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLElement)) return;
+    if (backplanParent === null || backplanWrapEl === null) return;
+
+    if (t.classList.contains("backplan-drop")) {
+      const key = Number(t.dataset.key);
+      // Sync first so any pending edits survive the re-render.
+      backplanDrafts = readBackplanDrafts().filter((d) => d._key !== key);
+      renderBackplanWizard();
+      return;
+    }
+    if (t.classList.contains("backplan-add-row")) {
+      backplanDrafts = readBackplanDrafts();
+      // Default the new row to halfway between today and the parent.
+      const half = halfwayDate(todayStr(), backplanParent.due_date);
+      backplanDrafts.push({
+        _key: ++backplanKeyCounter,
+        title: "",
+        due_date: half,
+        template_hint: "",
+      });
+      renderBackplanWizard();
+      return;
+    }
+    if (t.classList.contains("backplan-skip")) {
+      hideBackplanWizard();
+      return;
+    }
+    if (t.classList.contains("backplan-reroll")) {
+      // If we used LLM, switch to rules; if we used rules, fetch again
+      // (in case the user wants a fresh roll). Cheap either way.
+      const forceRules = backplanMeta?.source === "llm";
+      await loadBackplanForParent(backplanParent, forceRules);
+      return;
+    }
+    if (t.classList.contains("backplan-save")) {
+      const drafts = readBackplanDrafts();
+      const cleaned: MilestoneSuggestion[] = drafts
+        .filter((d) => d.title.length > 0 && d.due_date.length > 0)
+        .map((d) => ({
+          title: d.title,
+          due_date: d.due_date,
+          template_hint: d.template_hint,
+        }));
+      const msgEl = backplanWrapEl.querySelector<HTMLParagraphElement>(".backplan-msg");
+      if (cleaned.length === 0) {
+        if (msgEl !== null) setMessage(msgEl, "Nothing to save — add at least one step or hit Skip.", "error");
+        return;
+      }
+      try {
+        const created = await createChildMilestones(backplanParent.id, cleaned);
+        active.push(...created);
+        active.sort((a, b) => a.due_date.localeCompare(b.due_date));
+        // Auto-expand the parent the user just backplanned so they see
+        // the result instead of a chevron they have to click.
+        expandedParents.add(backplanParent.id);
+        renderList();
+        hideBackplanWizard();
+      } catch (err) {
+        console.error(err);
+        if (msgEl !== null) setMessage(msgEl, "Could not save check-points.", "error");
+      }
+    }
+  });
+
+  // --- Show more / less ---
+  showMoreBtn.addEventListener("click", () => {
+    showAll = !showAll;
+    renderList();
+  });
+
+  // --- Active list interactions (edit, delete) ---
+  listEl.addEventListener("click", async (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLElement)) return;
+    const action = t.dataset.milestoneAction;
+    if (!action) return;
+    const id = Number(t.dataset.id);
+    const m = active.find((x) => x.id === id);
+    if (!m) return;
+    const row = t.closest<HTMLElement>(".milestone-row");
+    if (row === null) return;
+
+    if (action === "toggle-children") {
+      // Toggle the set, then re-render. Cheaper than mutating the DOM
+      // by hand and keeps renderList as the single source of truth.
+      if (expandedParents.has(id)) {
+        expandedParents.delete(id);
+      } else {
+        expandedParents.add(id);
+      }
+      renderList();
+    } else if (action === "edit") {
+      startInlineEdit(row, m);
+    } else if (action === "delete") {
+      // Warn explicitly when a parent will take children with it —
+      // backend cascades, so the count matters.
+      const kids = active.filter((x) => x.parent_milestone_id === id);
+      const prompt = kids.length > 0
+        ? `Delete "${m.title}" and its ${kids.length} sub-milestone${kids.length === 1 ? "" : "s"}?`
+        : `Delete milestone "${m.title}"?`;
+      if (!window.confirm(prompt)) return;
+      try {
+        await deleteMilestone(m.id);
+        // Drop the parent and any cascaded children from the local cache
+        // so the re-render matches what the server now holds.
+        const cascadedIds = new Set([m.id, ...kids.map((k) => k.id)]);
+        active = active.filter((x) => !cascadedIds.has(x.id));
+        expandedParents.delete(m.id);
+        renderList();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  });
+
+  // --- Past list interactions (same wiring, but operates on
+  //     pastIncludingArchived; clicking edit on an archived row will
+  //     unarchive via the inline "Archive/Unarchive" toggle button).
+  pastListEl.addEventListener("click", async (e) => {
+    const t = e.target;
+    if (!(t instanceof HTMLElement)) return;
+    const action = t.dataset.milestoneAction;
+    if (!action) return;
+    const id = Number(t.dataset.id);
+    const m = pastIncludingArchived.find((x) => x.id === id);
+    if (!m) return;
+    const row = t.closest<HTMLElement>(".milestone-row");
+    if (row === null) return;
+
+    if (action === "edit") {
+      // Edit form needs the row to live in the past list; we still
+      // route the same flow but use `m` from the past collection.
+      startInlineEdit(row, m);
+    } else if (action === "delete") {
+      if (!window.confirm(`Delete milestone "${m.title}"?`)) return;
+      try {
+        await deleteMilestone(m.id);
+        pastIncludingArchived = pastIncludingArchived.filter((x) => x.id !== id);
+        renderList();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  });
+
+  // --- Lazy-load past details the first time it opens ---
+  pastDetailsEl.addEventListener("toggle", () => {
+    if ((pastDetailsEl as HTMLDetailsElement).open && !pastLoaded) {
+      void refreshPast();
+    }
+  });
+
+  // --- React to projects changes (rename / archive / delete) ---
+  window.addEventListener("projects:updated", () => renderList());
+}

@@ -13,19 +13,20 @@ import { renderMoonIconSvg, renderSunIconSvg } from "./views/icons";
 import { setCurrentCatSkin } from "./views/user-state";
 import { showAuthScreen } from "./views/auth";
 import * as FeynmanView from "./views/feynman";
+import * as MilestonesView from "./views/milestones";
 import * as SummariesView from "./views/summaries";
-import * as MoodView from "./views/mood";
 import * as NotesView from "./views/notes";
 import * as PomodoroView from "./views/pomodoro";
 import * as ProjectsView from "./views/projects";
 import { refreshProjects } from "./views/project-state";
 import * as StatsView from "./views/stats";
 import * as StopwatchView from "./views/stopwatch";
+import * as TimerMode from "./views/timerMode";
 import * as FriendsView from "./views/friends";
 import * as TodayView from "./views/today";
 import { initReadingInsightPrompts } from "./views/reading-insight";
 
-type AppView = "today" | "notes" | "feynman" | "pomodoro" | "stats" | "mood" | "projects" | "friends";
+type AppView = "today" | "notes" | "feynman" | "stats" | "projects" | "friends";
 
 const APP_HTML = `
   <div class="app-shell">
@@ -61,17 +62,98 @@ const APP_HTML = `
                title="Today's work-time goal (pomodoro + stopwatch). Click to edit."></div>
           <p id="perfect-day-badge" class="perfect-day-badge hidden">✨ Perfect day!</p>
         </section>
-        <section class="card stopwatch-card" id="stopwatch-card">
-          <h2>Work timer</h2>
-          <div id="stopwatch-clock" class="stopwatch-clock"></div>
-          <div id="stopwatch-display" class="stopwatch-display">00:00:00</div>
-          <p id="stopwatch-today" class="hint stopwatch-today">Today: —</p>
-          <div id="stopwatch-task-picker" class="stopwatch-task-picker"></div>
-          <div class="button-row stopwatch-buttons">
-            <button id="stopwatch-start-btn" type="button">▶ Start</button>
-            <button id="stopwatch-end-btn" type="button" class="secondary">End</button>
+        <section class="card stopwatch-card timer-card" id="timer-card">
+          <div class="timer-card-header">
+            <h2>Work timer</h2>
+            <div class="timer-mode-toggle" role="tablist">
+              <button type="button" class="timer-mode-btn active" data-timer-mode="pomodoro" role="tab">🍅 Pomodoro</button>
+              <button type="button" class="timer-mode-btn" data-timer-mode="free" role="tab">⏱ Free</button>
+            </div>
           </div>
-          <p id="stopwatch-message" class="message"></p>
+
+          <div id="stopwatch-clock" class="stopwatch-clock"></div>
+
+          <!-- Pomodoro mode panel -->
+          <div id="timer-panel-pomodoro" class="timer-mode-panel">
+            <div class="pomodoro-header-row">
+              <span id="pomodoro-mode-badge" class="tag">Work</span>
+              <button id="pomodoro-settings-toggle" class="link-btn" type="button" title="Pomodoro settings">⚙️</button>
+            </div>
+            <div id="pomodoro-display" class="pomodoro-display">25:00</div>
+            <div id="pomodoro-task-picker" class="pomodoro-task-picker"></div>
+            <div class="button-row">
+              <button id="pomodoro-start-button" type="button">▶ Start</button>
+              <button id="pomodoro-reset-button" class="secondary" type="button">Reset</button>
+            </div>
+            <p id="pomodoro-message" class="message"></p>
+            <p class="hint pomodoro-mode-hint" id="pomodoro-mode-hint">25 min work · 5 min short break · 15 min long break every 4</p>
+
+            <div id="pomodoro-settings-panel" class="settings-panel hidden">
+              <form id="pomodoro-settings-form" class="form">
+                <div class="settings-grid">
+                  <label>Work (min)
+                    <input id="pomodoro-setting-work" type="number" min="1" max="240" required />
+                  </label>
+                  <label>Short break (min)
+                    <input id="pomodoro-setting-short" type="number" min="1" max="60" required />
+                  </label>
+                  <label>Long break (min)
+                    <input id="pomodoro-setting-long" type="number" min="1" max="60" required />
+                  </label>
+                  <label>Sessions before long break
+                    <input id="pomodoro-setting-before-long" type="number" min="1" max="10" required />
+                  </label>
+                </div>
+                <label class="checkbox-row">
+                  <input id="pomodoro-setting-auto-start" type="checkbox" />
+                  <span>Auto-start next session</span>
+                </label>
+                <div class="button-row"><button type="submit">Save settings</button></div>
+                <p id="pomodoro-settings-message" class="message"></p>
+              </form>
+            </div>
+          </div>
+
+          <!-- Free mode panel -->
+          <div id="timer-panel-free" class="timer-mode-panel hidden">
+            <div id="stopwatch-display" class="stopwatch-display">00:00:00</div>
+            <div id="stopwatch-task-picker" class="stopwatch-task-picker"></div>
+            <div class="button-row stopwatch-buttons">
+              <button id="stopwatch-start-btn" type="button">▶ Start</button>
+              <button id="stopwatch-end-btn" type="button" class="secondary">End</button>
+            </div>
+            <p id="stopwatch-message" class="message"></p>
+          </div>
+
+          <p id="stopwatch-today" class="hint stopwatch-today">Today: —</p>
+
+          <details class="timer-sessions-details">
+            <summary>Today's pomodoros</summary>
+            <div id="pomodoro-list" class="task-list timer-sessions-list"></div>
+          </details>
+        </section>
+        <section class="card milestones-card" id="milestones-card">
+          <div class="section-header">
+            <h2>🗓 Upcoming</h2>
+            <button id="milestones-toggle-add" class="link-btn" type="button"
+                    title="Add a milestone">+ Add</button>
+          </div>
+          <form id="milestones-add-form" class="milestones-add-form hidden">
+            <input id="milestones-add-title" type="text" maxlength="200" placeholder="Title (e.g. NeurIPS abstract)" required />
+            <input id="milestones-add-date" type="date" required />
+            <div id="milestones-add-project-picker" class="milestones-add-project"></div>
+            <div class="button-row">
+              <button type="submit">Save</button>
+              <button type="button" class="secondary" id="milestones-add-cancel">Cancel</button>
+            </div>
+            <p id="milestones-add-message" class="message"></p>
+          </form>
+          <div id="milestones-list" class="milestones-list"></div>
+          <button id="milestones-show-more" class="link-btn hidden" type="button"></button>
+          <details id="milestones-past-details" class="milestones-past hidden">
+            <summary>Past / archived</summary>
+            <div id="milestones-past-list" class="milestones-list"></div>
+          </details>
         </section>
       </aside>
 
@@ -80,8 +162,6 @@ const APP_HTML = `
           <button class="feature-tab active" data-view="today">Today</button>
           <button class="feature-tab" data-view="notes">Paper notes</button>
           <button class="feature-tab" data-view="feynman">Feynman</button>
-          <button class="feature-tab" data-view="pomodoro">Pomodoro</button>
-          <button class="feature-tab" data-view="mood">Mood</button>
           <button class="feature-tab" data-view="projects">Projects</button>
           <button class="feature-tab" data-view="stats">Stats</button>
           <button class="feature-tab" data-view="friends">Friends</button>
@@ -97,6 +177,15 @@ const APP_HTML = `
               </div>
             </div>
             <p id="today-message" class="message"></p>
+          </section>
+
+          <section class="card today-yesterday-card hidden" id="today-yesterday-card">
+            <div class="section-header">
+              <h2>↩️ Yesterday in review</h2>
+              <button id="today-yesterday-carry-all" class="link-btn hidden" type="button"
+                      title="Bring every unfinished task into today">Bring all to today</button>
+            </div>
+            <div id="today-yesterday-body"></div>
           </section>
 
           <section class="card today-hero">
@@ -125,12 +214,20 @@ const APP_HTML = `
             <div id="today-upcoming-list" class="upcoming-list"></div>
           </section>
 
-          <section class="card">
-            <h2>Quick mood</h2>
-            <div class="quick-mood-row">
-              <div id="today-mood-row" class="mood-row"></div>
-              <span id="today-mood-status" class="hint today-mood-status"></span>
+          <section class="card today-mood-card">
+            <div class="section-header">
+              <h2>😊 Mood</h2>
+              <button id="today-mood-history-link" class="link-btn" type="button"
+                      title="Open Stats to see 30-day history">📈 History</button>
             </div>
+            <div id="today-mood-row" class="mood-row"></div>
+            <textarea id="today-mood-reflection" class="today-mood-reflection"
+                      placeholder="What's behind this? (optional)"></textarea>
+            <div class="button-row">
+              <button id="today-mood-save" type="button">Record mood</button>
+            </div>
+            <p id="today-mood-message" class="message"></p>
+            <div id="today-mood-list" class="today-mood-list"></div>
           </section>
 
           <section class="card">
@@ -200,6 +297,7 @@ const APP_HTML = `
             <div class="feynman-editor">
               <h3 id="feynman-step-title"></h3>
               <p id="feynman-step-description" class="hint"></p>
+              <div id="feynman-source-note" class="feynman-source-note hidden"></div>
               <label><span id="feynman-field-label"></span><textarea id="feynman-input"></textarea></label>
               <div class="button-row">
                 <button type="button" id="feynman-prev-button" class="secondary">Previous</button>
@@ -215,61 +313,6 @@ const APP_HTML = `
           </section>
         </div>
 
-
-        <div id="pomodoro-view" class="hidden">
-          <section class="card">
-            <div class="section-header">
-              <div>
-                <h2>Pomodoro</h2>
-                <p class="hint" id="pomodoro-mode-hint">25 min work · 5 min short break · 15 min long break every 4</p>
-              </div>
-              <div class="pomodoro-header-actions">
-                <span id="pomodoro-mode-badge" class="tag">Work</span>
-                <button id="pomodoro-settings-toggle" class="secondary" type="button" title="Pomodoro settings">⚙️</button>
-              </div>
-            </div>
-
-            <div id="pomodoro-settings-panel" class="settings-panel hidden">
-              <form id="pomodoro-settings-form" class="form">
-                <div class="settings-grid">
-                  <label>Work (min)
-                    <input id="pomodoro-setting-work" type="number" min="1" max="240" required />
-                  </label>
-                  <label>Short break (min)
-                    <input id="pomodoro-setting-short" type="number" min="1" max="60" required />
-                  </label>
-                  <label>Long break (min)
-                    <input id="pomodoro-setting-long" type="number" min="1" max="60" required />
-                  </label>
-                  <label>Sessions before long break
-                    <input id="pomodoro-setting-before-long" type="number" min="1" max="10" required />
-                  </label>
-                </div>
-                <label class="checkbox-row">
-                  <input id="pomodoro-setting-auto-start" type="checkbox" />
-                  <span>Auto-start next session (skip clicking Start between phases)</span>
-                </label>
-                <div class="button-row"><button type="submit">Save settings</button></div>
-                <p id="pomodoro-settings-message" class="message"></p>
-              </form>
-            </div>
-
-            <div class="pomodoro-timer">
-              <label>Current focus<input id="pomodoro-focus-input" type="text" maxlength="300" placeholder="What are you working on?" /></label>
-              <div id="pomodoro-display" class="pomodoro-display">25:00</div>
-              <div id="pomodoro-task-picker" class="pomodoro-task-picker"></div>
-              <div class="button-row">
-                <button id="pomodoro-start-button">Start</button>
-                <button id="pomodoro-reset-button" class="secondary">Reset</button>
-              </div>
-              <p id="pomodoro-message" class="message"></p>
-            </div>
-          </section>
-          <section class="card">
-            <h2>Today's sessions</h2>
-            <div id="pomodoro-list" class="task-list"></div>
-          </section>
-        </div>
 
         <div id="stats-view" class="hidden">
           <section class="card hidden" id="ai-summary-card">
@@ -323,30 +366,15 @@ const APP_HTML = `
             <h2 id="stats-mood-title">Last 7 days — mood</h2>
             <div id="stats-mood-chart" class="mood-history"></div>
           </section>
-        </div>
-        <div id="mood-view" class="hidden">
           <section class="card">
-            <h2>How are you feeling?</h2>
-            <p class="hint">Record your mood at any time — multiple entries per day are fine.</p>
-            <div id="mood-picker" class="mood-row"></div>
-            <label>Reflection (optional)<textarea id="mood-reflection-input" placeholder="What's on your mind? What happened today?"></textarea></label>
-            <div class="button-row"><button id="save-mood-button">Record mood</button></div>
-            <p id="mood-message" class="message"></p>
-          </section>
-          <section class="card">
-            <div class="section-header">
-              <h2>Mood history</h2>
-              <div class="days-selector" id="mood-days-selector">
-                <button class="days-btn active" data-days="7">7 days</button>
-                <button class="days-btn" data-days="30">30 days</button>
-                <button class="days-btn" data-days="90">90 days</button>
-              </div>
-            </div>
-            <div id="mood-list" class="mood-history-list"></div>
+            <h2 id="stats-mood-list-title">Mood entries — last 7 days</h2>
+            <p id="stats-mood-list-message" class="message"></p>
+            <div id="stats-mood-list" class="mood-history-list"></div>
           </section>
         </div>
-
         <div id="projects-view" class="hidden">
+          <div id="project-dashboard-container" class="hidden"></div>
+          <div id="projects-list-container">
           <section class="card">
             <h2>Projects / research threads</h2>
             <p class="hint">Group related daily tasks, paper notes, and Feynman entries under a named project. Work sessions inherit their project from the linked task.</p>
@@ -363,20 +391,20 @@ const APP_HTML = `
             <h2>Your projects</h2>
             <div id="projects-list" class="projects-list"></div>
           </section>
-          <section class="card hidden" id="project-dashboard-card">
-            <div id="project-dashboard-content"></div>
-            <p id="project-dashboard-message" class="message"></p>
-          </section>
+          </div>
         </div>
 
         <div id="friends-view" class="hidden">
-          <section class="card">
-            <h2>Privacy</h2>
-            <p class="hint">Friends remain optional. Choose what accepted friends can see.</p>
-            <label class="checkbox-row"><input id="share-study-time" type="checkbox" /> Share study duration</label>
-            <label class="checkbox-row"><input id="share-activity" type="checkbox" /> Share activity types in the feed</label>
-            <div class="button-row"><button id="save-friend-privacy" type="button">Save privacy</button></div>
-            <p id="friend-privacy-message" class="message"></p>
+          <section class="card collapsible" id="friend-privacy-card">
+            <h2 class="collapsible-header">Privacy <span class="collapse-arrow">&#9656;</span></h2>
+            <div class="collapsible-body hidden">
+              <p class="hint">Friends remain optional. Choose what accepted friends can see.</p>
+              <label class="checkbox-row"><input id="share-study-time" type="checkbox" /> Share study duration</label>
+              <label class="checkbox-row"><input id="share-activity" type="checkbox" /> Share activity types in the feed</label>
+              <label class="checkbox-row"><input id="share-project" type="checkbox" /> Share which project I worked on</label>
+              <div class="button-row"><button id="save-friend-privacy" type="button">Save privacy</button></div>
+              <p id="friend-privacy-message" class="message"></p>
+            </div>
           </section>
           <section class="card collapsible" id="friend-search-card">
             <h2 class="collapsible-header">Find friends <span class="collapse-arrow">&#9656;</span></h2>
@@ -443,11 +471,11 @@ async function refreshAll(): Promise<void> {
       TodayView.refresh(),
       FeynmanView.refresh(),
       PomodoroView.refresh(),
-      MoodView.refresh(),
       ProjectsView.refresh(),
       StatsView.refresh(),
       StopwatchView.refresh(),
       FriendsView.refresh(),
+      MilestonesView.refresh(),
     ]);
   } catch (error) {
     if (error instanceof UnauthorizedError) {
@@ -564,6 +592,7 @@ function mountApp(user: UserRead): void {
       // Propagate the new skin to all views that show it.
       setCurrentCatSkin(updated.cat_skin);
       StopwatchView.setCatSkin(updated.cat_skin);
+      PomodoroView.setCatSkin(updated.cat_skin);
       // Re-render any visible sleeping-cat empty states with the new skin.
       window.dispatchEvent(new CustomEvent("cat:skin-changed"));
       void FriendsView.refresh();
@@ -601,8 +630,6 @@ function mountApp(user: UserRead): void {
     today:    app!.querySelector<HTMLDivElement>("#today-view")!,
     notes:    app!.querySelector<HTMLDivElement>("#notes-view")!,
     feynman:  app!.querySelector<HTMLDivElement>("#feynman-view")!,
-    pomodoro: app!.querySelector<HTMLDivElement>("#pomodoro-view")!,
-    mood:     app!.querySelector<HTMLDivElement>("#mood-view")!,
     projects: app!.querySelector<HTMLDivElement>("#projects-view")!,
     stats:    app!.querySelector<HTMLDivElement>("#stats-view")!,
     friends:  app!.querySelector<HTMLDivElement>("#friends-view")!,
@@ -620,9 +647,7 @@ function mountApp(user: UserRead): void {
   );
   PomodoroView.init(() => Promise.all([PomodoroView.refresh(), StatsView.refresh()]).then());
   PomodoroView.setUser(user);  // pass settings (work/break durations etc.) to the timer
-  MoodView.init(() => Promise.all([
-    MoodView.refresh(), TodayView.refresh(), StatsView.refresh(),
-  ]).then());
+  PomodoroView.setCatSkin(user.cat_skin);  // initial pixel-clock tint
   // Projects: refresh stats too so the "Time per project" card reflects
   // renames/archives immediately rather than next stats refresh.
   ProjectsView.init(async () => {
@@ -633,7 +658,9 @@ function mountApp(user: UserRead): void {
   void refreshProjects(true);
   StatsView.init(() => StatsView.refresh());
   StopwatchView.init(user.cat_skin);
+  TimerMode.init();
   FriendsView.init(() => FriendsView.refresh());
+  MilestonesView.init();
   TodayView.init(() => Promise.all([
     TodayView.refresh(), StatsView.refresh(), PomodoroView.refresh(),
   ]).then());

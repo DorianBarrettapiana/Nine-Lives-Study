@@ -37,12 +37,28 @@ export interface ProjectUpdate {
   blocker?: string;
 }
 
-export interface ProjectDashboard {
+// --- Dashboard ----------------------------------------------------------
+
+import type { DailyTaskRead } from "./tracker";
+import type { PaperNoteRead } from "./notes";
+import type { FeynmanEntryRead } from "./feynman";
+
+export interface ReflectionMention {
+  log_date: string;
+  snippet: string;
+}
+
+export interface ProjectDashboardRead {
   project: ProjectRead;
-  weekly_focus_minutes: number;
-  open_tasks: Array<{ id: number; text: string; planned_date: string | null; due_date: string | null }>;
-  reading_queue: Array<{ id: number; title: string; reading_status: string; reading_minutes: number }>;
-  unresolved_gaps: Array<{ id: number; concept: string; gaps: string }>;
+  minutes_7d: number;
+  minutes_30d: number;
+  done_tasks_7d: number;
+  open_tasks_count: number;
+  last_activity_at: string | null;
+  open_tasks: DailyTaskRead[];
+  paper_notes: PaperNoteRead[];
+  feynman_entries: FeynmanEntryRead[];
+  recent_reflections: ReflectionMention[];
   recent_insights: Array<{
     id: number;
     paper_note_id: number;
@@ -51,6 +67,10 @@ export interface ProjectDashboard {
     next_step: string;
     created_at: string;
   }>;
+}
+
+export async function getProjectDashboard(projectId: number): Promise<ProjectDashboardRead> {
+  return apiFetch<ProjectDashboardRead>(`/projects/${projectId}/dashboard`);
 }
 
 export async function listProjects(includeArchived = false): Promise<ProjectRead[]> {
@@ -77,8 +97,4 @@ export async function updateProject(
 
 export async function deleteProject(projectId: number): Promise<void> {
   await apiFetch<void>(`/projects/${projectId}`, { method: "DELETE" });
-}
-
-export async function getProjectDashboard(projectId: number): Promise<ProjectDashboard> {
-  return apiFetch<ProjectDashboard>(`/projects/${projectId}/dashboard`);
 }

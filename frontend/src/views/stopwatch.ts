@@ -24,6 +24,7 @@ import {
 } from "../api/stopwatch";
 import { flashMessage, fmtMinutes, setMessage } from "../utils";
 import { renderAnalogClockSvg } from "./clock";
+import { getMode as getTimerMode } from "./timerMode";
 import { getTodayWorkMinutes } from "./stats";
 import { renderTaskPicker } from "./taskPicker";
 
@@ -92,8 +93,11 @@ function render(): void {
   const seconds = currentElapsedSeconds();
   const running = !!(active && active.is_running);
 
-  // Analog clock face (primary visual).
-  clockEl.innerHTML = renderAnalogClockSvg({ seconds, running, catSkin });
+  // Analog clock face (primary visual) — shared with pomodoro mode. Skip
+  // writing while pomodoro mode is showing so we don't stomp on its render.
+  if (getTimerMode() === "free") {
+    clockEl.innerHTML = renderAnalogClockSvg({ seconds, running, catSkin });
+  }
 
   // Digital readout (secondary, for precise reading).
   displayEl.textContent = fmtHMS(seconds);
@@ -311,6 +315,10 @@ export function init(initialCatSkin: string = "tabby"): void {
 
   startBtn.addEventListener("click", () => void onStartClick());
   endBtn.addEventListener("click", () => void onEndClick());
+
+  // When the user toggles back into free mode, re-paint the clock + readout
+  // since pomodoro mode was previously suppressing our writes.
+  window.addEventListener("timer-mode:changed", () => render());
 
   // Listen for pomodoro state — if pomodoro is active, our Start is locked.
   window.addEventListener("pomodoro:state", (e: Event) => {

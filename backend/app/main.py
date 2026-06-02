@@ -10,13 +10,16 @@ from app.api.routes.daily_tracker import router as daily_tracker_router
 from app.api.routes.feynman_entries import router as feynman_entries_router
 from app.api.routes.friends import router as friends_router
 from app.api.routes.health import router as health_router
+from app.api.routes.milestones import router as milestones_router
 from app.api.routes.mood import router as mood_router
+from app.api.routes.note_links import router as note_links_router
 from app.api.routes.paper_notes import router as paper_notes_router
 from app.api.routes.pomodoro import router as pomodoro_router
 from app.api.routes.projects import router as projects_router
 from app.api.routes.stats import router as stats_router
 from app.api.routes.stopwatch import router as stopwatch_router
 from app.api.routes.summaries import router as summaries_router
+from app.api.routes.tags import router as tags_router
 from app.api.routes.users import router as users_router
 from app.api.routes.xp import router as xp_router
 from app.core.config import APP_NAME, APP_VERSION
@@ -31,13 +34,16 @@ from app.models.feed_like import FeedLike  # noqa: F401
 from app.models.feynman_entry import FeynmanEntry  # noqa: F401
 from app.models.friend_cheer import FriendCheer  # noqa: F401
 from app.models.friendship import Friendship  # noqa: F401
+from app.models.milestone import Milestone  # noqa: F401
 from app.models.mood_entry import MoodEntry  # noqa: F401
+from app.models.note_link import NoteLink  # noqa: F401
 from app.models.paper_insight import PaperInsight  # noqa: F401
 from app.models.paper_note import PaperNote  # noqa: F401
 from app.models.pomodoro_session import PomodoroSession  # noqa: F401
 from app.models.project import Project  # noqa: F401
 from app.models.session import Session  # noqa: F401
 from app.models.stopwatch_session import StopwatchSession  # noqa: F401
+from app.models.tag import Tag, TagLink  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.user_progress import UserProgress  # noqa: F401
 from app.models.xp_event import XpEvent  # noqa: F401
@@ -85,7 +91,10 @@ app.include_router(daily_tracker_router)
 app.include_router(pomodoro_router)
 app.include_router(stopwatch_router)
 app.include_router(xp_router)
+app.include_router(milestones_router)
 app.include_router(mood_router)
 app.include_router(stats_router)
 app.include_router(friends_router)
 app.include_router(summaries_router)
+app.include_router(tags_router)
+app.include_router(note_links_router)

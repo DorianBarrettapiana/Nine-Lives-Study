@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.schemas._base import BaseSchema, UtcDateTime
+from app.schemas.tag import TagSummary
 
 PaperReadingStatus = Literal["inbox", "reading", "summarized", "revisit"]
 
@@ -17,7 +18,12 @@ class PaperNoteCreate(BaseModel):
     year: int | None = Field(default=None, ge=0, le=3000)
     key_points: str = ""
     questions: str = ""
+    # Legacy comma-separated tag string. New clients should prefer
+    # `tag_names` (proper list, full unicode support, no length cap per
+    # tag); the server treats `tag_names` as authoritative when both
+    # are present.
     tags: str = Field(default="", max_length=500)
+    tag_names: list[str] | None = None
     # Optional reference metadata — surfaced as collapsible "More fields"
     # in the UI so the manual-entry form stays uncluttered for users who
     # only want title + key ideas.
@@ -39,6 +45,7 @@ class PaperNoteUpdate(BaseModel):
     key_points: str | None = None
     questions: str | None = None
     tags: str | None = Field(default=None, max_length=500)
+    tag_names: list[str] | None = None
     item_type: str | None = Field(default=None, max_length=40)
     url: str | None = Field(default=None, max_length=500)
     doi: str | None = Field(default=None, max_length=200)
@@ -80,6 +87,10 @@ class PaperNoteRead(BaseSchema):
     key_points: str
     questions: str
     tags: str
+    # First-class tag list (replaces the CSV semantically). Empty for
+    # notes that haven't been migrated yet — the startup backfill
+    # populates it for legacy rows on next boot.
+    tag_list: list[TagSummary] = []
     item_type: str | None = None
     url: str | None = None
     doi: str | None = None

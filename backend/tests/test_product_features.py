@@ -54,7 +54,16 @@ def test_stats_task_ratio_includes_unfinished_tasks(auth_client: TestClient):
     })
     auth_client.patch(f"/daily/tasks/{first['id']}", json={"is_done": True})
 
-    stats = auth_client.get("/stats?days=7").json()
+    # The /daily/tasks route stamps task_date with `date.today()` (local),
+    # while /stats defaults to UTC `today`. Those differ on runners whose
+    # local clock isn't UTC (e.g. self-hosted Windows), so today's task
+    # falls outside the [today-6, today] window in UTC and the response
+    # is empty. The frontend always sends tz_offset; mirror that here so
+    # the test passes on any runner regardless of its timezone.
+    tz_offset_min = round(
+        (datetime.now() - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds() / 60
+    )
+    stats = auth_client.get(f"/stats?days=7&tz_offset={tz_offset_min}").json()
 
     assert stats["daily_tasks"] == [{
         "date": first["task_date"],
@@ -244,6 +253,10 @@ def test_monthly_progress_recap_route_is_exposed(auth_client: TestClient, monkey
         "summarise_progress_recap",
         lambda *_args: SummaryResult("Advisor-ready recap", "test-model", 10, 5),
     )
+    # Monthly recap is now restricted to the last 3 days of the calendar
+    # month — freeze "now" to a date in that window so this route smoke
+    # test isn't time-of-month dependent.
+    monkeypatch.setattr(summaries, "_utc_now", lambda: datetime(2026, 6, 30, 12, tzinfo=timezone.utc))
 
     response = auth_client.post("/summaries/progress/monthly/generate")
 

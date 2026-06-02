@@ -5,6 +5,7 @@ from datetime import date
 from pydantic import BaseModel, Field
 
 from app.schemas._base import BaseSchema, UtcDateTime
+from app.schemas.tag import TagSummary
 
 
 class DailyTaskCreate(BaseModel):
@@ -19,6 +20,7 @@ class DailyTaskCreate(BaseModel):
     due_date: date | None = None
     project_id: int | None = None
     paper_note_id: int | None = None
+    tag_names: list[str] | None = None
 
 
 class DailyTaskUpdate(BaseModel):
@@ -37,6 +39,7 @@ class DailyTaskUpdate(BaseModel):
     project_id: int | None = None
     planned_date: date | None = None
     due_date: date | None = None
+    tag_names: list[str] | None = None
 
 
 class DailyTaskRead(BaseSchema):
@@ -53,6 +56,7 @@ class DailyTaskRead(BaseSchema):
     sort_order: float = 0
     project_id: int | None = None
     paper_note_id: int | None = None
+    tag_list: list[TagSummary] = []
     created_at: UtcDateTime
     updated_at: UtcDateTime
 

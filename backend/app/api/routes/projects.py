@@ -10,7 +10,7 @@ become unassigned. This matches how Linear/GitHub/Things treat
 "deleting a project that still has work in it".
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, update
@@ -19,8 +19,9 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.core.xp import ENTITY_POMODORO, ENTITY_STOPWATCH, EVENT_POMODORO, EVENT_STOPWATCH
-from app.models.daily_tracker import DailyTask
+from app.models.daily_tracker import DailyLog, DailyTask
 from app.models.feynman_entry import FeynmanEntry
+from app.models.milestone import Milestone
 from app.models.paper_insight import PaperInsight
 from app.models.paper_note import PaperNote
 from app.models.pomodoro_session import PomodoroSession
@@ -30,12 +31,10 @@ from app.models.user import User
 from app.models.xp_event import XpEvent
 from app.schemas.project import (
     ProjectCreate,
-    ProjectDashboardGap,
-    ProjectDashboardPaper,
     ProjectDashboardRead,
-    ProjectDashboardTask,
     ProjectRead,
     ProjectUpdate,
+    ReflectionMention,
 )
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -109,95 +108,6 @@ def update_project(
     return project
 
 
-@router.get("/{project_id}/dashboard", response_model=ProjectDashboardRead)
-def get_project_dashboard(
-    project_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> ProjectDashboardRead:
-    """Return the small set of signals needed to steer one research thread."""
-    project = _get_owned_project(project_id, current_user, db)
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
-    work_events = db.scalars(
-        select(XpEvent)
-        .where(XpEvent.user_id == current_user.id)
-        .where(XpEvent.event_type.in_([EVENT_POMODORO, EVENT_STOPWATCH]))
-    ).all()
-
-    weekly_focus_minutes = 0
-    reading_minutes_by_note: dict[int, int] = {}
-    for event in work_events:
-        session = None
-        if event.entity_type == ENTITY_POMODORO:
-            session = db.get(PomodoroSession, event.entity_id)
-        elif event.entity_type == ENTITY_STOPWATCH:
-            session = db.get(StopwatchSession, event.entity_id)
-        if session is None or session.linked_task_id is None:
-            continue
-        task = db.get(DailyTask, session.linked_task_id)
-        if task is None or task.user_id != current_user.id:
-            continue
-        if task.paper_note_id is not None:
-            reading_minutes_by_note[task.paper_note_id] = (
-                reading_minutes_by_note.get(task.paper_note_id, 0) + event.amount
-            )
-        event_created_at = event.created_at
-        if event_created_at.tzinfo is not None:
-            event_created_at = event_created_at.astimezone(timezone.utc).replace(tzinfo=None)
-        if task.project_id == project.id and event_created_at >= cutoff:
-            weekly_focus_minutes += event.amount
-
-    tasks = db.scalars(
-        select(DailyTask)
-        .where(DailyTask.user_id == current_user.id)
-        .where(DailyTask.project_id == project.id)
-        .where(DailyTask.is_done.is_(False))
-        .order_by(DailyTask.due_date.asc().nullslast(), DailyTask.planned_date.asc())
-        .limit(8)
-    ).all()
-    notes = db.scalars(
-        select(PaperNote)
-        .where(PaperNote.user_id == current_user.id)
-        .where(PaperNote.project_id == project.id)
-        .where(PaperNote.reading_status.in_(["inbox", "reading", "revisit"]))
-        .order_by(PaperNote.updated_at.desc())
-        .limit(8)
-    ).all()
-    gaps = db.scalars(
-        select(FeynmanEntry)
-        .where(FeynmanEntry.user_id == current_user.id)
-        .where(FeynmanEntry.project_id == project.id)
-        .where(FeynmanEntry.gaps != "")
-        .order_by(FeynmanEntry.updated_at.desc())
-        .limit(8)
-    ).all()
-    insights = db.scalars(
-        select(PaperInsight)
-        .join(PaperNote, PaperNote.id == PaperInsight.paper_note_id)
-        .where(PaperInsight.user_id == current_user.id)
-        .where(PaperNote.project_id == project.id)
-        .order_by(PaperInsight.created_at.desc())
-        .limit(6)
-    ).all()
-
-    return ProjectDashboardRead(
-        project=ProjectRead.model_validate(project),
-        weekly_focus_minutes=weekly_focus_minutes,
-        open_tasks=[ProjectDashboardTask.model_validate(task) for task in tasks],
-        reading_queue=[
-            ProjectDashboardPaper(
-                id=note.id,
-                title=note.title,
-                reading_status=note.reading_status,
-                reading_minutes=reading_minutes_by_note.get(note.id, 0),
-            )
-            for note in notes
-        ],
-        unresolved_gaps=[ProjectDashboardGap.model_validate(gap) for gap in gaps],
-        recent_insights=list(insights),
-    )
-
-
 @router.delete("/{project_id}", status_code=204)
 def delete_project(
     project_id: int,
@@ -212,7 +122,7 @@ def delete_project(
     # the owning user as defense-in-depth — even though only the user's own
     # project_id values could match, scoping by user_id keeps a future
     # "shared project" feature from accidentally touching other users' rows.
-    for model in (DailyTask, PaperNote, FeynmanEntry):
+    for model in (DailyTask, PaperNote, FeynmanEntry, Milestone):
         db.execute(
             update(model)
             .where(model.user_id == current_user.id)
@@ -222,3 +132,171 @@ def delete_project(
 
     db.delete(project)
     db.commit()
+
+
+@router.get("/{project_id}/dashboard", response_model=ProjectDashboardRead)
+def get_project_dashboard(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ProjectDashboardRead:
+    """Aggregated "research thread status" for a single project.
+
+    Combines:
+      * Pulse: minutes worked over last 7 / 30 days, completed tasks
+        in last 7 days, last activity timestamp.
+      * Open work: unfinished tasks attached to this project.
+      * Knowledge: paper notes + Feynman entries attached to this
+        project.
+      * Mentions: snippets of daily reflections from the last 30 days
+        where this project's name appears (case-insensitive substring).
+
+    Time aggregation is transitive: a work session counts toward a
+    project only if its `linked_task_id` references a task currently
+    assigned to that project. Sessions on a since-reassigned task move
+    with the task — same semantics as the Stats page.
+    """
+    project = _get_owned_project(project_id, current_user, db)
+    user_id = current_user.id
+    now = datetime.now(timezone.utc)
+    today = date.today()
+    cutoff_7d = now - timedelta(days=7)
+    cutoff_30d = now - timedelta(days=30)
+    reflection_since = today - timedelta(days=30)
+
+    # --- Tasks for this project ----------------------------------------------
+    tasks = list(db.scalars(
+        select(DailyTask)
+        .where(DailyTask.user_id == user_id)
+        .where(DailyTask.project_id == project_id)
+        .order_by(DailyTask.is_done.asc(), DailyTask.task_date.desc())
+    ).all())
+    task_ids = {t.id for t in tasks}
+    open_tasks = [t for t in tasks if not t.is_done]
+    done_tasks_7d = sum(
+        1 for t in tasks
+        if t.is_done and t.updated_at and t.updated_at.replace(tzinfo=timezone.utc) >= cutoff_7d
+    )
+
+    # --- Work sessions linked (transitively) to this project ------------------
+    # We pull only sessions whose linked_task_id is in this project's task
+    # set, then sum minutes via the XP ledger (same logic as stats.py).
+    if task_ids:
+        pomodoros = list(db.scalars(
+            select(PomodoroSession)
+            .where(PomodoroSession.user_id == user_id)
+            .where(PomodoroSession.linked_task_id.in_(task_ids))
+            .where(PomodoroSession.is_completed == True)  # noqa: E712
+        ).all())
+        stopwatches = list(db.scalars(
+            select(StopwatchSession)
+            .where(StopwatchSession.user_id == user_id)
+            .where(StopwatchSession.linked_task_id.in_(task_ids))
+        ).all())
+    else:
+        pomodoros = []
+        stopwatches = []
+
+    pomo_ids = [s.id for s in pomodoros]
+    sw_ids = [s.id for s in stopwatches]
+
+    work_events: list[XpEvent] = []
+    if pomo_ids:
+        work_events.extend(db.scalars(
+            select(XpEvent)
+            .where(XpEvent.user_id == user_id)
+            .where(XpEvent.event_type == EVENT_POMODORO)
+            .where(XpEvent.entity_type == ENTITY_POMODORO)
+            .where(XpEvent.entity_id.in_(pomo_ids))
+        ).all())
+    if sw_ids:
+        work_events.extend(db.scalars(
+            select(XpEvent)
+            .where(XpEvent.user_id == user_id)
+            .where(XpEvent.event_type == EVENT_STOPWATCH)
+            .where(XpEvent.entity_type == ENTITY_STOPWATCH)
+            .where(XpEvent.entity_id.in_(sw_ids))
+        ).all())
+
+    minutes_7d = 0
+    minutes_30d = 0
+    last_activity_at: datetime | None = None
+    for ev in work_events:
+        ts = ev.created_at.replace(tzinfo=timezone.utc) if ev.created_at and ev.created_at.tzinfo is None else ev.created_at
+        if ts is None:
+            continue
+        if ts >= cutoff_30d:
+            minutes_30d += ev.amount
+            if ts >= cutoff_7d:
+                minutes_7d += ev.amount
+        if last_activity_at is None or ts > last_activity_at:
+            last_activity_at = ts
+
+    # --- Paper notes & Feynman entries ---------------------------------------
+    paper_notes = list(db.scalars(
+        select(PaperNote)
+        .where(PaperNote.user_id == user_id)
+        .where(PaperNote.project_id == project_id)
+        .order_by(PaperNote.updated_at.desc())
+    ).all())
+
+    feynman_entries = list(db.scalars(
+        select(FeynmanEntry)
+        .where(FeynmanEntry.user_id == user_id)
+        .where(FeynmanEntry.project_id == project_id)
+        .order_by(FeynmanEntry.updated_at.desc())
+    ).all())
+
+    recent_insights = list(db.scalars(
+        select(PaperInsight)
+        .join(PaperNote, PaperNote.id == PaperInsight.paper_note_id)
+        .where(PaperInsight.user_id == user_id)
+        .where(PaperNote.project_id == project_id)
+        .order_by(PaperInsight.created_at.desc())
+        .limit(6)
+    ).all())
+
+    # --- Reflection mentions --------------------------------------------------
+    # Case-insensitive substring match against the project's name. Cheap
+    # MVP heuristic — false positives possible if the user has a short or
+    # generic project name ("Notes"), but we'd rather over-surface than
+    # require a markdown tag syntax in their reflection field.
+    name_lower = project.name.lower()
+    mentions: list[ReflectionMention] = []
+    if name_lower.strip():
+        recent_logs = db.scalars(
+            select(DailyLog)
+            .where(DailyLog.user_id == user_id)
+            .where(DailyLog.log_date >= reflection_since)
+            .order_by(DailyLog.log_date.desc())
+        ).all()
+        for log in recent_logs:
+            text = (log.reflection or "")
+            idx = text.lower().find(name_lower)
+            if idx < 0:
+                continue
+            # ~80 chars of context around the match.
+            start = max(0, idx - 30)
+            end = min(len(text), idx + len(project.name) + 50)
+            snippet = text[start:end].strip()
+            if start > 0:
+                snippet = "…" + snippet
+            if end < len(text):
+                snippet = snippet + "…"
+            mentions.append(ReflectionMention(log_date=log.log_date, snippet=snippet))
+            if len(mentions) >= 5:
+                break
+
+    return ProjectDashboardRead(
+        project=ProjectRead.model_validate(project),
+        minutes_7d=minutes_7d,
+        minutes_30d=minutes_30d,
+        done_tasks_7d=done_tasks_7d,
+        open_tasks_count=len(open_tasks),
+        last_activity_at=last_activity_at,
+        open_tasks=[t for t in open_tasks],
+        paper_notes=[n for n in paper_notes],
+        feynman_entries=[e for e in feynman_entries],
+        recent_reflections=mentions,
+        recent_insights=recent_insights,
+    )

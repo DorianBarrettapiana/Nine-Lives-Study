@@ -17,11 +17,15 @@ import {
   generateWeekly,
   generateProgressRecap,
   getAiConfig,
+  getMonthlyAvailability,
+  getStageAvailability,
   getWeeklyAvailability,
   listSummaries,
   setAiOptIn,
   type AiConfigRead,
   type AiSummaryRead,
+  type MonthlyAvailability,
+  type StageAvailability,
   type WeeklyAvailability,
   type ProgressSummaryKind,
 } from "../api/summaries";
@@ -335,6 +339,9 @@ async function onGenerateProgressClick(period: ProgressSummaryKind): Promise<voi
   } finally {
     btn.disabled = false;
     btn.textContent = original;
+    // Re-check availability so the freshly-generated kind flips to its
+    // disabled "already done" state without requiring a page reload.
+    void refreshAvailability();
   }
 }
 
@@ -404,59 +411,95 @@ export async function init(): Promise<void> {
 }
 
 async function refreshAvailability(): Promise<void> {
+  // Run the three availability fetches in parallel; failures degrade
+  // gracefully — a dead availability endpoint shouldn't grey out an
+  // otherwise-usable button, the backend's hard checks will still
+  // 400/429 on bad clicks.
+  const tz = -new Date().getTimezoneOffset();
+  const [weekly, monthly, stage] = await Promise.all([
+    getWeeklyAvailability(tz).catch((e) => { console.warn("weekly avail", e); return null; }),
+    getMonthlyAvailability(tz).catch((e) => { console.warn("monthly avail", e); return null; }),
+    getStageAvailability().catch((e) => { console.warn("stage avail", e); return null; }),
+  ]);
+  if (weekly) applyWeeklyAvailability(weekly);
+  if (monthly) applyMonthlyAvailability(monthly);
+  if (stage) applyStageAvailability(stage);
+}
+
+function applyWeeklyAvailability(avail: WeeklyAvailability): void {
   if (!generateBtn) return;
-  let avail: WeeklyAvailability;
-  try {
-    avail = await getWeeklyAvailability(-new Date().getTimezoneOffset());
-  } catch (e) {
-    console.warn("availability fetch failed", e);
-    return;
-  }
   if (avail.can_generate) {
     generateBtn.disabled = false;
-    // Surface the slot's framing so the user knows what they'll get:
-    // Tuesday produces a retrospective on last week, Friday a pulse on
-    // this week so far.
-    const flavor = avail.slot === "Tuesday" ? "last week recap" : "this week pulse";
-    generateBtn.textContent = `Generate ${flavor}`;
-    generateBtn.title = `${avail.slot} slot · creates ${avail.period_key}`;
+    generateBtn.textContent = "Generate last week recap";
+    generateBtn.title = `Friday slot · creates ${avail.period_key}`;
   } else if (avail.reason === "off_day") {
     generateBtn.disabled = true;
-    // Show the user WHY the button is dead in the button text itself, not
-    // just the tooltip — tooltips don't show on mobile, and a greyed-out
-    // "Generate" leaves the user wondering whether the feature is broken.
-    generateBtn.textContent = `Available ${avail.next_slot ?? "Tuesday"}`;
+    // Tell the user WHY in the button text — tooltips don't show on mobile.
+    generateBtn.textContent = `Available ${avail.next_slot ?? "Friday"}`;
     generateBtn.title =
-      `Weekly recap can only be generated on Tuesdays and Fridays. ` +
-      `Next available: ${avail.next_slot ?? "Tuesday"}.`;
+      `Weekly recap is available on Fridays only. ` +
+      `Next available: ${avail.next_slot ?? "Friday"}.`;
   } else if (avail.reason === "already_generated") {
     generateBtn.disabled = true;
-    generateBtn.textContent = "Already generated";
+    generateBtn.textContent = "Already generated this week";
     generateBtn.title = `You've already generated ${avail.period_key}. ` +
-      `The other slot or next week unlocks the button.`;
+      `Next Friday unlocks the button.`;
+  }
+}
+
+function applyMonthlyAvailability(avail: MonthlyAvailability): void {
+  if (!monthlyBtn) return;
+  if (avail.can_generate) {
+    monthlyBtn.disabled = false;
+    monthlyBtn.textContent = "Monthly";
+    monthlyBtn.title = `End-of-month window · creates ${avail.period_key}`;
+  } else if (avail.reason === "off_window") {
+    monthlyBtn.disabled = true;
+    monthlyBtn.textContent = `Monthly · ${avail.next_available ?? ""}`;
+    monthlyBtn.title =
+      `Monthly recap is available only in the last ` +
+      `${avail.window_days ?? 3} days of the month. ` +
+      `Next available: ${avail.next_available ?? "end of month"}.`;
+  } else if (avail.reason === "already_generated") {
+    monthlyBtn.disabled = true;
+    monthlyBtn.textContent = "Monthly · done";
+    monthlyBtn.title = `You've already generated ${avail.period_key}.`;
+  }
+}
+
+function applyStageAvailability(avail: StageAvailability): void {
+  if (!stageBtn) return;
+  if (avail.can_generate) {
+    stageBtn.disabled = false;
+    stageBtn.textContent = "90-day stage";
+    stageBtn.title = `Available now (next call locked for ${avail.cooldown_days} days)`;
+  } else if (avail.reason === "cooldown") {
+    stageBtn.disabled = true;
+    stageBtn.textContent = `90-day · ${avail.next_available ?? ""}`;
+    stageBtn.title =
+      `Stage recap is limited to once every ${avail.cooldown_days} days. ` +
+      `Next available: ${avail.next_available ?? "later"}.`;
   }
 }
 
 // --- Weekly-ritual nudge ----------------------------------------------------
 //
-// Fires Tuesday 18:00+ and Friday 18:00+ local time — matching the only two
-// days the server lets the user generate. Modal asks once per slot;
-// localStorage carries the dismissal flag (per period_key, so next week's
-// matching day fires fresh).
+// Fires Friday 18:00+ local time — the only day the server now lets the
+// user generate. Modal asks once per week; localStorage carries the
+// dismissal flag per period_key so next Friday fires fresh.
 //
 // Server-side state is the source of truth via `getWeeklyAvailability()`:
-// if the slot is already generated, no prompt. We don't replicate the
-// server's day check on the client (it's redundant with the availability
-// fetch), but we still gate on time-of-day so morning lectures aren't
-// interrupted by an evening-reflection nudge.
+// if the slot is already generated, no prompt. We still gate on
+// time-of-day so morning lectures aren't interrupted by an evening
+// reflection nudge.
 
 const PROMPT_DISMISSED_PREFIX = "nl_ai_prompt_dismissed_";
 
 async function maybePromptWeeklyRitual(): Promise<void> {
   const now = new Date();
-  // Tue=2, Fri=5 in JS getDay() (Sun=0).
-  const isRitualDay = now.getDay() === 2 || now.getDay() === 5;
-  if (!isRitualDay) return;
+  // Fri=5 in JS getDay() (Sun=0). Single ritual day after the Tuesday
+  // slot was retired — fewer interrupts, one consolidated review.
+  if (now.getDay() !== 5) return;
   if (now.getHours() < 18) return;
 
   // Server tells us whether this slot is still open. If it isn't (or it's

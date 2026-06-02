@@ -29,10 +29,13 @@ import {
   type ZoteroItem,
 } from "../api/notes";
 import { ApiError } from "../api/client";
-import { listFeynmanEntries, type FeynmanEntryRead } from "../api/feynman";
+import { createFeynmanEntry, listFeynmanEntries, type FeynmanEntryRead } from "../api/feynman";
+import { getLinks, type BacklinksRead } from "../api/links";
+import * as FeynmanView from "./feynman";
 import { escapeHtml, setMessage } from "../utils";
 import { renderEmptyStateWithCat } from "./icons";
 import { projectChipHtml, renderProjectPicker } from "./project-picker";
+import { mountTagInput, refreshTagCache, type TagInputController } from "./tagInput";
 
 let notesList: HTMLDivElement;
 let noteForm: HTMLFormElement;
@@ -42,6 +45,11 @@ let noteYearInput: HTMLInputElement;
 let noteKeyPointsInput: HTMLTextAreaElement;
 let noteQuestionsInput: HTMLTextAreaElement;
 let noteTagsInput: HTMLInputElement;
+let noteTagInput: TagInputController | null = null;
+// Click-to-filter chip: when the user clicks a tag chip on a saved note,
+// stuff that name in here and re-render. Cleared by the "All" chip the
+// filter row injects when active.
+let activeTagFilter: string | null = null;
 let noteUrlInput: HTMLInputElement;
 let noteDoiInput: HTMLInputElement;
 let noteAbstractInput: HTMLTextAreaElement;
@@ -73,6 +81,7 @@ function clearNoteForm(): void {
   noteKeyPointsInput.value = "";
   noteQuestionsInput.value = "";
   noteTagsInput.value = "";
+  if (noteTagInput) noteTagInput.clear();
   noteUrlInput.value = "";
   noteDoiInput.value = "";
   noteAbstractInput.value = "";
@@ -103,23 +112,44 @@ function zoteroDeepLink(note: PaperNoteRead): string | null {
   return `https://www.zotero.org/users/${zoteroConfig.zotero_user_id}/items/${note.zotero_key}`;
 }
 
+function noteTagNames(note: PaperNoteRead): string[] {
+  // Prefer the authoritative tag_list (from the link table). Fall back to
+  // splitting the CSV mirror so notes whose backfill hasn't run yet still
+  // render some tags instead of nothing.
+  if (note.tag_list && note.tag_list.length > 0) {
+    return note.tag_list.map((t) => t.name);
+  }
+  return note.tags.split(",").map((t) => t.trim()).filter(Boolean);
+}
+
 export function render(): void {
   const query = noteSearchInput?.value.trim().toLowerCase() ?? "";
   const tagQuery = noteTagFilterInput?.value.trim().toLowerCase() ?? "";
+  const activeFilter = activeTagFilter?.toLowerCase() ?? "";
   const visibleNotes = notes.filter((note) => {
     const haystack = [
       note.title, note.authors, note.doi, note.url, note.key_points, note.questions,
     ].join(" ").toLowerCase();
-    const tags = note.tags.toLowerCase();
-    return (!query || haystack.includes(query)) && (!tagQuery || tags.includes(tagQuery));
+    const names = noteTagNames(note).map((n) => n.toLowerCase());
+    const tagsBlob = [note.tags.toLowerCase(), ...names].join(" ");
+    const matchesActive = !activeFilter || names.includes(activeFilter);
+    return (!query || haystack.includes(query))
+      && (!tagQuery || tagsBlob.includes(tagQuery))
+      && matchesActive;
   });
   if (visibleNotes.length === 0) {
-    notesList.innerHTML = renderEmptyStateWithCat("No paper note yet.");
+    notesList.innerHTML = activeTagFilter
+      ? `<p class="hint">No paper note tagged <strong>${escapeHtml(activeTagFilter)}</strong>. <button class="link-btn" data-action="clear-tag-filter" type="button">Show all</button></p>`
+      : renderEmptyStateWithCat("No paper note yet.");
     return;
   }
-  notesList.innerHTML = visibleNotes.map((note) => {
-    const tags = note.tags.split(",").map((t) => t.trim()).filter(Boolean)
-      .map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join("");
+  const filterBanner = activeTagFilter
+    ? `<p class="hint tag-filter-banner">Filtering by tag <span class="tag">#${escapeHtml(activeTagFilter)}</span> <button class="link-btn" data-action="clear-tag-filter" type="button">clear</button></p>`
+    : "";
+  notesList.innerHTML = filterBanner + visibleNotes.map((note) => {
+    const tags = noteTagNames(note)
+      .map((t) => `<button type="button" class="tag tag-clickable" data-action="filter-tag" data-tag="${escapeHtml(t)}" title="Filter notes by #${escapeHtml(t)}">${escapeHtml(t)}</button>`)
+      .join("");
     const zoteroLink = zoteroDeepLink(note);
     const sourceBadge = note.source === "zotero"
       ? `<span class="source-badge zotero-badge" title="Imported from Zotero">📚 Zotero</span>`
@@ -167,6 +197,9 @@ export function render(): void {
           <div class="note-actions">
             <button class="secondary" data-action="read-today" data-id="${note.id}">+ Read today</button>
             <button class="secondary" data-action="edit" data-id="${note.id}">Edit</button>
+            ${note.feynman_entry_id === null
+              ? `<button class="secondary" data-action="start-feynman" data-id="${note.id}" title="Spawn a Feynman record from this paper and link it">🧠 Start Feynman</button>`
+              : `<button class="link-btn" data-action="open-feynman" data-id="${note.id}" title="Open the linked Feynman record">🧠 Open Feynman</button>`}
             <button class="danger" data-action="delete" data-id="${note.id}">Delete</button>
           </div>
         </div>
@@ -186,8 +219,27 @@ export function render(): void {
         ${insightHtml}
         ${abstractHtml}
         ${tags ? `<div class="tags">${tags}</div>` : ""}
+        <details class="note-backlinks" data-backlinks="${note.id}">
+          <summary>🔗 Links</summary>
+          <div class="note-backlinks-body"><p class="hint">Open to load.</p></div>
+        </details>
       </article>`;
   }).join("");
+}
+
+function renderBacklinksHtml(data: BacklinksRead): string {
+  if (data.backlinks.length === 0 && data.outgoing.length === 0) {
+    return `<p class="hint">No links yet. Mention another note as <code>[[Its title]]</code> in the body to create one.</p>`;
+  }
+  const fmtRef = (label: string, title: string, kind: string): string =>
+    `<li><span class="link-kind tag-chip" data-kind="${kind}">${kind === "feynman_entry" ? "Feynman" : "Paper"}</span> <strong>${escapeHtml(title)}</strong>${label && label.toLowerCase() !== title.toLowerCase() ? ` <span class="hint">(as “${escapeHtml(label)}”)</span>` : ""}</li>`;
+  const inHtml = data.backlinks.length
+    ? `<div class="note-backlinks-section"><h4>Backlinks (${data.backlinks.length})</h4><ul class="link-list">${data.backlinks.map((b) => fmtRef(b.label, b.source.title, b.source.item_type)).join("")}</ul></div>`
+    : "";
+  const outHtml = data.outgoing.length
+    ? `<div class="note-backlinks-section"><h4>Outgoing (${data.outgoing.length})</h4><ul class="link-list">${data.outgoing.map((o) => fmtRef(o.label, o.target.title, o.target.item_type)).join("")}</ul></div>`
+    : "";
+  return inHtml + outHtml;
 }
 
 function humanReadingStatus(status: PaperReadingStatus): string {
@@ -258,6 +310,31 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
   zoteroSettingsButton = document.querySelector<HTMLButtonElement>("#zotero-settings-button")!;
   zoteroImportButton = document.querySelector<HTMLButtonElement>("#zotero-import-button")!;
 
+  // Mount the chip-style tag control next to the legacy free-text input
+  // (which stays around so legacy reads keep working until the link table
+  // is fully populated). We host it inside the existing label by
+  // appending a sibling div — the text input remains usable as a fallback
+  // for power users who want to paste a CSV.
+  const tagLabel = noteTagsInput.closest("label");
+  if (tagLabel) {
+    const chipHost = document.createElement("div");
+    chipHost.className = "note-tag-input-host";
+    tagLabel.appendChild(chipHost);
+    noteTagInput = mountTagInput(chipHost, {
+      placeholder: "Add tag and press Enter…",
+      onChange: () => {
+        // Keep the legacy CSV box loosely in sync so users who eyeball
+        // it see what's being saved. The form submit reads from chips.
+        noteTagsInput.value = (noteTagInput?.getNames() ?? []).join(", ");
+      },
+    });
+    // Hide the raw input visually but keep it focusable for "Tab from
+    // year → into tags" power users (they can still type comma-separated
+    // and pick it up via blur → submit). Display: none would skip a11y
+    // labelling so we make it sr-only-ish.
+    noteTagsInput.classList.add("note-tags-legacy-input");
+  }
+
   // Re-tint the sleeping-cat empty state when the user picks a new skin.
   window.addEventListener("cat:skin-changed", () => render());
 
@@ -268,11 +345,19 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
     const yearRaw = noteYearInput.value.trim();
     const year = yearRaw ? Number(yearRaw) : null;
     if (year !== null && !Number.isFinite(year)) { setMessage(noteMessage, "Year must be a valid number.", "error"); return; }
+    // Chip control is authoritative; if it has any chips use those,
+    // otherwise fall back to splitting whatever the user typed into the
+    // legacy CSV box (so a quick "tag1, tag2 <submit>" still works).
+    const chipNames = noteTagInput?.getNames() ?? [];
+    const tagNames = chipNames.length > 0
+      ? chipNames
+      : noteTagsInput.value.split(",").map((t) => t.trim()).filter(Boolean);
     const payload = {
       title, authors: noteAuthorsInput.value.trim(), year,
       key_points: noteKeyPointsInput.value.trim(),
       questions: noteQuestionsInput.value.trim(),
-      tags: noteTagsInput.value.trim(),
+      tags: tagNames.join(", "),
+      tag_names: tagNames,
       url: noteUrlInput.value.trim() || null,
       doi: noteDoiInput.value.trim() || null,
       abstract: noteAbstractInput.value.trim() || null,
@@ -289,6 +374,9 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
         setMessage(noteMessage, "Note updated.", "success");
       }
       clearNoteForm();
+      // Refresh autocomplete cache so any brand-new tags become
+      // suggestable in subsequent inputs without a page reload.
+      void refreshTagCache();
       await onRefreshNeeded();
     } catch (error) {
       console.error(error);
@@ -301,7 +389,43 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
   notesList.addEventListener("click", async (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
+    // Lazy-load the backlinks panel on first open. The <summary> click
+    // is what toggles the <details>; we hook before the default action
+    // so the fetch starts immediately, then the user sees the spinner
+    // when the panel opens. Loaded marker dedupes re-clicks (close+open).
+    if (target.tagName === "SUMMARY") {
+      const details = target.closest<HTMLDetailsElement>("details.note-backlinks");
+      if (details && details.dataset.loaded !== "true") {
+        const noteId = Number(details.dataset.backlinks);
+        const body = details.querySelector<HTMLDivElement>(".note-backlinks-body");
+        if (Number.isFinite(noteId) && body) {
+          details.dataset.loaded = "true";
+          body.innerHTML = `<p class="hint">Loading…</p>`;
+          try {
+            const data = await getLinks("paper_note", noteId);
+            body.innerHTML = renderBacklinksHtml(data);
+          } catch (e) {
+            console.error(e);
+            details.dataset.loaded = "";  // allow retry
+            body.innerHTML = `<p class="message error">Could not load links.</p>`;
+          }
+        }
+      }
+      // Fall through — we don't return so the native toggle still happens.
+    }
     const action = target.dataset.action;
+    // Tag-filter actions don't need a note id — handle them before the
+    // generic per-note dispatch.
+    if (action === "filter-tag") {
+      activeTagFilter = target.dataset.tag ?? null;
+      render();
+      return;
+    }
+    if (action === "clear-tag-filter") {
+      activeTagFilter = null;
+      render();
+      return;
+    }
     const noteId = Number(target.dataset.id);
     if (!action || !Number.isFinite(noteId)) return;
     const note = notes.find((n) => n.id === noteId);
@@ -314,6 +438,12 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
       noteKeyPointsInput.value = note.key_points;
       noteQuestionsInput.value = note.questions;
       noteTagsInput.value = note.tags;
+      if (noteTagInput) {
+        const names = note.tag_list && note.tag_list.length > 0
+          ? note.tag_list.map((t) => t.name)
+          : note.tags.split(",").map((t) => t.trim()).filter(Boolean);
+        noteTagInput.setNames(names);
+      }
       noteUrlInput.value = note.url ?? "";
       noteDoiInput.value = note.doi ?? "";
       noteAbstractInput.value = note.abstract ?? "";
@@ -335,6 +465,30 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
         console.error(error);
         setMessage(noteMessage, "Could not add reading task.", "error");
       }
+    } else if (action === "start-feynman") {
+      try {
+        // Same "concept seed" pattern as manual creation: prefill from the
+        // paper title, leave the rest blank — the user will write step 2-4.
+        const entry = await createFeynmanEntry({
+          concept: note.title,
+          explanation: "",
+          gaps: "",
+          analogy: "",
+          project_id: note.project_id,
+        });
+        await updateNote(note.id, { feynman_entry_id: entry.id });
+        setMessage(noteMessage, "Feynman record created and linked.", "success");
+        await onRefreshNeeded();
+        switchToView("feynman");
+        await FeynmanView.loadForEdit(entry.id);
+      } catch (error) {
+        console.error(error);
+        setMessage(noteMessage, "Could not start Feynman.", "error");
+      }
+    } else if (action === "open-feynman") {
+      if (note.feynman_entry_id === null) return;
+      switchToView("feynman");
+      await FeynmanView.loadForEdit(note.feynman_entry_id);
     } else if (action === "delete") {
       const extra = note.source === "zotero"
         ? "\n(The item stays in your Zotero library — only this local note is removed.)"

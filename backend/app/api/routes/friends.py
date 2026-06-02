@@ -15,9 +15,12 @@ from app.core.xp import (
     XP_CHEER_RECEIVED,
     award_xp_event,
 )
+from app.models.daily_tracker import DailyTask
 from app.models.feed_like import FeedLike
 from app.models.friend_cheer import FriendCheer
 from app.models.friendship import Friendship
+from app.models.pomodoro_session import PomodoroSession
+from app.models.project import Project
 from app.models.user import User
 from app.models.xp_event import XpEvent
 from app.schemas.friendship import (
@@ -302,8 +305,11 @@ def get_feed(
     if not fids:
         return []
 
+    # Pull the user's share_project flag alongside the activity flag so the
+    # downstream project-name lookup can skip events whose owner has opted
+    # out, without an extra round-trip per row.
     events = db.execute(
-        select(XpEvent, User.username, User.cat_skin)
+        select(XpEvent, User.username, User.cat_skin, User.share_project)
         .join(User, User.id == XpEvent.user_id)
         .where(XpEvent.user_id.in_(fids))
         .where(User.share_activity.is_(True))
@@ -311,7 +317,65 @@ def get_feed(
         .limit(limit)
     ).all()
 
-    event_ids = [e.id for e, _, _ in events]
+    # --- Resolve project name per event when owner opted in ----------------
+    #
+    # Only work-session events carry a project link in our data model:
+    #   - task_done    → daily_tasks.project_id
+    #   - pomodoro_done → pomodoro_sessions.linked_task_id → daily_tasks.project_id
+    # Everything else (notes, feynman, mood) ignores share_project here.
+    task_ids: set[int] = set()
+    pomo_ids: set[int] = set()
+    for ev, _, _, share_project in events:
+        if not share_project:
+            continue
+        if ev.event_type == "task_done":
+            task_ids.add(ev.entity_id)
+        elif ev.event_type == "pomodoro_done":
+            pomo_ids.add(ev.entity_id)
+
+    # Pomodoro session → linked task id (only for sessions whose owners
+    # opted into project sharing).
+    pomo_to_task: dict[int, int | None] = {}
+    if pomo_ids:
+        for sid, ltid in db.execute(
+            select(PomodoroSession.id, PomodoroSession.linked_task_id)
+            .where(PomodoroSession.id.in_(pomo_ids))
+        ).all():
+            pomo_to_task[sid] = ltid
+            if ltid is not None:
+                task_ids.add(ltid)
+
+    # Task id → project id (one batch query).
+    task_to_project: dict[int, int | None] = {}
+    if task_ids:
+        for tid, pid in db.execute(
+            select(DailyTask.id, DailyTask.project_id)
+            .where(DailyTask.id.in_(task_ids))
+        ).all():
+            task_to_project[tid] = pid
+
+    # Project id → name (one batch query).
+    project_id_to_name: dict[int, str] = {}
+    pids = {pid for pid in task_to_project.values() if pid is not None}
+    if pids:
+        for pid, name in db.execute(
+            select(Project.id, Project.name).where(Project.id.in_(pids))
+        ).all():
+            project_id_to_name[pid] = name
+
+    def project_for(ev: XpEvent, share_project: bool) -> str | None:
+        if not share_project:
+            return None
+        if ev.event_type == "task_done":
+            pid = task_to_project.get(ev.entity_id)
+        elif ev.event_type == "pomodoro_done":
+            tid = pomo_to_task.get(ev.entity_id)
+            pid = task_to_project.get(tid) if tid is not None else None
+        else:
+            return None
+        return project_id_to_name.get(pid) if pid is not None else None
+
+    event_ids = [e.id for e, _, _, _ in events]
     like_counts: dict[int, int] = {}
     my_likes: set[int] = set()
     if event_ids:
@@ -340,8 +404,9 @@ def get_feed(
             created_at=ev.created_at,
             like_count=like_counts.get(ev.id, 0),
             liked_by_me=ev.id in my_likes,
+            project_name=project_for(ev, share_project),
         )
-        for ev, uname, skin in events
+        for ev, uname, skin, share_project in events
     ]
 
 
