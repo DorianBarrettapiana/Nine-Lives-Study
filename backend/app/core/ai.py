@@ -577,3 +577,108 @@ def summarise_feynman_review(user_id: int, entry_id: int, db: Session) -> Summar
 def summarise_reflections(user_id: int, since_utc: datetime, db: Session) -> SummaryResult:
     data = gather_reflections(user_id, since_utc, db)
     return _summarise(_SYSTEM_REFLECTIONS, data, max_tokens=1500)
+
+
+# --- Backplanning suggestions -----------------------------------------------
+#
+# Used by /milestones/{id}/suggest-children when the user has opted in to AI.
+# Differs from the summarisers above in two ways:
+#   * Output is a structured JSON list, not prose — we parse it back out.
+#   * We bound the work: capped check-points, capped tokens, strict schema
+#     validation. On any failure (no key, no opt-in, parse error, bad shape,
+#     SDK exception) we return None so the route can fall back to the
+#     deterministic rule engine in `app.core.backplanning`.
+
+_SYSTEM_BACKPLAN = """\
+You are a PhD productivity coach helping the user backplan one milestone.
+
+Given:
+- a parent milestone title and its due date,
+- today's date,
+- a list of the user's existing milestones (so you don't propose conflicts).
+
+Propose 3 to 6 intermediate check-points that decompose the work into
+weekly-or-biweekly chunks. Each check-point is a (title, due_date) pair.
+
+Constraints (HARD — violating any voids the response):
+- Every due_date must be strictly between today and the parent due_date,
+  inclusive of neither.
+- Dates must be in YYYY-MM-DD format.
+- Titles must be short, imperative phrases (≤ 60 chars). No emoji,
+  no markdown, no quotes.
+- Return between 3 and 6 items.
+- Output ONLY a JSON object of the shape:
+    {"suggestions": [{"title": "...", "due_date": "YYYY-MM-DD"}, ...]}
+  No prose before or after. No code fences. No commentary.
+
+Style:
+- Order earliest-first.
+- Prefer concrete verbs ("Draft", "Run", "Revise") over vague ones
+  ("Work on").
+- If the parent looks like a paper deadline, follow the canonical
+  outline → draft → review → revise → submit arc. For a defense,
+  use slides + mock rehearsals. For an application, use draft +
+  letters + submit.\
+"""
+
+
+def _parse_backplan_json(raw: str) -> list[dict] | None:
+    """Tolerantly pull the suggestions list out of a model response.
+
+    The system prompt asks for bare JSON, but models occasionally wrap
+    it in a code fence anyway. Strip those before parsing. Returns None
+    on any error so the route falls back to rules.
+    """
+    text = raw.strip()
+    if text.startswith("```"):
+        # ```json\n...\n``` → drop the opening fence line and the trailing fence
+        nl = text.find("\n")
+        if nl != -1:
+            text = text[nl + 1 :]
+        if text.endswith("```"):
+            text = text[: -3]
+        text = text.strip()
+    try:
+        parsed = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    items = parsed.get("suggestions")
+    if not isinstance(items, list):
+        return None
+    return items
+
+
+def suggest_backplan_via_llm(
+    parent_title: str,
+    parent_due_iso: str,
+    today_iso: str,
+    sibling_milestones: list[dict],
+) -> list[dict] | None:
+    """Ask Claude for 3–6 intermediate check-points; return raw items or None.
+
+    The caller (`app.api.routes.milestones`) is responsible for:
+      * gating on `is_configured()` AND the user's `ai_opt_in` flag
+      * validating each item's date is strictly between today and
+        parent_due (defense-in-depth; the prompt also says so)
+      * coercing the items into `MilestoneSuggestion` instances
+
+    Returns None on any failure mode — caller falls back to the rules
+    engine, which never fails.
+    """
+    if not is_configured():
+        return None
+    payload = {
+        "today": today_iso,
+        "parent": {"title": parent_title, "due_date": parent_due_iso},
+        # Send up to 20 siblings so the model can avoid colliding with
+        # existing milestones (e.g. "you already have a check-point on
+        # 2026-08-14"). Trimmed for token budget.
+        "existing_milestones": sibling_milestones[:20],
+    }
+    try:
+        result = _summarise(_SYSTEM_BACKPLAN, payload, max_tokens=600)
+    except Exception:  # noqa: BLE001 — any SDK/network failure → rules
+        return None
+    return _parse_backplan_json(result.content)
