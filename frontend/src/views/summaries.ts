@@ -41,8 +41,22 @@ let stageBtn: HTMLButtonElement | null = null;
 let contentEl: HTMLDivElement | null = null;
 let metaEl: HTMLParagraphElement | null = null;
 let messageEl: HTMLParagraphElement | null = null;
+let historyToggleBtn: HTMLButtonElement | null = null;
+let historyPanelEl: HTMLDivElement | null = null;
+let historyListEl: HTMLDivElement | null = null;
 
 let config: AiConfigRead | null = null;
+
+// Cached past recaps per kind. Filled lazily on first History open and on
+// every successful generate so the panel reflects what the user just did
+// without re-fetching the whole list. `null` = not fetched yet.
+type HistoryKind = "weekly" | "monthly" | "stage";
+const historyCache: Record<HistoryKind, AiSummaryRead[] | null> = {
+  weekly: null,
+  monthly: null,
+  stage: null,
+};
+let activeHistoryKind: HistoryKind = "weekly";
 
 // --- Tiny markdown renderer -------------------------------------------------
 // Supports: `## heading`, `### heading`, `**bold**`, `- bullet`, blank-line
@@ -300,6 +314,7 @@ async function onGenerateClick(): Promise<void> {
     const summary = await generateWeekly(tzOffset);
     // Just-generated: auto-expand so the user reads it without another click.
     showSummary(summary, { expanded: true });
+    void refreshHistoryAfterGenerate("weekly");
     flashMessage(messageEl, "Recap ready.", "success");
   } catch (e) {
     setMessage(messageEl, parseError(e), "error");
@@ -333,6 +348,7 @@ async function onGenerateProgressClick(period: ProgressSummaryKind): Promise<voi
       period, -new Date().getTimezoneOffset(),
     );
     showSummary(summary, { expanded: true });
+    void refreshHistoryAfterGenerate(period);
     flashMessage(messageEl, "Recap ready.", "success");
   } catch (e) {
     setMessage(messageEl, parseError(e), "error");
@@ -365,6 +381,9 @@ export async function init(): Promise<void> {
   contentEl = document.querySelector<HTMLDivElement>("#ai-summary-content");
   metaEl = document.querySelector<HTMLParagraphElement>("#ai-summary-meta");
   messageEl = document.querySelector<HTMLParagraphElement>("#ai-summary-message");
+  historyToggleBtn = document.querySelector<HTMLButtonElement>("#ai-summary-history-toggle");
+  historyPanelEl = document.querySelector<HTMLDivElement>("#ai-summary-history");
+  historyListEl = document.querySelector<HTMLDivElement>("#ai-summary-history-list");
 
   if (!cardEl || !generateBtn) return;
 
@@ -385,12 +404,30 @@ export async function init(): Promise<void> {
   monthlyBtn?.addEventListener("click", () => void onGenerateProgressClick("monthly"));
   stageBtn?.addEventListener("click", () => void onGenerateProgressClick("stage"));
 
+  // History panel: tab switching, row click → view, toggle button.
+  historyToggleBtn?.addEventListener("click", () => void toggleHistoryPanel());
+  historyPanelEl?.addEventListener("click", (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return;
+    const tab = target.closest<HTMLButtonElement>(".ai-history-tab");
+    if (tab && tab.dataset.historyKind) {
+      setActiveHistoryTab(tab.dataset.historyKind as HistoryKind);
+      return;
+    }
+    const row = target.closest<HTMLButtonElement>(".ai-history-row");
+    if (row && row.dataset.historyId) {
+      showHistoryEntry(Number(row.dataset.historyId));
+    }
+  });
+
   // Surface the most recent prior recap so re-opening the view doesn't show
   // a blank card. listSummaries is cheap (no AI call) — fine on init.
-  let history: AiSummaryRead[] = [];
+  // Seed the history cache from the same response so opening the History
+  // panel is instant on the weekly tab.
   try {
-    history = await listSummaries("weekly");
-    if (history.length > 0) showSummary(history[0]);
+    const weekly = await listSummaries("weekly");
+    historyCache.weekly = weekly;
+    if (weekly.length > 0) showSummary(weekly[0]);
     else clearSummary();
   } catch (e) {
     console.warn("AI summary history fetch failed.", e);
@@ -466,6 +503,88 @@ function applyMonthlyAvailability(avail: MonthlyAvailability): void {
     monthlyBtn.title = `You've already generated ${avail.period_key}.`;
   }
 }
+
+// --- History panel ---------------------------------------------------------
+
+function historyLabel(kind: HistoryKind): string {
+  return { weekly: "Weekly", monthly: "Monthly", stage: "90-day" }[kind];
+}
+
+async function loadHistory(kind: HistoryKind, force = false): Promise<void> {
+  if (!force && historyCache[kind] !== null) return;
+  try {
+    historyCache[kind] = await listSummaries(kind);
+  } catch (e) {
+    console.warn(`history fetch failed for ${kind}`, e);
+    historyCache[kind] = [];
+  }
+}
+
+function renderHistoryPanel(): void {
+  if (!historyListEl) return;
+  const items = historyCache[activeHistoryKind];
+  if (items === null) {
+    historyListEl.innerHTML = `<p class="hint">Loading…</p>`;
+    return;
+  }
+  if (items.length === 0) {
+    historyListEl.innerHTML =
+      `<p class="hint">No ${historyLabel(activeHistoryKind).toLowerCase()} recaps yet. Generate one and it'll appear here.</p>`;
+    return;
+  }
+  historyListEl.innerHTML = items.map((s) => {
+    const when = parseApiDate(s.generated_at).toLocaleString(undefined, {
+      year: "numeric", month: "short", day: "numeric",
+    });
+    return `
+      <button class="ai-history-row" type="button" data-history-id="${s.id}">
+        <span class="ai-history-row-key">${escapeHtml(s.period_key)}</span>
+        <span class="ai-history-row-when">${escapeHtml(when)}</span>
+      </button>`;
+  }).join("");
+}
+
+function showHistoryEntry(id: number): void {
+  const items = historyCache[activeHistoryKind];
+  if (items === null) return;
+  const entry = items.find((s) => s.id === id);
+  if (entry === undefined) return;
+  showSummary(entry, { expanded: true });
+  // Close the panel so the user sees what they picked without scrolling.
+  historyPanelEl?.classList.add("hidden");
+  historyToggleBtn?.classList.remove("active");
+}
+
+function setActiveHistoryTab(kind: HistoryKind): void {
+  activeHistoryKind = kind;
+  document.querySelectorAll<HTMLButtonElement>(".ai-history-tab").forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.historyKind === kind);
+  });
+  void loadHistory(kind).then(renderHistoryPanel);
+}
+
+async function toggleHistoryPanel(): Promise<void> {
+  if (!historyPanelEl || !historyToggleBtn) return;
+  const wasHidden = historyPanelEl.classList.contains("hidden");
+  historyPanelEl.classList.toggle("hidden", !wasHidden);
+  historyToggleBtn.classList.toggle("active", wasHidden);
+  if (wasHidden) {
+    // Lazy-load the currently active tab on open.
+    await loadHistory(activeHistoryKind);
+    renderHistoryPanel();
+  }
+}
+
+/** Force-refresh the cache for one kind after a successful generation,
+ *  so the history list immediately reflects the new entry. */
+async function refreshHistoryAfterGenerate(kind: HistoryKind): Promise<void> {
+  await loadHistory(kind, true);
+  if (historyPanelEl && !historyPanelEl.classList.contains("hidden")
+      && activeHistoryKind === kind) {
+    renderHistoryPanel();
+  }
+}
+
 
 function applyStageAvailability(avail: StageAvailability): void {
   if (!stageBtn) return;

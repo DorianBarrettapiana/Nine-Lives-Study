@@ -321,10 +321,19 @@ const APP_HTML = `
                 <button id="ai-summary-generate" type="button">Generate weekly</button>
                 <button id="ai-summary-monthly" class="secondary" type="button">Monthly</button>
                 <button id="ai-summary-stage" class="secondary" type="button">90-day stage</button>
+                <button id="ai-summary-history-toggle" class="secondary" type="button" title="View past recaps">📜 History</button>
               </div>
             </div>
             <p class="hint" id="ai-summary-hint">Synthesizes focus time, papers touched, open Feynman gaps, mood, and reflections into an advisor-ready narrative.</p>
             <p class="message" id="ai-summary-message"></p>
+            <div id="ai-summary-history" class="ai-summary-history hidden">
+              <div class="ai-summary-history-tabs" role="tablist">
+                <button class="ai-history-tab active" data-history-kind="weekly" role="tab" type="button">Weekly</button>
+                <button class="ai-history-tab" data-history-kind="monthly" role="tab" type="button">Monthly</button>
+                <button class="ai-history-tab" data-history-kind="stage" role="tab" type="button">90-day</button>
+              </div>
+              <div id="ai-summary-history-list" class="ai-summary-history-list"></div>
+            </div>
             <div id="ai-summary-content" class="ai-summary-markdown"></div>
             <p class="hint" id="ai-summary-meta"></p>
           </section>

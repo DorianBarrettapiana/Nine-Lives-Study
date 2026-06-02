@@ -2145,6 +2145,73 @@ h3 {
 
 /* --- AI summary card --------------------------------------------------- */
 
+/* History panel: shows past weekly / monthly / 90-day recaps grouped by
+ * kind. Hidden by default; opened by the 📜 History button in the
+ * header. Tabs across the top switch between kinds; rows below are
+ * clickable to load that recap into the main content area. */
+.ai-summary-history {
+  margin: 0.5rem 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem;
+  background: var(--bg-muted);
+}
+.ai-summary-history.hidden { display: none; }
+.ai-summary-history-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+.ai-history-tab {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-item);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.ai-history-tab.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+.ai-summary-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 18rem;
+  overflow-y: auto;
+}
+.ai-history-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  background: var(--bg-item);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+}
+.ai-history-row:hover {
+  border-color: var(--accent);
+  background: var(--bg-item-hover, var(--bg-item));
+}
+.ai-history-row-key { font-weight: 500; }
+.ai-history-row-when { color: var(--text-soft); font-size: 0.78rem; }
+
+/* History toggle button active-state pill (when panel is open) */
+#ai-summary-history-toggle.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
 .ai-summary-markdown {
   font-size: 0.95rem;
   line-height: 1.55;
