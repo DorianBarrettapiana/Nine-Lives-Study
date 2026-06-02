@@ -18,6 +18,7 @@ export interface DailyTaskRead {
   sort_order: number;
   project_id: number | null;
   paper_note_id: number | null;
+  parent_task_id: number | null;
   tag_list: TagSummary[];
   created_at: string;
   updated_at: string;
@@ -51,6 +52,7 @@ export interface DailyTaskCreate {
   due_date?: string | null;
   project_id?: number | null;
   paper_note_id?: number | null;
+  parent_task_id?: number | null;
   tag_names?: string[];
   // When true (and no date is supplied), the task is created in the backlog
   // (no planned_date) — it won't appear in any day's Today until scheduled.
@@ -64,6 +66,7 @@ export interface DailyTaskUpdate {
   planned_date?: string | null;
   due_date?: string | null;
   project_id?: number | null;
+  parent_task_id?: number | null;
   tag_names?: string[];
 }
 

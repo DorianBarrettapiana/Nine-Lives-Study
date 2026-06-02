@@ -73,7 +73,7 @@ export async function renderTaskPicker(opts: RenderOptions): Promise<void> {
   const selected = opts.selectedTaskId ?? 0;
 
   const opt = (t: DailyTaskRead): string =>
-    `<option value="${t.id}" ${t.id === selected ? "selected" : ""}>${escapeHtml(t.text)}</option>`;
+    `<option value="${t.id}" ${t.id === selected ? "selected" : ""}>${t.parent_task_id === null ? "" : "↳ "}${escapeHtml(t.text)}</option>`;
 
   opts.container.innerHTML = `
     <label class="task-picker-row">

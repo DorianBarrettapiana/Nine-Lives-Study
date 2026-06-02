@@ -232,6 +232,7 @@ def test_dashboard_basic_shape(auth_client: TestClient):
     assert body["minutes_30d"] == 0
     assert body["open_tasks_count"] == 0
     assert body["open_tasks"] == []
+    assert body["task_time_breakdown"] == []
     assert body["paper_notes"] == []
     assert body["feynman_entries"] == []
     assert body["recent_reflections"] == []
@@ -257,6 +258,36 @@ def test_dashboard_aggregates_work_minutes_and_open_tasks(auth_client: TestClien
     assert body["open_tasks_count"] == 1
     assert body["open_tasks"][0]["id"] == task_a["id"]
     assert body["last_activity_at"] is not None
+
+
+def test_dashboard_rolls_subtask_time_into_parent(auth_client: TestClient):
+    pid = _make_project(auth_client, "Pipeline")
+    parent = auth_client.post("/daily/tasks", json={
+        "text": "Process data", "project_id": pid,
+    }).json()
+    child = auth_client.post("/daily/tasks", json={
+        "text": "Normalize columns", "parent_task_id": parent["id"],
+    }).json()
+
+    for tid in (parent["id"], child["id"]):
+        session = auth_client.post(
+            "/pomodoro", json={"session_type": "work", "linked_task_id": tid},
+        ).json()
+        auth_client.patch(f"/pomodoro/{session['id']}/complete", json={})
+
+    body = auth_client.get(f"/projects/{pid}/dashboard").json()
+    assert body["minutes_7d"] == 50
+    breakdown = body["task_time_breakdown"]
+    assert len(breakdown) == 1
+    assert breakdown[0]["text"] == "Process data"
+    assert breakdown[0]["direct_minutes"] == 25
+    assert breakdown[0]["total_minutes"] == 50
+    assert breakdown[0]["children"] == [{
+        "id": child["id"],
+        "text": "Normalize columns",
+        "is_done": False,
+        "minutes": 25,
+    }]
 
 
 def test_dashboard_reflection_mentions_substring_match(auth_client: TestClient):

@@ -75,6 +75,7 @@ let projectFilter: number | "none" | null = null;
 // pattern as the projects picker uses in the notes view).
 let pendingTaskProjectId: number | null = null;
 let pendingTaskDue: string = "";
+let addingChildForTaskId: number | null = null;
 
 // --- date helpers ----------------------------------------------------------
 
@@ -134,16 +135,16 @@ function passesProjectFilter(task: { project_id: number | null }): boolean {
   return task.project_id === projectFilter;
 }
 
-function taskHtml(task: DailyTaskRead, readOnly: boolean): string {
+function taskHtml(task: DailyTaskRead, readOnly: boolean, isChild = false): string {
   const isMainGoal = state?.log?.main_goal_task_id === task.id;
   const goalStar = isMainGoal ? `<span class="task-main-goal-star" title="Main goal">⭐</span>` : "";
   const duePill = task.due_date
     ? `<span class="due-pill ${dueClass(task.due_date)}" title="Due ${task.due_date}">📅 ${shortDue(task.due_date)}</span>`
     : "";
   return `
-    <div class="task-item${task.is_done ? " task-done" : ""}${isMainGoal ? " task-main-goal" : ""}"
+    <div class="task-item ${isChild ? "task-child" : "task-root"}${task.is_done ? " task-done" : ""}${isMainGoal ? " task-main-goal" : ""}"
          data-task-id="${task.id}"
-         ${readOnly ? "" : 'draggable="true"'}>
+         ${readOnly || isChild ? "" : 'draggable="true"'}>
       <button class="task-checkbox ${task.is_done ? "checked" : ""}"
               data-task-action="toggle" data-id="${task.id}"
               aria-label="Toggle task"
@@ -157,10 +158,29 @@ function taskHtml(task: DailyTaskRead, readOnly: boolean): string {
       ${projectChipHtml(task.project_id)}
       ${duePill}
       ${readOnly ? "" : `
+        ${isChild || task.is_done ? "" : `<button type="button" class="link-btn task-add-child" data-task-action="add-child" data-id="${task.id}" title="Break this task into steps">+ Step</button>`}
         ${task.is_done ? "" : `<button class="secondary compact-btn" data-task-action="stopwatch" data-id="${task.id}" title="Start work timer">▶</button>`}
         ${task.is_done ? "" : `<button class="task-carry" data-task-action="carry" data-id="${task.id}" title="Carry to tomorrow">→</button>`}
         <button class="task-delete" data-task-action="delete" data-id="${task.id}" title="Delete">×</button>`}
     </div>`;
+}
+
+function taskGroupHtml(task: DailyTaskRead, children: DailyTaskRead[], readOnly: boolean): string {
+  const adding = addingChildForTaskId === task.id && !readOnly;
+  const childRows = children.map((child) => taskHtml(child, readOnly, true)).join("");
+  const childPanel = children.length === 0 && !adding
+    ? ""
+    : `<details class="task-children" open>
+         <summary>${children.length} step${children.length === 1 ? "" : "s"}</summary>
+         <div class="task-children-list">${childRows}</div>
+         ${adding ? `
+           <form class="task-child-form" data-parent-id="${task.id}">
+             <input class="task-child-input" type="text" maxlength="500" placeholder="Add a concrete step..." autofocus />
+             <button type="submit">Add step</button>
+             <button type="button" class="secondary" data-task-action="cancel-child" data-id="${task.id}">Cancel</button>
+           </form>` : ""}
+       </details>`;
+  return `<div class="task-group">${taskHtml(task, readOnly)}${childPanel}</div>`;
 }
 
 function dueClass(due: string): string {
@@ -221,7 +241,7 @@ function renderProjectBreakdown(): void {
     return;
   }
   const counts = new Map<string, number>();
-  for (const t of state.tasks) {
+  for (const t of state.tasks.filter((task) => task.parent_task_id === null)) {
     if (t.is_done) continue;
     const key = t.project_id === null
       ? "(no project)"
@@ -242,7 +262,8 @@ function renderTaskList(): void {
   if (!state) return;
   const readOnly = !isToday();
   const filtered = state.tasks.filter(passesProjectFilter);
-  if (filtered.length === 0) {
+  const roots = filtered.filter((task) => task.parent_task_id === null);
+  if (roots.length === 0) {
     if (state.tasks.length > 0) {
       taskList.innerHTML = `<div class="empty-state">No task matches this filter.</div>`;
     } else {
@@ -252,7 +273,12 @@ function renderTaskList(): void {
     }
     return;
   }
-  taskList.innerHTML = filtered.map((t) => taskHtml(t, readOnly)).join("");
+  taskList.innerHTML = roots.map((task) => taskGroupHtml(
+    task,
+    filtered.filter((child) => child.parent_task_id === task.id),
+    readOnly,
+  )).join("");
+  taskList.querySelector<HTMLInputElement>(".task-child-input")?.focus();
 }
 
 function renderYesterdayCard(): void {
@@ -264,7 +290,7 @@ function renderYesterdayCard(): void {
   }
 
   const reflection = yesterdayState.log?.reflection?.trim() ?? "";
-  const unfinished = yesterdayState.tasks.filter((t) => !t.is_done);
+  const unfinished = yesterdayState.tasks.filter((t) => !t.is_done && t.parent_task_id === null);
   const mainGoalId = yesterdayState.log?.main_goal_task_id ?? null;
   const mainGoal = mainGoalId !== null
     ? yesterdayState.tasks.find((t) => t.id === mainGoalId)
@@ -623,8 +649,7 @@ function attachDragHandlers(): void {
       if (!movedId || !state) return;
       const targetId = Number(row.dataset.taskId);
       if (movedId === targetId) return;
-      const group = row.parentElement!;
-      const items = Array.from(group.querySelectorAll<HTMLDivElement>(".task-item"));
+      const items = Array.from(taskList.querySelectorAll<HTMLDivElement>(".task-item.task-root"));
       const targetIdx = items.indexOf(row);
       const prevIdx = items[targetIdx - 1]?.dataset.taskId === String(movedId)
         ? targetIdx - 2 : targetIdx - 1;
@@ -750,7 +775,13 @@ export function init(onDataChanged: () => Promise<void>): void {
     if (!task) return;
     if (!isToday() && action !== "stopwatch" && action !== "pomodoro") return;
     try {
-      if (action === "toggle") {
+      if (action === "add-child") {
+        addingChildForTaskId = id;
+        renderTaskList();
+      } else if (action === "cancel-child") {
+        addingChildForTaskId = null;
+        renderTaskList();
+      } else if (action === "toggle") {
         await updateDailyTask(id, { is_done: !task.is_done });
         await refresh();
         await onDataChangedCb?.();
@@ -776,6 +807,27 @@ export function init(onDataChanged: () => Promise<void>): void {
     } catch (error) {
       console.error(error);
       setMessage(messageEl, "Could not update task.", "error");
+    }
+  });
+
+  taskList.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !form.matches(".task-child-form")) return;
+    const parentId = Number(form.dataset.parentId);
+    const input = form.querySelector<HTMLInputElement>(".task-child-input");
+    const text = input?.value.trim() ?? "";
+    if (!Number.isFinite(parentId) || !text) return;
+    try {
+      await createDailyTask({ text, parent_task_id: parentId });
+      addingChildForTaskId = null;
+      setMessage(messageEl, "Step added.", "success");
+      await refresh();
+      await onDataChangedCb?.();
+      window.dispatchEvent(new CustomEvent("task-list:updated"));
+    } catch (error) {
+      console.error(error);
+      setMessage(messageEl, "Could not add step.", "error");
     }
   });
 
@@ -815,7 +867,7 @@ export function init(onDataChanged: () => Promise<void>): void {
 
   yesterdayCarryAllBtn.addEventListener("click", async () => {
     if (yesterdayState === null) return;
-    const unfinished = yesterdayState.tasks.filter((t) => !t.is_done);
+    const unfinished = yesterdayState.tasks.filter((t) => !t.is_done && t.parent_task_id === null);
     if (unfinished.length === 0) return;
     yesterdayCarryAllBtn.disabled = true;
     try {

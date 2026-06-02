@@ -20,6 +20,7 @@ class DailyTaskCreate(BaseModel):
     due_date: date | None = None
     project_id: int | None = None
     paper_note_id: int | None = None
+    parent_task_id: int | None = None
     tag_names: list[str] | None = None
     # Backlog flag: when True the task is created with no planned_date (it
     # doesn't show up in any day's Today list until scheduled). Used by the
@@ -42,6 +43,7 @@ class DailyTaskUpdate(BaseModel):
     # "unassign". Pydantic's exclude_unset distinguishes these two cases
     # in the route handler.
     project_id: int | None = None
+    parent_task_id: int | None = None
     planned_date: date | None = None
     due_date: date | None = None
     tag_names: list[str] | None = None
@@ -61,6 +63,7 @@ class DailyTaskRead(BaseSchema):
     sort_order: float = 0
     project_id: int | None = None
     paper_note_id: int | None = None
+    parent_task_id: int | None = None
     tag_list: list[TagSummary] = []
     created_at: UtcDateTime
     updated_at: UtcDateTime
