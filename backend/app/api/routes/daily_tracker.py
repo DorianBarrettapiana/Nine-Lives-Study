@@ -167,27 +167,26 @@ def create_daily_task(
     # Scheduling semantics. `planned_date` is the canonical "when do I work
     # on this" and now drives every day-scoped query (Today, stats, daily
     # goal). Resolution order:
-    #   explicit planned_date / task_date  >  unplanned backlog  >  today
-    # A backlog task (planned_date NULL) is attached to a project but doesn't
-    # surface in any day's list until it gets scheduled. `task_date` is the
-    # legacy NOT-NULL column; we mirror planned_date into it (falling back to
-    # today for backlog rows so the column always has a value).
-    explicit_day = payload.planned_date or payload.task_date
-    if explicit_day is not None:
-        planned_day: date | None = explicit_day
-    elif payload.unplanned:
-        planned_day = None
+    #   parent task's date  >  explicit planned_date / task_date
+    #   >  unplanned backlog  >  today
+    # A subtask inherits its parent's day so they stay grouped. A backlog
+    # task (planned_date NULL) is attached to a project but doesn't surface
+    # in any day's list until it gets scheduled. `task_date` is the legacy
+    # NOT-NULL column; we mirror planned_date into it (falling back to today
+    # for backlog rows so the column always has a value).
+    parent = _validate_parent_task_id(payload.parent_task_id, current_user, db)
+    if parent is not None:
+        planned_day: date | None = parent.planned_date or parent.task_date
     else:
-        planned_day = date.today()
+        explicit_day = payload.planned_date or payload.task_date
+        if explicit_day is not None:
+            planned_day = explicit_day
+        elif payload.unplanned:
+            planned_day = None
+        else:
+            planned_day = date.today()
     legacy_task_date = planned_day or date.today()
 
-    # Dual-write date semantics: the canonical "when do I work on this"
-    # is `planned_date`. Old clients still send `task_date`; new clients
-    # can send either / both. Resolution order:
-    #   explicit planned_date  >  explicit task_date  >  today
-    # Both columns are written so legacy queries keep functioning.
-    parent = _validate_parent_task_id(payload.parent_task_id, current_user, db)
-    day = parent.task_date if parent is not None else payload.planned_date or resolve_target_date(payload.task_date)
     _validate_paper_note_link(payload.paper_note_id, current_user, db)
     # New tasks land at the bottom of their scheduling group (the day they're
     # planned for, or the backlog). Compute (max sort_order in group) + 1.
@@ -386,84 +385,36 @@ def carry_daily_task_forward(
         raise HTTPException(status_code=400, detail="Completed tasks do not need to be carried forward.")
     base_date = task.planned_date or task.task_date
     target_date = base_date + timedelta(days=1)
-    target_date = task.task_date + timedelta(days=1)
-    if task.parent_task_id is not None:
-        parent = _get_owned_task(task.parent_task_id, current_user, db)
-        copied_parent = _copy_task_to_date(parent, target_date, current_user, db)
-        copied = _copy_task_to_date(task, target_date, current_user, db, parent_task_id=copied_parent.id)
-    else:
-        copied = _copy_task_to_date(task, target_date, current_user, db)
-        children = db.scalars(
+
+    # Gather rows to move: the task itself, plus its unfinished children if
+    # it's a parent. Children ride along so a subtask group stays grouped on
+    # the new day. The parent of a moved child is left where it is — the
+    # user explicitly picked the child to carry, not the whole group.
+    movers: list[DailyTask] = [task]
+    if task.parent_task_id is None:
+        movers.extend(db.scalars(
             select(DailyTask)
             .where(DailyTask.user_id == current_user.id)
             .where(DailyTask.parent_task_id == task.id)
             .where(DailyTask.is_done.is_(False))
             .order_by(DailyTask.sort_order.asc(), DailyTask.created_at.asc())
-        ).all()
-        for child in children:
-            _copy_task_to_date(child, target_date, current_user, db, parent_task_id=copied.id)
-    db.commit()
-    db.refresh(copied)
-    return _serialize_tasks_with_tags([copied], current_user, db)[0]
-
-
-def _copy_task_to_date(
-    task: DailyTask,
-    target_date: date,
-    current_user: User,
-    db: Session,
-    *,
-    parent_task_id: int | None = None,
-) -> DailyTask:
-    """Copy one task once, preserving tags and an optional copied parent."""
-    existing = db.scalar(
-        select(DailyTask)
-        .where(DailyTask.user_id == current_user.id)
-        .where(DailyTask.task_date == target_date)
-        .where(DailyTask.text == task.text)
-        .where(DailyTask.parent_task_id == parent_task_id)
-    )
-    if existing is not None:
-        return existing
+        ).all())
 
     max_so = db.scalar(
         select(DailyTask.sort_order)
         .where(DailyTask.user_id == current_user.id)
         .where(DailyTask.planned_date == target_date)
-        .where(DailyTask.id != task.id)
+        .where(DailyTask.id.not_in([m.id for m in movers]))
         .order_by(DailyTask.sort_order.desc())
         .limit(1)
-    )
-    task.planned_date = target_date
-    task.task_date = target_date
-    task.sort_order = (max_so or 0.0) + 1.0
+    ) or 0.0
+    for offset, mover in enumerate(movers, start=1):
+        mover.planned_date = target_date
+        mover.task_date = target_date
+        mover.sort_order = max_so + offset
     db.commit()
     db.refresh(task)
     return _serialize_tasks_with_tags([task], current_user, db)[0]
-    copied = DailyTask(
-        user_id=current_user.id,
-        task_date=target_date,
-        planned_date=target_date,
-        due_date=task.due_date,
-        text=task.text,
-        is_done=False,
-        sort_order=(max_so or 0.0) + 1.0,
-        project_id=task.project_id,
-        paper_note_id=task.paper_note_id,
-        parent_task_id=parent_task_id,
-    )
-    db.add(copied)
-    db.flush()
-    # Carry the tags along too — same conceptual task moving forward.
-    src_tag_map = fetch_tags_for_items(
-        current_user.id, TAG_ITEM_DAILY_TASK, [task.id], db,
-    )
-    src_names = [t.name for t in src_tag_map.get(task.id, [])]
-    if src_names:
-        replace_item_tags(
-            current_user.id, TAG_ITEM_DAILY_TASK, copied.id, src_names, db,
-        )
-    return copied
 
 
 @router.put("/log", response_model=DailyLogRead)
