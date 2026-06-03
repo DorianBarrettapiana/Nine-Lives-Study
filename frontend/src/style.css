@@ -3023,6 +3023,108 @@ h3 {
 .upcoming-late { color: #ef4444; }
 .upcoming-text { flex: 1; min-width: 0; }
 
+/* --- #1: milestone steps due soon ----------------------------------------- */
+.milestone-steps-list { display: grid; gap: 0.4rem; }
+.milestone-step-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--bg-item);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+}
+.milestone-step-when {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  min-width: 4.5rem;
+  color: var(--text-soft);
+}
+.milestone-step-when.due-today { color: #d97706; }
+.milestone-step-when.overdue { color: #ef4444; }
+.milestone-step-title { flex: 1; min-width: 0; }
+.milestone-step-add { flex-shrink: 0; white-space: nowrap; }
+
+/* 🎯 marker on a task that advances a milestone. */
+.milestone-pill {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.3rem;
+  font-size: 0.8rem;
+}
+
+/* --- #3: estimate chips + pill -------------------------------------------- */
+.estimate-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.estimate-chips-label {
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  margin-right: 0.15rem;
+}
+.estimate-chip {
+  padding: 0.2rem 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 999px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border-soft);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.estimate-chip:hover { border-color: var(--accent); }
+.estimate-chip.active {
+  background: rgba(99, 102, 241, 0.16);
+  border-color: var(--accent);
+  color: var(--text-accent);
+}
+.estimate-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.45rem;
+  margin-left: 0.4rem;
+  border-radius: 999px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border-soft);
+  color: var(--text-soft);
+  font-weight: 600;
+}
+.task-big-nudge {
+  margin-left: 0.4rem;
+  color: #d97706 !important;
+  font-size: 0.78rem;
+}
+
+/* --- #2: break-it-down panel ---------------------------------------------- */
+.task-breakdown-form {
+  margin: 0.4rem 0 0.6rem 1.6rem;
+  padding: 0.7rem 0.8rem;
+  background: var(--bg-item);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  display: grid;
+  gap: 0.5rem;
+}
+.task-breakdown-hint { margin: 0; }
+.task-breakdown-q {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+}
+.task-breakdown-input {
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-input, var(--bg-muted));
+}
+.task-breakdown-btn { color: var(--text-accent); }
+
 /* Inline project tag on a friend feed item. Smaller than a regular tag so
    it sits naturally inside the activity sentence rather than dominating. */
 .feed-project-tag {

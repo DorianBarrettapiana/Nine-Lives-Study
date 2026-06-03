@@ -43,6 +43,13 @@ let pendingTaskId: number | null = null;
 // Kept only for Today-page quick starts. The sidebar itself deliberately
 // offers one source of truth: choose a task from the picker.
 let pendingWorkLabel = "";
+// Optional self-estimate (minutes) for the task we're about to focus on.
+// When the running clock crosses it we fire a one-time "over estimate" nudge —
+// the count-up timer's way of saying "this was bigger than you thought, maybe
+// split what's left". Null = no estimate, no nudge.
+let pendingEstimateMinutes: number | null = null;
+let activeEstimateMinutes: number | null = null;
+let estimateNudgeShown = false;
 
 let active: StopwatchSessionRead | null = null;
 // Local clock baseline for the currently-active session. We anchor on the
@@ -102,6 +109,20 @@ function render(): void {
   // Digital readout (secondary, for precise reading).
   displayEl.textContent = fmtHMS(seconds);
   displayEl.classList.toggle("paused", !running);
+
+  // Estimate coordination ("正向计时钟"): once the running count-up passes the
+  // task's self-estimate, nudge once. The point isn't to stop work — it's to
+  // prompt "this is bigger than planned; what's the next concrete slice?".
+  if (running && activeEstimateMinutes !== null && !estimateNudgeShown
+      && seconds >= activeEstimateMinutes * 60) {
+    estimateNudgeShown = true;
+    flashMessage(
+      messageEl,
+      `⏱ Past your ${activeEstimateMinutes}m estimate — good moment to split what's left.`,
+      "neutral",
+      6000,
+    );
+  }
 
   // Today's accumulated work time (pomodoro + stopwatch). Server-computed
   // baseline counts only ENDED sessions; while a stopwatch is active
@@ -190,6 +211,10 @@ async function onStartClick(): Promise<void> {
     if (active === null) {
       const s = await startStopwatch(pendingWorkLabel, pendingTaskId);
       pendingWorkLabel = "";
+      // Arm the over-estimate nudge for this fresh session.
+      activeEstimateMinutes = pendingEstimateMinutes;
+      estimateNudgeShown = false;
+      pendingEstimateMinutes = null;
       setActive(s);
     } else if (active.is_running) {
       // Optimistic pause: freeze the displayed seconds immediately so the
@@ -225,13 +250,18 @@ async function onStartClick(): Promise<void> {
   }
 }
 
-export async function startForFocus(taskId: number | null, label: string): Promise<boolean> {
+export async function startForFocus(
+  taskId: number | null,
+  label: string,
+  estimateMinutes?: number,
+): Promise<boolean> {
   if (active || inFlight) {
     setMessage(messageEl, "End the current stopwatch before starting another focus.", "error");
     return false;
   }
   pendingTaskId = taskId;
   pendingWorkLabel = label;
+  pendingEstimateMinutes = estimateMinutes ?? null;
   await onStartClick();
   return active !== null;
 }
@@ -242,6 +272,8 @@ async function onEndClick(): Promise<void> {
   setMessage(messageEl, "", "neutral");
   try {
     const finished = await endStopwatch(active.id);
+    activeEstimateMinutes = null;
+    estimateNudgeShown = false;
     setActive(null);
     const minutes = Math.floor(finished.accumulated_seconds / 60);
     if (minutes > 0) {

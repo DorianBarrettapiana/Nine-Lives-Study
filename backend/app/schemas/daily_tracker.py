@@ -21,6 +21,10 @@ class DailyTaskCreate(BaseModel):
     project_id: int | None = None
     paper_note_id: int | None = None
     parent_task_id: int | None = None
+    # Optional link to a milestone this task advances (see model).
+    milestone_id: int | None = None
+    # Optional self-estimate in minutes. Validated 1..600; None = unestimated.
+    estimate_minutes: int | None = Field(default=None, ge=1, le=600)
     tag_names: list[str] | None = None
     # Backlog flag: when True the task is created with no planned_date (it
     # doesn't show up in any day's Today list until scheduled). Used by the
@@ -46,6 +50,9 @@ class DailyTaskUpdate(BaseModel):
     parent_task_id: int | None = None
     planned_date: date | None = None
     due_date: date | None = None
+    # Self-estimate in minutes. Field omitted = leave unchanged; explicit JSON
+    # null = clear the estimate (distinguished via exclude_unset in the route).
+    estimate_minutes: int | None = Field(default=None, ge=1, le=600)
     tag_names: list[str] | None = None
 
 
@@ -64,6 +71,8 @@ class DailyTaskRead(BaseSchema):
     project_id: int | None = None
     paper_note_id: int | None = None
     parent_task_id: int | None = None
+    milestone_id: int | None = None
+    estimate_minutes: int | None = None
     tag_list: list[TagSummary] = []
     created_at: UtcDateTime
     updated_at: UtcDateTime

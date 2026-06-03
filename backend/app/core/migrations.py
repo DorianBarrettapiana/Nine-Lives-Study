@@ -68,6 +68,12 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     # Optional one-level task breakdown. Children inherit project context
     # from their parent in the route layer.
     ("daily_tasks",     "parent_task_id",          "INTEGER"),
+    # Task → milestone link: lets a backplanned milestone check-point be
+    # pulled into a day as a concrete task. NULL = not tied to a milestone.
+    ("daily_tasks",     "milestone_id",            "INTEGER"),
+    # Optional self-estimate (minutes) so the timer + split-nudge can reason
+    # about task size. NULL = unestimated.
+    ("daily_tasks",     "estimate_minutes",        "INTEGER"),
     # Research-thread steering context.
     ("projects",        "research_question",        "TEXT NOT NULL DEFAULT ''"),
     ("projects",        "milestone",                "TEXT NOT NULL DEFAULT ''"),

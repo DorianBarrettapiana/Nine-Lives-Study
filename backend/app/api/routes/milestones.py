@@ -21,9 +21,11 @@ from app.core import ai
 from app.core.auth import get_current_user
 from app.core.backplanning import suggest_children, weeks_between
 from app.core.database import get_db
+from app.models.daily_tracker import DailyTask
 from app.models.milestone import Milestone
 from app.models.project import Project
 from app.models.user import User
+from app.schemas.daily_tracker import DailyTaskRead
 from app.schemas.milestone import (
     BackplanChildren,
     MilestoneCreate,
@@ -379,3 +381,56 @@ def create_child_milestones(
     for m in created:
         db.refresh(m)
     return created
+
+
+@router.post("/{milestone_id}/add-to-today", response_model=DailyTaskRead, status_code=201)
+def add_milestone_to_today(
+    milestone_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DailyTaskRead:
+    """Pull a milestone (typically a backplanned check-point) into today as a
+    concrete task.
+
+    Bridges the planning timescale (milestones) and the doing timescale (daily
+    tasks): a near-due check-point becomes something the user can actually
+    start, time and tick off today. The task carries `milestone_id` so we can
+    de-dupe re-adds and so the milestone's progress can be reflected later.
+    Reuses an open task already linked to this milestone for today.
+    """
+    m = _get_owned_milestone(milestone_id, current_user, db)
+    today = date.today()
+
+    existing = db.scalar(
+        select(DailyTask)
+        .where(DailyTask.user_id == current_user.id)
+        .where(DailyTask.planned_date == today)
+        .where(DailyTask.milestone_id == m.id)
+        .where(DailyTask.is_done.is_(False))
+        .order_by(DailyTask.created_at.desc())
+    )
+    if existing is not None:
+        return DailyTaskRead.model_validate(existing)
+
+    max_so = db.scalar(
+        select(DailyTask.sort_order)
+        .where(DailyTask.user_id == current_user.id)
+        .where(DailyTask.planned_date == today)
+        .order_by(DailyTask.sort_order.desc())
+        .limit(1)
+    )
+    task = DailyTask(
+        user_id=current_user.id,
+        task_date=today,
+        planned_date=today,
+        due_date=m.due_date,
+        text=m.title[:500],
+        is_done=False,
+        sort_order=(max_so or 0.0) + 1.0,
+        project_id=m.project_id,
+        milestone_id=m.id,
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return DailyTaskRead.model_validate(task)

@@ -27,6 +27,10 @@ async function showPrompt(taskId: number): Promise<void> {
       <label>One open question
         <textarea id="reading-insight-question" placeholder="What remains unclear or worth challenging?"></textarea>
       </label>
+      <label class="checkbox-row">
+        <input id="reading-insight-add-question-task" type="checkbox" />
+        Turn the open question into a task to chase down
+      </label>
       <label>One next step
         <input id="reading-insight-next" type="text" placeholder="e.g. Compare the ablation table with our baseline" />
       </label>
@@ -48,6 +52,7 @@ async function showPrompt(taskId: number): Promise<void> {
   const question = backdrop.querySelector<HTMLTextAreaElement>("#reading-insight-question")!;
   const nextStep = backdrop.querySelector<HTMLInputElement>("#reading-insight-next")!;
   const addTask = backdrop.querySelector<HTMLInputElement>("#reading-insight-add-task")!;
+  const addQuestionTask = backdrop.querySelector<HTMLInputElement>("#reading-insight-add-question-task")!;
   const message = backdrop.querySelector<HTMLParagraphElement>("#reading-insight-message")!;
 
   const close = (): void => {
@@ -72,10 +77,22 @@ async function showPrompt(taskId: number): Promise<void> {
     }
     try {
       await createPaperInsight(context.note_id, payload);
+      let madeTask = false;
+      if (payload.question && addQuestionTask.checked) {
+        // The open question becomes a top-level "chase this down" task linked to
+        // the paper's project (not paper_note_id — that key feeds the reading
+        // de-dup). Prefix makes it read as an action, not a stray note.
+        await createDailyTask({
+          text: `Resolve: ${payload.question}`.slice(0, 500),
+          project_id: context.project_id,
+        });
+        madeTask = true;
+      }
       if (payload.next_step && addTask.checked) {
         await createDailyTask({ text: payload.next_step, project_id: context.project_id });
-        window.dispatchEvent(new CustomEvent("task-list:updated"));
+        madeTask = true;
       }
+      if (madeTask) window.dispatchEvent(new CustomEvent("task-list:updated"));
       window.dispatchEvent(new CustomEvent("paper-insights:updated"));
       close();
     } catch (error) {

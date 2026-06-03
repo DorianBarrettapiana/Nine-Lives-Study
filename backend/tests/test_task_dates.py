@@ -57,6 +57,39 @@ def test_create_task_with_due_date(auth_client: TestClient):
     assert body["planned_date"] == date.today().isoformat()
 
 
+def test_create_task_with_estimate_minutes(auth_client: TestClient):
+    r = auth_client.post(
+        "/daily/tasks",
+        json={"text": "size me", "estimate_minutes": 25},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["estimate_minutes"] == 25
+
+
+def test_create_task_without_estimate_is_null(auth_client: TestClient):
+    r = auth_client.post("/daily/tasks", json={"text": "unsized"})
+    assert r.status_code == 201
+    assert r.json()["estimate_minutes"] is None
+
+
+def test_estimate_minutes_out_of_range_rejected(auth_client: TestClient):
+    too_big = auth_client.post(
+        "/daily/tasks", json={"text": "x", "estimate_minutes": 601},
+    )
+    assert too_big.status_code == 422
+    too_small = auth_client.post(
+        "/daily/tasks", json={"text": "x", "estimate_minutes": 0},
+    )
+    assert too_small.status_code == 422
+
+
+def test_patch_estimate_minutes(auth_client: TestClient):
+    tid = auth_client.post("/daily/tasks", json={"text": "t"}).json()["id"]
+    r = auth_client.patch(f"/daily/tasks/{tid}", json={"estimate_minutes": 45})
+    assert r.status_code == 200
+    assert r.json()["estimate_minutes"] == 45
+
+
 def test_patch_planned_date_updates_task_date(auth_client: TestClient):
     """Editing planned_date must keep task_date in sync — otherwise the
     legacy 'tasks for day X' query goes stale."""

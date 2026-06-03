@@ -206,7 +206,16 @@ const APP_HTML = `
               <input id="today-task-due" type="date" title="Optional deadline" />
               <div id="today-task-project-picker" class="task-project-picker"></div>
               <button type="submit">Add task</button>
+              <div id="today-task-estimate" class="estimate-chips" title="Rough size — helps you keep tasks small"></div>
             </form>
+          </section>
+
+          <section class="card hidden" id="today-milestones-card">
+            <div class="section-header">
+              <h2>🎯 Milestone steps due soon</h2>
+            </div>
+            <p class="hint">Turn a looming deadline into one concrete thing to do today.</p>
+            <div id="today-milestones-list" class="milestone-steps-list"></div>
           </section>
 
           <section class="card" id="today-upcoming-card">

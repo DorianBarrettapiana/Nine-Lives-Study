@@ -15,7 +15,8 @@ import {
   listUpcomingTasks, saveDailyLog, updateDailyTask,
   type DailyStateRead, type DailyTaskRead,
 } from "../api/tracker";
-import { escapeHtml, parseApiDate, setMessage } from "../utils";
+import { addMilestoneToToday, listMilestones, type MilestoneRead } from "../api/milestones";
+import { escapeHtml, flashMessage, parseApiDate, setMessage } from "../utils";
 import { renderEmptyStateWithCat } from "./icons";
 import * as PomodoroView from "./pomodoro";
 import {
@@ -48,6 +49,9 @@ let progressFill: HTMLDivElement;
 let projectBreakdownEl: HTMLParagraphElement;
 let upcomingCardEl: HTMLElement;
 let upcomingListEl: HTMLDivElement;
+let milestonesCardEl: HTMLElement;
+let milestonesListEl: HTMLDivElement;
+let taskEstimateEl: HTMLDivElement;
 let yesterdayCardEl: HTMLElement;
 let yesterdayBodyEl: HTMLDivElement;
 let yesterdayCarryAllBtn: HTMLButtonElement;
@@ -62,6 +66,7 @@ let selectedMood = "";
 
 let state: DailyStateRead | null = null;
 let upcoming: DailyTaskRead[] = [];
+let milestones: MilestoneRead[] = [];
 let yesterdayState: DailyStateRead | null = null;
 let todaysMoods: MoodEntryRead[] = [];
 let onDataChangedCb: (() => Promise<void>) | null = null;
@@ -76,6 +81,26 @@ let projectFilter: number | "none" | null = null;
 let pendingTaskProjectId: number | null = null;
 let pendingTaskDue: string = "";
 let addingChildForTaskId: number | null = null;
+// Which root task currently has its "break it down" question panel open.
+let breakingDownTaskId: number | null = null;
+// Estimate (minutes) pre-selected for the next new task via the chip row.
+// null = no estimate. Sticky across the session like the project picker.
+let pendingTaskEstimate: number | null = null;
+
+// Offered time-estimate buckets (minutes). Tuned to pomodoro-ish chunks so a
+// task that doesn't fit in one sitting is visibly "too big".
+const ESTIMATE_CHOICES = [5, 15, 25, 45] as const;
+// At/above this estimate a leaf task earns a gentle "break it down" nudge.
+const BIG_TASK_MINUTES = 45;
+
+// The three guiding questions behind the "break it down" panel. Answering any
+// of them turns the answer into a concrete subtask — the value is the prompt
+// to think concretely, not the AI-ness of it.
+const BREAKDOWN_QUESTIONS = [
+  "Smallest step that proves progress?",
+  "What info are you missing to continue?",
+  "What's a version you could finish in 25 min?",
+] as const;
 
 // --- date helpers ----------------------------------------------------------
 
@@ -135,11 +160,23 @@ function passesProjectFilter(task: { project_id: number | null }): boolean {
   return task.project_id === projectFilter;
 }
 
-function taskHtml(task: DailyTaskRead, readOnly: boolean, isChild = false): string {
+function taskHtml(task: DailyTaskRead, readOnly: boolean, isChild = false, hasChildren = false): string {
   const isMainGoal = state?.log?.main_goal_task_id === task.id;
   const goalStar = isMainGoal ? `<span class="task-main-goal-star" title="Main goal">⭐</span>` : "";
+  const milestonePill = task.milestone_id !== null
+    ? `<span class="milestone-pill" title="Advances a milestone">🎯</span>`
+    : "";
   const duePill = task.due_date
     ? `<span class="due-pill ${dueClass(task.due_date)}" title="Due ${task.due_date}">📅 ${shortDue(task.due_date)}</span>`
+    : "";
+  const estPill = task.estimate_minutes
+    ? `<span class="estimate-pill" title="Your estimate">~${task.estimate_minutes}m</span>`
+    : "";
+  // A big, un-broken-down leaf is the classic "too vague to start" trap —
+  // offer a one-click path into the break-down panel.
+  const bigNudge = !readOnly && !isChild && !task.is_done && !hasChildren
+    && task.estimate_minutes !== null && task.estimate_minutes >= BIG_TASK_MINUTES
+    ? `<button type="button" class="link-btn task-big-nudge" data-task-action="break-down" data-id="${task.id}" title="This looks big — break it into steps">⚠ break down</button>`
     : "";
   return `
     <div class="task-item ${isChild ? "task-child" : "task-root"}${task.is_done ? " task-done" : ""}${isMainGoal ? " task-main-goal" : ""}"
@@ -155,18 +192,41 @@ function taskHtml(task: DailyTaskRead, readOnly: boolean, isChild = false): stri
       <span class="task-text ${task.is_done ? "done" : ""}"
             data-task-action="edit" data-id="${task.id}"
             title="${readOnly ? "" : "Double-click to edit"}">${escapeHtml(task.text)}</span>
+      ${milestonePill}
       ${projectChipHtml(task.project_id)}
       ${duePill}
+      ${estPill}
+      ${bigNudge}
       ${readOnly ? "" : `
         ${isChild || task.is_done ? "" : `<button type="button" class="link-btn task-add-child" data-task-action="add-child" data-id="${task.id}" title="Break this task into steps">+ Step</button>`}
+        ${isChild || task.is_done ? "" : `<button type="button" class="link-btn task-breakdown-btn" data-task-action="break-down" data-id="${task.id}" title="Stuck? Answer 3 quick questions to break it down">🧩 Break down</button>`}
         ${task.is_done ? "" : `<button class="secondary compact-btn" data-task-action="stopwatch" data-id="${task.id}" title="Start work timer">▶</button>`}
         ${task.is_done ? "" : `<button class="task-carry" data-task-action="carry" data-id="${task.id}" title="Carry to tomorrow">→</button>`}
         <button class="task-delete" data-task-action="delete" data-id="${task.id}" title="Delete">×</button>`}
     </div>`;
 }
 
+function breakdownPanelHtml(taskId: number): string {
+  const rows = BREAKDOWN_QUESTIONS.map((q, i) => `
+    <label class="task-breakdown-q">
+      <span>${escapeHtml(q)}</span>
+      <input class="task-breakdown-input" data-q-index="${i}" type="text" maxlength="500"
+             placeholder="Answer becomes a subtask (optional)" />
+    </label>`).join("");
+  return `
+    <form class="task-breakdown-form" data-parent-id="${taskId}">
+      <p class="hint task-breakdown-hint">Stuck? Turn the blocker into next steps — fill any that apply.</p>
+      ${rows}
+      <div class="button-row">
+        <button type="submit">Add as steps</button>
+        <button type="button" class="secondary" data-task-action="cancel-breakdown" data-id="${taskId}">Cancel</button>
+      </div>
+    </form>`;
+}
+
 function taskGroupHtml(task: DailyTaskRead, children: DailyTaskRead[], readOnly: boolean): string {
   const adding = addingChildForTaskId === task.id && !readOnly;
+  const breakingDown = breakingDownTaskId === task.id && !readOnly;
   const childRows = children.map((child) => taskHtml(child, readOnly, true)).join("");
   const childPanel = children.length === 0 && !adding
     ? ""
@@ -180,7 +240,8 @@ function taskGroupHtml(task: DailyTaskRead, children: DailyTaskRead[], readOnly:
              <button type="button" class="secondary" data-task-action="cancel-child" data-id="${task.id}">Cancel</button>
            </form>` : ""}
        </details>`;
-  return `<div class="task-group">${taskHtml(task, readOnly)}${childPanel}</div>`;
+  const breakdownPanel = breakingDown ? breakdownPanelHtml(task.id) : "";
+  return `<div class="task-group">${taskHtml(task, readOnly, false, children.length > 0)}${childPanel}${breakdownPanel}</div>`;
 }
 
 function dueClass(due: string): string {
@@ -380,6 +441,66 @@ function humanWhen(date: string): string {
   return shortDue(date);
 }
 
+function daysUntil(dateStr: string): number {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const [ty, tm, td] = todayStr().split("-").map(Number);
+  return Math.round(
+    (new Date(y, m - 1, d).getTime() - new Date(ty, tm - 1, td).getTime()) / (24 * 3600 * 1000),
+  );
+}
+
+// --- #1: milestone check-points → today -----------------------------------
+// Surfaces near-due (or overdue) milestones that aren't yet pulled into today,
+// so a far-off deadline becomes one concrete task you can start now.
+const MILESTONE_HORIZON_DAYS = 21;
+
+function renderMilestoneSteps(): void {
+  // Planning affordance only — hide it while browsing past days.
+  if (!isToday() || !state) {
+    milestonesCardEl.classList.add("hidden");
+    return;
+  }
+  // Milestones already turned into an open task today shouldn't be re-offered.
+  const linked = new Set(
+    state.tasks.filter((t) => !t.is_done && t.milestone_id !== null).map((t) => t.milestone_id),
+  );
+  const candidates = milestones
+    .filter((m) => !m.is_archived && !linked.has(m.id) && daysUntil(m.due_date) <= MILESTONE_HORIZON_DAYS)
+    .filter(passesProjectFilter)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date))
+    .slice(0, 5);
+  if (candidates.length === 0) {
+    milestonesCardEl.classList.add("hidden");
+    return;
+  }
+  milestonesCardEl.classList.remove("hidden");
+  milestonesListEl.innerHTML = candidates.map((m) => {
+    const d = daysUntil(m.due_date);
+    const countdown = d < 0
+      ? `<span class="milestone-step-when overdue">${Math.abs(d)}d overdue</span>`
+      : d === 0
+        ? `<span class="milestone-step-when due-today">due today</span>`
+        : `<span class="milestone-step-when">D-${d}</span>`;
+    return `
+      <div class="milestone-step-item" data-milestone-id="${m.id}">
+        ${countdown}
+        <span class="milestone-step-title">${escapeHtml(m.title)}</span>
+        ${projectChipHtml(m.project_id)}
+        <button type="button" class="link-btn milestone-step-add" data-milestone-id="${m.id}">+ Add to today</button>
+      </div>`;
+  }).join("");
+}
+
+// --- #3: estimate chips on the new-task form -------------------------------
+
+function renderEstimateChips(): void {
+  if (!taskEstimateEl) return;
+  const chips = ESTIMATE_CHOICES.map((mins) => `
+    <button type="button" class="estimate-chip ${pendingTaskEstimate === mins ? "active" : ""}"
+            data-estimate="${mins}">${mins}m</button>`).join("");
+  taskEstimateEl.innerHTML = `<span class="estimate-chips-label">Size:</span>${chips}`;
+}
+
 function renderMood(): void {
   const readOnly = !isToday();
   moodRow.innerHTML = MOODS.map((m) => `
@@ -440,10 +561,12 @@ export function render(): void {
   renderProjectBreakdown();
   renderYesterdayCard();
   renderTaskList();
+  renderMilestoneSteps();
   renderUpcoming();
   renderMood();
   renderReflection();
   renderTaskForm();
+  renderEstimateChips();
   renderTaskProjectPicker();
 }
 
@@ -475,7 +598,7 @@ export async function refresh(): Promise<void> {
     const yesterdayFetch: Promise<DailyStateRead | null> = isToday()
       ? getDailyState(shiftDate(todayStr(), -1)).catch(() => null)
       : Promise.resolve(null);
-    const [s, up, moods, y] = await Promise.all([
+    const [s, up, moods, y, ms] = await Promise.all([
       getDailyState(viewedDate ?? undefined),
       // Upcoming is always for "from today onwards" — date navigation in
       // Today doesn't shift the looming-deadlines window.
@@ -484,10 +607,13 @@ export async function refresh(): Promise<void> {
       // enough for the inline list; multi-day history lives in Stats.
       listMoodEntries(1).catch(() => [] as MoodEntryRead[]),
       yesterdayFetch,
+      // Future-dated, non-archived milestones for the "steps due soon" card.
+      listMilestones({ onlyFuture: false }).catch(() => [] as MilestoneRead[]),
     ]);
     state = s;
     upcoming = up;
     yesterdayState = y;
+    milestones = ms;
     // Filter today's moods to actual today (the 1-day list can include
     // yesterday's tail-end depending on tz).
     const today = todayStr();
@@ -688,6 +814,9 @@ export function init(onDataChanged: () => Promise<void>): void {
   projectBreakdownEl = document.querySelector<HTMLParagraphElement>("#today-project-breakdown")!;
   upcomingCardEl = document.querySelector<HTMLElement>("#today-upcoming-card")!;
   upcomingListEl = document.querySelector<HTMLDivElement>("#today-upcoming-list")!;
+  milestonesCardEl = document.querySelector<HTMLElement>("#today-milestones-card")!;
+  milestonesListEl = document.querySelector<HTMLDivElement>("#today-milestones-list")!;
+  taskEstimateEl = document.querySelector<HTMLDivElement>("#today-task-estimate")!;
   yesterdayCardEl = document.querySelector<HTMLElement>("#today-yesterday-card")!;
   yesterdayBodyEl = document.querySelector<HTMLDivElement>("#today-yesterday-body")!;
   yesterdayCarryAllBtn = document.querySelector<HTMLButtonElement>("#today-yesterday-carry-all")!;
@@ -750,10 +879,13 @@ export function init(onDataChanged: () => Promise<void>): void {
         text,
         project_id: pendingTaskProjectId,
         due_date: taskDueInput.value || null,
+        estimate_minutes: pendingTaskEstimate,
       });
       taskInput.value = "";
       taskDueInput.value = "";
       pendingTaskDue = "";
+      pendingTaskEstimate = null;
+      renderEstimateChips();
       setMessage(messageEl, "Task created.", "success");
       await refresh();
       await onDataChangedCb?.();
@@ -781,6 +913,13 @@ export function init(onDataChanged: () => Promise<void>): void {
       } else if (action === "cancel-child") {
         addingChildForTaskId = null;
         renderTaskList();
+      } else if (action === "break-down") {
+        breakingDownTaskId = breakingDownTaskId === id ? null : id;
+        renderTaskList();
+        taskList.querySelector<HTMLInputElement>(".task-breakdown-input")?.focus();
+      } else if (action === "cancel-breakdown") {
+        breakingDownTaskId = null;
+        renderTaskList();
       } else if (action === "toggle") {
         await updateDailyTask(id, { is_done: !task.is_done });
         await refresh();
@@ -799,7 +938,7 @@ export function init(onDataChanged: () => Promise<void>): void {
         window.dispatchEvent(new CustomEvent("task-list:updated"));
       } else if (action === "stopwatch") {
         TimerMode.setMode("free");
-        await StopwatchView.startForFocus(id, task.text);
+        await StopwatchView.startForFocus(id, task.text, task.estimate_minutes ?? undefined);
       } else if (action === "pomodoro") {
         TimerMode.setMode("pomodoro");
         await PomodoroView.startForFocus(id);
@@ -811,23 +950,51 @@ export function init(onDataChanged: () => Promise<void>): void {
   });
 
   taskList.addEventListener("submit", async (event) => {
-    event.preventDefault();
     const form = event.target;
-    if (!(form instanceof HTMLFormElement) || !form.matches(".task-child-form")) return;
-    const parentId = Number(form.dataset.parentId);
-    const input = form.querySelector<HTMLInputElement>(".task-child-input");
-    const text = input?.value.trim() ?? "";
-    if (!Number.isFinite(parentId) || !text) return;
-    try {
-      await createDailyTask({ text, parent_task_id: parentId });
-      addingChildForTaskId = null;
-      setMessage(messageEl, "Step added.", "success");
-      await refresh();
-      await onDataChangedCb?.();
-      window.dispatchEvent(new CustomEvent("task-list:updated"));
-    } catch (error) {
-      console.error(error);
-      setMessage(messageEl, "Could not add step.", "error");
+    if (!(form instanceof HTMLFormElement)) return;
+    if (form.matches(".task-child-form")) {
+      event.preventDefault();
+      const parentId = Number(form.dataset.parentId);
+      const input = form.querySelector<HTMLInputElement>(".task-child-input");
+      const text = input?.value.trim() ?? "";
+      if (!Number.isFinite(parentId) || !text) return;
+      try {
+        await createDailyTask({ text, parent_task_id: parentId });
+        addingChildForTaskId = null;
+        setMessage(messageEl, "Step added.", "success");
+        await refresh();
+        await onDataChangedCb?.();
+        window.dispatchEvent(new CustomEvent("task-list:updated"));
+      } catch (error) {
+        console.error(error);
+        setMessage(messageEl, "Could not add step.", "error");
+      }
+    } else if (form.matches(".task-breakdown-form")) {
+      event.preventDefault();
+      const parentId = Number(form.dataset.parentId);
+      if (!Number.isFinite(parentId)) return;
+      // Each non-empty answer becomes one concrete subtask.
+      const answers = Array.from(
+        form.querySelectorAll<HTMLInputElement>(".task-breakdown-input"),
+      ).map((i) => i.value.trim()).filter((v) => v.length > 0);
+      if (answers.length === 0) {
+        setMessage(messageEl, "Answer at least one question to create a step.", "error");
+        return;
+      }
+      try {
+        // Sequential keeps sort_order deterministic (creation-ordered).
+        for (const text of answers) {
+          await createDailyTask({ text, parent_task_id: parentId });
+        }
+        breakingDownTaskId = null;
+        setMessage(messageEl, `Added ${answers.length} step${answers.length === 1 ? "" : "s"}.`, "success");
+        await refresh();
+        await onDataChangedCb?.();
+        window.dispatchEvent(new CustomEvent("task-list:updated"));
+      } catch (error) {
+        console.error(error);
+        setMessage(messageEl, "Could not add steps.", "error");
+      }
     }
   });
 
@@ -897,6 +1064,40 @@ export function init(onDataChanged: () => Promise<void>): void {
     if (!task || !task.planned_date) return;
     viewedDate = task.planned_date === todayStr() ? null : task.planned_date;
     await refresh();
+  });
+
+  // Milestone "steps due soon" — pull a milestone into today as a task.
+  milestonesListEl.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const btn = target.closest<HTMLElement>(".milestone-step-add");
+    if (!btn) return;
+    const mid = Number(btn.dataset.milestoneId);
+    if (!Number.isFinite(mid)) return;
+    (btn as HTMLButtonElement).disabled = true;
+    try {
+      await addMilestoneToToday(mid);
+      flashMessage(messageEl, "🎯 Added to today.", "success");
+      await refresh();
+      await onDataChangedCb?.();
+      window.dispatchEvent(new CustomEvent("task-list:updated"));
+    } catch (error) {
+      console.error(error);
+      setMessage(messageEl, "Could not add milestone to today.", "error");
+      (btn as HTMLButtonElement).disabled = false;
+    }
+  });
+
+  // Estimate chips on the new-task form — toggle the pending estimate.
+  taskEstimateEl.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const chip = target.closest<HTMLElement>(".estimate-chip");
+    if (!chip) return;
+    const mins = Number(chip.dataset.estimate);
+    if (!Number.isFinite(mins)) return;
+    pendingTaskEstimate = pendingTaskEstimate === mins ? null : mins;
+    renderEstimateChips();
   });
 
   // Mood emoji click — stage selection (Save button commits with optional
