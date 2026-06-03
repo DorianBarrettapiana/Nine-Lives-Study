@@ -54,6 +54,22 @@ class DailyTask(Base):
         nullable=True,
         index=True,
     )
+    # Optional link to a milestone (typically a backplanned check-point) that
+    # this task advances. Lets "+ Add to today" on a near-due milestone create
+    # a concrete daily task and de-dupe against re-adding the same check-point.
+    # SET NULL on delete is enforced application-side (SQLite FK pragma off),
+    # matching the project_id pattern.
+    milestone_id: Mapped[int | None] = mapped_column(
+        ForeignKey("milestones.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # Optional user time estimate in minutes (e.g. 5 / 15 / 25 / 45). Powers
+    # the "this is too big — break it down" nudge and lets the work timer show
+    # estimate-vs-elapsed. NULL = the user never estimated this task.
+    estimate_minutes: Mapped[int | None] = mapped_column(
+        Integer, nullable=True,
+    )
     # User-controlled ordering within a day. Lower sorts first; ties break
     # by `created_at`. Float so the frontend can insert "between neighbors"
     # via the midpoint trick (e.g. 1.0 / 2.0 → drop between → 1.5).

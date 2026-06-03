@@ -7,6 +7,7 @@
  */
 
 import { apiFetch } from "./client";
+import type { DailyTaskRead } from "./tracker";
 
 export interface MilestoneRead {
   id: number;
@@ -97,6 +98,15 @@ export async function getMilestoneSuggestions(
   return apiFetch<MilestoneSuggestionsRead>(
     `/milestones/${parentId}/suggest-children${qs}`,
   );
+}
+
+/** Pull a milestone (typically a near-due check-point) into today as a
+ *  concrete daily task. Returns the created/reused task; the backend
+ *  de-dupes against an open task already linked to this milestone today. */
+export async function addMilestoneToToday(id: number): Promise<DailyTaskRead> {
+  return apiFetch<DailyTaskRead>(`/milestones/${id}/add-to-today`, {
+    method: "POST",
+  });
 }
 
 /** Bulk-create child milestones under a parent. */

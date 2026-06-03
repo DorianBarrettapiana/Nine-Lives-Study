@@ -19,6 +19,11 @@ export interface DailyTaskRead {
   project_id: number | null;
   paper_note_id: number | null;
   parent_task_id: number | null;
+  // Optional link to a milestone this task advances (backplanned check-point
+  // pulled into the day). NULL = not milestone-linked.
+  milestone_id: number | null;
+  // Optional user time estimate in minutes. NULL = unestimated.
+  estimate_minutes: number | null;
   tag_list: TagSummary[];
   created_at: string;
   updated_at: string;
@@ -53,6 +58,8 @@ export interface DailyTaskCreate {
   project_id?: number | null;
   paper_note_id?: number | null;
   parent_task_id?: number | null;
+  milestone_id?: number | null;
+  estimate_minutes?: number | null;
   tag_names?: string[];
   // When true (and no date is supplied), the task is created in the backlog
   // (no planned_date) — it won't appear in any day's Today until scheduled.
@@ -67,6 +74,8 @@ export interface DailyTaskUpdate {
   due_date?: string | null;
   project_id?: number | null;
   parent_task_id?: number | null;
+  // Pass a number to set, or null to clear the estimate. Omit to leave it.
+  estimate_minutes?: number | null;
   tag_names?: string[];
 }
 

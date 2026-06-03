@@ -30,6 +30,7 @@ import {
 } from "../api/notes";
 import { ApiError } from "../api/client";
 import { createFeynmanEntry, listFeynmanEntries, type FeynmanEntryRead } from "../api/feynman";
+import { createDailyTask } from "../api/tracker";
 import { getLinks, type BacklinksRead } from "../api/links";
 import * as FeynmanView from "./feynman";
 import { escapeHtml, setMessage } from "../utils";
@@ -184,7 +185,7 @@ export function render(): void {
       ? `<div class="note-insight">
           <strong>Latest reading insight</strong>
           ${latestInsight.key_idea ? `<p>${escapeHtml(latestInsight.key_idea)}</p>` : ""}
-          ${latestInsight.question ? `<p class="hint">Question: ${escapeHtml(latestInsight.question)}</p>` : ""}
+          ${latestInsight.question ? `<p class="hint">Question: ${escapeHtml(latestInsight.question)} <button type="button" class="link-btn" data-action="question-to-task" data-id="${note.id}" title="Turn this open question into a task">→ task</button></p>` : ""}
           ${latestInsight.next_step ? `<p class="hint">Next: ${escapeHtml(latestInsight.next_step)}</p>` : ""}
           ${note.insight_count > 1 ? `<span class="hint">${note.insight_count} insights captured</span>` : ""}
         </div>`
@@ -459,6 +460,21 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
       noteEditorDetails.open = true;
       switchToView("notes");
       window.scrollTo({ top: 0, behavior: "smooth" });
+    } else if (action === "question-to-task") {
+      const q = note.latest_insight?.question?.trim();
+      if (!q) return;
+      try {
+        await createDailyTask({
+          text: `Resolve: ${q}`.slice(0, 500),
+          project_id: note.project_id,
+        });
+        setMessage(noteMessage, "Open question added to today's tasks.", "success");
+        window.dispatchEvent(new CustomEvent("task-list:updated"));
+        await onRefreshNeeded();
+      } catch (error) {
+        console.error(error);
+        setMessage(noteMessage, "Could not create task.", "error");
+      }
     } else if (action === "read-today") {
       try {
         await addNoteToToday(note.id);

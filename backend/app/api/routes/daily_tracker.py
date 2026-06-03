@@ -25,6 +25,7 @@ from app.core.xp import (
     award_xp_event,
 )
 from app.models.daily_tracker import DailyLog, DailyTask
+from app.models.milestone import Milestone
 from app.models.paper_note import PaperNote
 from app.models.project import Project
 from app.models.tag import TAG_ITEM_DAILY_TASK
@@ -93,6 +94,21 @@ def _validate_parent_task_id(
     if parent.parent_task_id is not None:
         raise HTTPException(status_code=400, detail="Tasks can only have one level of subtasks.")
     return parent
+
+
+def _validate_milestone_id(milestone_id: int | None, current_user: User, db: Session) -> None:
+    """Reject milestone_id values that don't belong to the current user.
+
+    NULL is always allowed (the task isn't tied to a milestone).
+    """
+    if milestone_id is None:
+        return
+    milestone = db.get(Milestone, milestone_id)
+    if milestone is None or milestone.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unknown milestone.",
+        )
 
 
 def _serialize_tasks_with_tags(
@@ -188,6 +204,7 @@ def create_daily_task(
     legacy_task_date = planned_day or date.today()
 
     _validate_paper_note_link(payload.paper_note_id, current_user, db)
+    _validate_milestone_id(payload.milestone_id, current_user, db)
     # New tasks land at the bottom of their scheduling group (the day they're
     # planned for, or the backlog). Compute (max sort_order in group) + 1.
     group_filter = (
@@ -216,6 +233,8 @@ def create_daily_task(
         project_id=project_id,
         paper_note_id=payload.paper_note_id,
         parent_task_id=parent.id if parent is not None else None,
+        milestone_id=payload.milestone_id,
+        estimate_minutes=payload.estimate_minutes,
     )
     db.add(task)
     db.flush()

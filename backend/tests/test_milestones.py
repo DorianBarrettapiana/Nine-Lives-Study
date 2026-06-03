@@ -146,6 +146,58 @@ def test_delete_milestone(auth_client: TestClient):
 
 
 # ---------------------------------------------------------------------------
+# add-to-today: pull a milestone into the day as a linked daily task
+# ---------------------------------------------------------------------------
+
+
+def test_add_milestone_to_today_creates_linked_task(auth_client: TestClient):
+    pid = _make_project(auth_client, "Thesis")
+    due = _iso(date.today() + timedelta(days=7))
+    m_id = auth_client.post("/milestones", json={
+        "title": "Draft intro section", "due_date": due, "project_id": pid,
+    }).json()["id"]
+
+    r = auth_client.post(f"/milestones/{m_id}/add-to-today")
+    assert r.status_code == 201, r.text
+    task = r.json()
+    assert task["text"] == "Draft intro section"
+    assert task["milestone_id"] == m_id
+    assert task["project_id"] == pid
+    assert task["due_date"] == due
+    assert task["planned_date"] == date.today().isoformat()
+
+    # And it shows up in today's state.
+    tasks = auth_client.get("/daily").json()["tasks"]
+    assert any(t["id"] == task["id"] and t["milestone_id"] == m_id for t in tasks)
+
+
+def test_add_milestone_to_today_is_idempotent(auth_client: TestClient):
+    m_id = auth_client.post("/milestones", json={
+        "title": "Defense slides", "due_date": _iso(date.today() + timedelta(days=3)),
+    }).json()["id"]
+
+    first = auth_client.post(f"/milestones/{m_id}/add-to-today").json()
+    second = auth_client.post(f"/milestones/{m_id}/add-to-today").json()
+    # Reuses the open milestone-linked task rather than duplicating.
+    assert first["id"] == second["id"]
+
+
+def test_add_unknown_milestone_to_today_404(auth_client: TestClient):
+    r = auth_client.post("/milestones/9999/add-to-today")
+    assert r.status_code == 404
+
+
+def test_cannot_add_other_users_milestone_to_today(
+    auth_client: TestClient, second_auth_client: TestClient,
+):
+    m_id = auth_client.post("/milestones", json={
+        "title": "mine", "due_date": _iso(date.today()),
+    }).json()["id"]
+    r = second_auth_client.post(f"/milestones/{m_id}/add-to-today")
+    assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # Cross-user isolation
 # ---------------------------------------------------------------------------
 
