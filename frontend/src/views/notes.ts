@@ -462,7 +462,7 @@ export function init(onRefreshNeeded: () => Promise<void>, switchToView: (view: 
     } else if (action === "read-today") {
       try {
         await addNoteToToday(note.id);
-        setMessage(noteMessage, `"${note.title}" added to today's tasks.`, "success");
+        setMessage(noteMessage, `"${note.title}" added under today's Reading list.`, "success");
         window.dispatchEvent(new CustomEvent("task-list:updated"));
         await onRefreshNeeded();
       } catch (error) {

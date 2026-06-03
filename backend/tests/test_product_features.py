@@ -276,9 +276,18 @@ def test_paper_note_read_today_flows_into_focus_minutes_and_recap(
     assert first.status_code == 201
     assert second.status_code == 201
     assert second.json()["id"] == task["id"]
-    assert task["text"] == "Read: Attention Is All You Need"
+    # The paper is now a subtask under a shared "Reading" parent bucket: the
+    # subtask text is the bare paper title and carries the note + project link.
+    assert task["text"] == "Attention Is All You Need"
     assert task["paper_note_id"] == note["id"]
     assert task["project_id"] == project["id"]
+    assert task["parent_task_id"] is not None
+
+    today_tasks = auth_client.get("/daily").json()["tasks"]
+    parent = next(t for t in today_tasks if t["id"] == task["parent_task_id"])
+    assert parent["text"] == "Reading"
+    assert parent["parent_task_id"] is None
+    assert parent["paper_note_id"] is None
 
     session = auth_client.post("/pomodoro", json={
         "session_type": "work",
