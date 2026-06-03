@@ -69,6 +69,11 @@ from app.schemas.paper_note import (
 
 router = APIRouter(prefix="/notes", tags=["paper-notes"])
 
+# Title of the shared "Reading" parent task that groups every paper sent to a
+# day via "+ Read today". Papers become subtasks under it so the day plan shows
+# one collapsible reading bucket instead of many flat "Read: ..." rows.
+READING_PARENT_TEXT = "Reading"
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -381,7 +386,14 @@ def add_note_to_today(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DailyTask:
-    """Create one ordinary reading task for today, reusing an open one."""
+    """Add the paper as a subtask under today's shared "Reading" parent task.
+
+    Reuses an open reading subtask for this note if one already exists, and
+    reuses (or creates) a single "Reading" parent bucket per day so all papers
+    sent to a day collapse into one group instead of many flat rows. The paper
+    subtask carries the note + project link so timers, reading context and
+    per-project time still resolve to it.
+    """
     note = _get_owned_note(note_id, current_user, db)
     today = date.today()
     existing = db.scalar(
@@ -394,12 +406,38 @@ def add_note_to_today(
     )
     if existing is not None:
         return existing
+
+    # Find or create the shared "Reading" parent bucket for today. Match an
+    # open root-level task (no parent, no paper link) with the reserved title.
+    parent = db.scalar(
+        select(DailyTask)
+        .where(DailyTask.user_id == current_user.id)
+        .where(DailyTask.task_date == today)
+        .where(DailyTask.parent_task_id.is_(None))
+        .where(DailyTask.paper_note_id.is_(None))
+        .where(DailyTask.is_done.is_(False))
+        .where(DailyTask.text == READING_PARENT_TEXT)
+        .order_by(DailyTask.created_at.desc())
+    )
+    if parent is None:
+        parent = DailyTask(
+            user_id=current_user.id,
+            task_date=today,
+            planned_date=today,
+            text=READING_PARENT_TEXT,
+            is_done=False,
+            sort_order=_next_task_sort_order(current_user.id, today, db),
+        )
+        db.add(parent)
+        db.flush()  # assign parent.id before linking the child
+
     task = DailyTask(
         user_id=current_user.id,
         task_date=today,
         planned_date=today,
-        text=f"Read: {note.title}",
+        text=note.title,
         is_done=False,
+        parent_task_id=parent.id,
         sort_order=_next_task_sort_order(current_user.id, today, db),
         project_id=note.project_id,
         paper_note_id=note.id,
