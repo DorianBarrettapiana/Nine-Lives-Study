@@ -3152,6 +3152,25 @@ h3 {
 }
 .dashboard-task-time-row.child { border-left: 3px solid var(--border-soft); }
 
+/* Open-work hierarchy: indented subtasks + inline "add step" form. */
+.dashboard-task-group { display: flex; flex-direction: column; gap: 0.35rem; }
+.dashboard-task-row.is-child { border-left: 3px solid var(--accent, var(--border-soft)); }
+.dashboard-task-children { margin-left: 1rem; }
+.dashboard-task-children > summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--text-soft);
+  padding: 0.15rem 0;
+}
+.dashboard-task-children-list { display: flex; flex-direction: column; gap: 0.35rem; margin-top: 0.25rem; }
+.dashboard-add-child-form {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.3rem 0 0 1rem;
+  align-items: center;
+}
+.dashboard-add-child-form .dashboard-child-input { flex: 1; }
+
 /* --- Feynman: source-paper banner ----------------------------------- */
 .feynman-source-note {
   background: var(--bg-item);

@@ -14,7 +14,12 @@ import {
   type ProjectDashboardRead,
   type ProjectRead,
 } from "../api/projects";
-import { createDailyTask, updateDailyTask } from "../api/tracker";
+import {
+  createDailyTask,
+  deleteDailyTask,
+  updateDailyTask,
+  type DailyTaskRead,
+} from "../api/tracker";
 import { escapeHtml, fmtMinutes, formatDate, setMessage } from "../utils";
 import {
   getCachedProjects,
@@ -87,19 +92,56 @@ function dashboardHtml(d: ProjectDashboardRead): string {
     ? formatDate(d.last_activity_at)
     : "No work session yet";
 
-  const openTasksHtml = d.open_tasks.length === 0
+  // Group open tasks by parent so subtasks render under their parent —
+  // same hierarchy users already know from Today. Tasks whose parent isn't
+  // in this project (or is done) fall back to root rendering so nothing
+  // gets dropped.
+  const openById = new Map<number, DailyTaskRead>(d.open_tasks.map((t) => [t.id, t]));
+  const childrenByParent = new Map<number, DailyTaskRead[]>();
+  const roots: DailyTaskRead[] = [];
+  for (const t of d.open_tasks) {
+    if (t.parent_task_id !== null && openById.has(t.parent_task_id)) {
+      const list = childrenByParent.get(t.parent_task_id) ?? [];
+      list.push(t);
+      childrenByParent.set(t.parent_task_id, list);
+    } else {
+      roots.push(t);
+    }
+  }
+
+  const taskRowHtml = (t: DailyTaskRead, isChild: boolean): string => `
+    <div class="dashboard-task-row${isChild ? " is-child" : ""}" data-task-id="${t.id}">
+      <span class="dashboard-task-text">${escapeHtml(t.text)}</span>
+      ${t.due_date ? `<span class="hint">📅 ${escapeHtml(t.due_date)}</span>` : ""}
+      ${t.planned_date
+        ? `<span class="hint dashboard-task-planned">🗓 ${escapeHtml(t.planned_date)}</span>`
+        : `<span class="tag dashboard-task-backlog">📥 Backlog</span>
+           <button type="button" class="link-btn" data-dashboard-action="schedule-today"
+                   data-task-id="${t.id}" title="Plan this task for today">Schedule today</button>`}
+      ${isChild ? "" : `
+        <button type="button" class="link-btn" data-dashboard-action="add-child"
+                data-task-id="${t.id}" title="Break this task into steps">+ Step</button>`}
+      <button type="button" class="link-btn danger" data-dashboard-action="delete-task"
+              data-task-id="${t.id}" title="Delete task">×</button>
+    </div>`;
+
+  const openTasksHtml = roots.length === 0
     ? `<p class="hint">No open task.</p>`
-    : d.open_tasks.map((t) => `
-        <div class="dashboard-task-row" data-task-id="${t.id}">
-          <span class="dashboard-task-text">${escapeHtml(t.text)}</span>
-          ${t.due_date ? `<span class="hint">📅 ${escapeHtml(t.due_date)}</span>` : ""}
-          ${t.planned_date
-            ? `<span class="hint dashboard-task-planned">🗓 ${escapeHtml(t.planned_date)}</span>`
-            : `<span class="tag dashboard-task-backlog">📥 Backlog</span>
-               <button type="button" class="link-btn" data-dashboard-action="schedule-today"
-                       data-task-id="${t.id}" title="Plan this task for today">Schedule today</button>`}
-        </div>
-      `).join("");
+    : roots.map((root) => {
+        const children = childrenByParent.get(root.id) ?? [];
+        const childrenBlock = children.length === 0
+          ? ""
+          : `<details class="dashboard-task-children" open>
+               <summary>${children.length} step${children.length === 1 ? "" : "s"}</summary>
+               <div class="dashboard-task-children-list">
+                 ${children.map((c) => taskRowHtml(c, true)).join("")}
+               </div>
+             </details>`;
+        return `<div class="dashboard-task-group" data-root-id="${root.id}">
+          ${taskRowHtml(root, false)}
+          ${childrenBlock}
+        </div>`;
+      }).join("");
 
   const notesHtml = d.paper_notes.length === 0
     ? `<p class="hint">No paper note yet.</p>`
@@ -361,13 +403,66 @@ export function init(onChanged?: () => Promise<void>): void {
         console.error(e);
         target.removeAttribute("disabled");
       }
+    } else if (action === "add-child") {
+      // Inject an inline "add a step" form right under this root task.
+      const taskId = Number(target.dataset.taskId);
+      if (!taskId) return;
+      const group = dashboardContainer.querySelector<HTMLDivElement>(
+        `.dashboard-task-group[data-root-id="${taskId}"]`,
+      );
+      if (!group || group.querySelector(".dashboard-add-child-form")) return;
+      const form = document.createElement("form");
+      form.className = "dashboard-add-child-form";
+      form.dataset.parentId = String(taskId);
+      form.innerHTML = `
+        <input type="text" class="dashboard-child-input" maxlength="500"
+               placeholder="Add a concrete step..." required />
+        <button type="submit">Add step</button>
+        <button type="button" class="secondary" data-dashboard-action="cancel-add-child">Cancel</button>
+      `;
+      group.appendChild(form);
+      form.querySelector<HTMLInputElement>(".dashboard-child-input")?.focus();
+    } else if (action === "cancel-add-child") {
+      target.closest(".dashboard-add-child-form")?.remove();
+    } else if (action === "delete-task") {
+      const taskId = Number(target.dataset.taskId);
+      if (!taskId || openDashboardId === null) return;
+      if (!window.confirm("Delete this task? Steps under it will also be deleted.")) return;
+      try {
+        await deleteDailyTask(taskId);
+        await openDashboard(openDashboardId);
+        await onChangedCb?.();
+      } catch (e) {
+        console.error(e);
+      }
     }
   });
 
-  // Add a task to the open project (lands in the project's backlog).
+  // Add a task to the open project (lands in the project's backlog),
+  // or add a subtask under an existing task in the open work list.
   dashboardContainer.addEventListener("submit", async (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement)) return;
+
+    // Subtask: inline form injected under a parent task.
+    if (form.classList.contains("dashboard-add-child-form")) {
+      event.preventDefault();
+      const parentId = Number(form.dataset.parentId);
+      const input = form.querySelector<HTMLInputElement>(".dashboard-child-input");
+      const text = input?.value.trim() ?? "";
+      if (!parentId || !text || openDashboardId === null) return;
+      try {
+        await createDailyTask({ text, parent_task_id: parentId });
+        await openDashboard(openDashboardId);
+        await onChangedCb?.();
+      } catch (e) {
+        console.error(e);
+        const msg = dashboardContainer.querySelector<HTMLParagraphElement>(".dashboard-task-message");
+        if (msg) setMessage(msg, "Could not add step.", "error");
+      }
+      return;
+    }
+
     if (!form.classList.contains("dashboard-add-task")) return;
     event.preventDefault();
     const projectId = Number(form.dataset.projectId);
