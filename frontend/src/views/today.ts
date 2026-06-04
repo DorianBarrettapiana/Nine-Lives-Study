@@ -86,6 +86,9 @@ let breakingDownTaskId: number | null = null;
 // Estimate (minutes) pre-selected for the next new task via the chip row.
 // null = no estimate. Sticky across the session like the project picker.
 let pendingTaskEstimate: number | null = null;
+// Which task currently has its inline estimate editor open (root OR child).
+// Lets any task — including subtasks — be sized or re-sized after creation.
+let editingEstimateTaskId: number | null = null;
 
 // Offered time-estimate buckets (minutes). Tuned to pomodoro-ish chunks so a
 // task that doesn't fit in one sitting is visibly "too big".
@@ -160,6 +163,42 @@ function passesProjectFilter(task: { project_id: number | null }): boolean {
   return task.project_id === projectFilter;
 }
 
+// Inline estimate control shown on every task row. Three states:
+//  - editing → chip row (5/15/25/45 + clear) that PATCHes the task,
+//  - has estimate → clickable ~Xm pill that opens the editor,
+//  - no estimate → a tiny "+ size" affordance (hidden when read-only/done).
+// Works the same for root tasks and subtasks, so any task can be sized.
+function estimateControlHtml(task: DailyTaskRead, readOnly: boolean): string {
+  if (!readOnly && editingEstimateTaskId === task.id) {
+    const chips = ESTIMATE_CHOICES.map((mins) => `
+      <button type="button" class="estimate-chip ${task.estimate_minutes === mins ? "active" : ""}"
+              data-task-action="set-estimate" data-id="${task.id}" data-estimate="${mins}">${mins}m</button>`).join("");
+    const clear = task.estimate_minutes !== null
+      ? `<button type="button" class="estimate-chip estimate-clear" data-task-action="set-estimate" data-id="${task.id}" data-estimate="clear" title="Clear estimate">✕</button>`
+      : "";
+    return `<span class="estimate-edit">${chips}${clear}</span>`;
+  }
+  if (task.estimate_minutes !== null) {
+    return readOnly
+      ? `<span class="estimate-pill" title="Estimate">~${task.estimate_minutes}m</span>`
+      : `<button type="button" class="estimate-pill estimate-pill-btn" data-task-action="edit-estimate" data-id="${task.id}" title="Click to change the estimate">~${task.estimate_minutes}m</button>`;
+  }
+  return (!readOnly && !task.is_done)
+    ? `<button type="button" class="link-btn estimate-add" data-task-action="edit-estimate" data-id="${task.id}" title="Add a size estimate">+ size</button>`
+    : "";
+}
+
+// One reusable "add a concrete step" form. `parentId` is always the ROOT task
+// id: breaking a subtask down yields siblings (the model allows one level only).
+function addStepFormHtml(parentId: number): string {
+  return `
+    <form class="task-child-form" data-parent-id="${parentId}">
+      <input class="task-child-input" type="text" maxlength="500" placeholder="Add a concrete step..." autofocus />
+      <button type="submit">Add step</button>
+      <button type="button" class="secondary" data-task-action="cancel-child" data-id="${parentId}">Cancel</button>
+    </form>`;
+}
+
 function taskHtml(task: DailyTaskRead, readOnly: boolean, isChild = false, hasChildren = false): string {
   const isMainGoal = state?.log?.main_goal_task_id === task.id;
   const goalStar = isMainGoal ? `<span class="task-main-goal-star" title="Main goal">⭐</span>` : "";
@@ -169,19 +208,20 @@ function taskHtml(task: DailyTaskRead, readOnly: boolean, isChild = false, hasCh
   const duePill = task.due_date
     ? `<span class="due-pill ${dueClass(task.due_date)}" title="Due ${task.due_date}">📅 ${shortDue(task.due_date)}</span>`
     : "";
-  const estPill = task.estimate_minutes
-    ? `<span class="estimate-pill" title="Your estimate">~${task.estimate_minutes}m</span>`
-    : "";
+  const estControl = estimateControlHtml(task, readOnly);
   // A big, un-broken-down leaf is the classic "too vague to start" trap —
   // offer a one-click path into the break-down panel.
   const bigNudge = !readOnly && !isChild && !task.is_done && !hasChildren
     && task.estimate_minutes !== null && task.estimate_minutes >= BIG_TASK_MINUTES
     ? `<button type="button" class="link-btn task-big-nudge" data-task-action="break-down" data-id="${task.id}" title="This looks big — break it into steps">⚠ break down</button>`
     : "";
+  // A subtask broken down yields *siblings* (one-level model), so its hint
+  // wording differs slightly from a root task's "into steps".
+  const stepTitle = isChild ? "Add another step alongside this one" : "Break this task into steps";
   return `
     <div class="task-item ${isChild ? "task-child" : "task-root"}${task.is_done ? " task-done" : ""}${isMainGoal ? " task-main-goal" : ""}"
          data-task-id="${task.id}"
-         ${readOnly || isChild ? "" : 'draggable="true"'}>
+         ${readOnly ? "" : 'draggable="true"'}>
       <button class="task-checkbox ${task.is_done ? "checked" : ""}"
               data-task-action="toggle" data-id="${task.id}"
               aria-label="Toggle task"
@@ -195,11 +235,11 @@ function taskHtml(task: DailyTaskRead, readOnly: boolean, isChild = false, hasCh
       ${milestonePill}
       ${projectChipHtml(task.project_id)}
       ${duePill}
-      ${estPill}
+      ${estControl}
       ${bigNudge}
       ${readOnly ? "" : `
-        ${isChild || task.is_done ? "" : `<button type="button" class="link-btn task-add-child" data-task-action="add-child" data-id="${task.id}" title="Break this task into steps">+ Step</button>`}
-        ${isChild || task.is_done ? "" : `<button type="button" class="link-btn task-breakdown-btn" data-task-action="break-down" data-id="${task.id}" title="Stuck? Answer 3 quick questions to break it down">🧩 Break down</button>`}
+        ${task.is_done ? "" : `<button type="button" class="link-btn task-add-child" data-task-action="add-child" data-id="${task.id}" title="${stepTitle}">+ Step</button>`}
+        ${task.is_done ? "" : `<button type="button" class="link-btn task-breakdown-btn" data-task-action="break-down" data-id="${task.id}" title="Stuck? Answer 3 quick questions to break it down">🧩 Break down</button>`}
         ${task.is_done ? "" : `<button class="secondary compact-btn" data-task-action="stopwatch" data-id="${task.id}" title="Start work timer">▶</button>`}
         ${task.is_done ? "" : `<button class="task-carry" data-task-action="carry" data-id="${task.id}" title="Carry to tomorrow">→</button>`}
         <button class="task-delete" data-task-action="delete" data-id="${task.id}" title="Delete">×</button>`}
@@ -225,22 +265,25 @@ function breakdownPanelHtml(taskId: number): string {
 }
 
 function taskGroupHtml(task: DailyTaskRead, children: DailyTaskRead[], readOnly: boolean): string {
-  const adding = addingChildForTaskId === task.id && !readOnly;
-  const breakingDown = breakingDownTaskId === task.id && !readOnly;
-  const childRows = children.map((child) => taskHtml(child, readOnly, true)).join("");
-  const childPanel = children.length === 0 && !adding
+  const rootId = task.id;
+  const addingRoot = addingChildForTaskId === rootId && !readOnly;
+  const breakingDownRoot = breakingDownTaskId === rootId && !readOnly;
+  // Each child row may be followed by its own step-form / breakdown panel when
+  // the user chose to break *that subtask* down. Steps still attach to rootId
+  // so they appear as siblings (the model forbids deeper nesting).
+  const childRows = children.map((child) => {
+    const addStep = addingChildForTaskId === child.id && !readOnly ? addStepFormHtml(rootId) : "";
+    const breakdown = breakingDownTaskId === child.id && !readOnly ? breakdownPanelHtml(rootId) : "";
+    return taskHtml(child, readOnly, true) + addStep + breakdown;
+  }).join("");
+  const childPanel = children.length === 0 && !addingRoot
     ? ""
     : `<details class="task-children" open>
          <summary>${children.length} step${children.length === 1 ? "" : "s"}</summary>
          <div class="task-children-list">${childRows}</div>
-         ${adding ? `
-           <form class="task-child-form" data-parent-id="${task.id}">
-             <input class="task-child-input" type="text" maxlength="500" placeholder="Add a concrete step..." autofocus />
-             <button type="submit">Add step</button>
-             <button type="button" class="secondary" data-task-action="cancel-child" data-id="${task.id}">Cancel</button>
-           </form>` : ""}
+         ${addingRoot ? addStepFormHtml(rootId) : ""}
        </details>`;
-  const breakdownPanel = breakingDown ? breakdownPanelHtml(task.id) : "";
+  const breakdownPanel = breakingDownRoot ? breakdownPanelHtml(rootId) : "";
   return `<div class="task-group">${taskHtml(task, readOnly, false, children.length > 0)}${childPanel}${breakdownPanel}</div>`;
 }
 
@@ -746,6 +789,15 @@ function startInlineEdit(taskId: number, span: HTMLElement): void {
 
 let dragTaskId: number | null = null;
 
+// Two tasks belong to the same reorder group when they share a parent (both
+// roots → parent null; or both children of the same task).
+function sameSiblingGroup(aId: number, bId: number): boolean {
+  if (!state) return false;
+  const a = state.tasks.find((t) => t.id === aId);
+  const b = state.tasks.find((t) => t.id === bId);
+  return !!a && !!b && a.parent_task_id === b.parent_task_id;
+}
+
 function attachDragHandlers(): void {
   taskList.querySelectorAll<HTMLDivElement>(".task-item[draggable=true]").forEach((row) => {
     row.addEventListener("dragstart", (e) => {
@@ -765,7 +817,11 @@ function attachDragHandlers(): void {
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
       taskList.querySelectorAll(".drop-above").forEach((el) => el.classList.remove("drop-above"));
-      row.classList.add("drop-above");
+      // Only signal a valid drop when the hovered row is in the same sibling
+      // group as the dragged one — no cross-level (root↔child) moves.
+      if (state && dragTaskId !== null && sameSiblingGroup(dragTaskId, Number(row.dataset.taskId))) {
+        row.classList.add("drop-above");
+      }
     });
     row.addEventListener("drop", async (e) => {
       e.preventDefault();
@@ -775,15 +831,23 @@ function attachDragHandlers(): void {
       if (!movedId || !state) return;
       const targetId = Number(row.dataset.taskId);
       if (movedId === targetId) return;
-      const items = Array.from(taskList.querySelectorAll<HTMLDivElement>(".task-item.task-root"));
+      const moved = state.tasks.find((t) => t.id === movedId);
+      const targetTask = state.tasks.find((t) => t.id === targetId);
+      if (!moved || !targetTask) return;
+      // Reorder only within one sibling group (roots, or one parent's children).
+      if (moved.parent_task_id !== targetTask.parent_task_id) return;
+      const isChildLevel = moved.parent_task_id !== null;
+      const scope: ParentNode = isChildLevel
+        ? (row.closest(".task-children-list") ?? taskList)
+        : taskList;
+      const itemSel = isChildLevel ? ".task-item.task-child" : ".task-item.task-root";
+      const items = Array.from(scope.querySelectorAll<HTMLDivElement>(itemSel));
       const targetIdx = items.indexOf(row);
       const prevIdx = items[targetIdx - 1]?.dataset.taskId === String(movedId)
         ? targetIdx - 2 : targetIdx - 1;
-      const targetTask = state.tasks.find((t) => t.id === targetId);
       const prevTask = prevIdx >= 0
         ? state.tasks.find((t) => t.id === Number(items[prevIdx].dataset.taskId))
         : null;
-      if (!targetTask) return;
       const prevSO = prevTask ? prevTask.sort_order : targetTask.sort_order - 1;
       const newSO = (prevSO + targetTask.sort_order) / 2;
       try {
@@ -920,6 +984,16 @@ export function init(onDataChanged: () => Promise<void>): void {
       } else if (action === "cancel-breakdown") {
         breakingDownTaskId = null;
         renderTaskList();
+      } else if (action === "edit-estimate") {
+        editingEstimateTaskId = editingEstimateTaskId === id ? null : id;
+        renderTaskList();
+      } else if (action === "set-estimate") {
+        const raw = target.dataset.estimate;
+        const value = raw === "clear" ? null : Number(raw);
+        editingEstimateTaskId = null;
+        await updateDailyTask(id, { estimate_minutes: value });
+        await refresh();
+        await onDataChangedCb?.();
       } else if (action === "toggle") {
         await updateDailyTask(id, { is_done: !task.is_done });
         await refresh();

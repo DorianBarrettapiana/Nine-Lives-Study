@@ -3094,6 +3094,20 @@ h3 {
   color: var(--text-soft);
   font-weight: 600;
 }
+/* Same pill, but interactive: opens the inline estimate editor. */
+.estimate-pill-btn { cursor: pointer; font-family: inherit; }
+.estimate-pill-btn:hover { border-color: var(--accent); color: var(--text-accent); }
+/* "+ size" affordance on a task that has no estimate yet. */
+.estimate-add { margin-left: 0.4rem; font-size: 0.74rem; }
+/* Inline editor: a compact chip row attached to the task row. */
+.estimate-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.4rem;
+}
+.estimate-edit .estimate-chip { padding: 0.1rem 0.4rem; font-size: 0.72rem; }
+.estimate-clear { color: #ef4444; }
 .task-big-nudge {
   margin-left: 0.4rem;
   color: #d97706 !important;
