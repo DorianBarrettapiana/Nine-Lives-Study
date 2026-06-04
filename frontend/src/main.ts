@@ -52,6 +52,7 @@ const APP_HTML = `
           <button id="avatar-picker-toggle" class="link-btn" type="button">Change cat</button>
           <div id="avatar-picker" class="avatar-picker hidden"></div>
           <p id="avatar-picker-message" class="message"></p>
+          <button type="button" id="profile-motto" class="profile-motto" title="Click to edit your motto"></button>
         </section>
         <section class="card" id="xp-card">
           <h2>Level <span id="xp-level">1</span></h2>
@@ -572,13 +573,74 @@ function mountApp(user: UserRead): void {
   const pickerToggle = app!.querySelector<HTMLButtonElement>("#avatar-picker-toggle")!;
   const pickerEl = app!.querySelector<HTMLDivElement>("#avatar-picker")!;
   const pickerMsg = app!.querySelector<HTMLParagraphElement>("#avatar-picker-message")!;
+  const mottoEl = app!.querySelector<HTMLButtonElement>("#profile-motto")!;
 
   function renderUserChrome(u: UserRead): void {
     topbarAvatar.innerHTML = renderAvatarSvg(u.cat_skin, 22);
     topbarUsername.textContent = u.username;
     profileAvatar.innerHTML = renderAvatarSvg(u.cat_skin, 96);
     profileUsername.textContent = u.username;
+    renderMotto(u);
   }
+
+  // Render the motto as a clickable line; falls back to a muted placeholder
+  // when the user hasn't set one yet.
+  function renderMotto(u: UserRead): void {
+    const motto = u.motto?.trim() ?? "";
+    if (motto) {
+      mottoEl.textContent = motto;
+      mottoEl.classList.remove("profile-motto-empty");
+    } else {
+      mottoEl.textContent = "+ Add a motto";
+      mottoEl.classList.add("profile-motto-empty");
+    }
+  }
+
+  // Inline editor: swap the motto line for a text input that saves on blur
+  // or Enter (Escape cancels). Persisted to the user record via updateMe.
+  function startMottoEdit(): void {
+    if (mottoEl.querySelector("input")) return;
+    const current = user.motto ?? "";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.maxLength = 140;
+    input.value = current;
+    input.className = "profile-motto-input";
+    input.placeholder = "Your motto…";
+    mottoEl.textContent = "";
+    mottoEl.classList.remove("profile-motto-empty");
+    mottoEl.appendChild(input);
+    input.focus();
+    input.select();
+
+    let settled = false;
+    const finish = async (commit: boolean) => {
+      if (settled) return;
+      settled = true;
+      const next = input.value.trim().slice(0, 140);
+      if (!commit || next === (user.motto ?? "")) {
+        renderMotto(user);
+        return;
+      }
+      try {
+        const updated = await updateMe({ motto: next });
+        Object.assign(user, updated);
+        renderMotto(updated);
+      } catch {
+        renderMotto(user);
+      }
+    };
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); void finish(true); }
+      else if (e.key === "Escape") { e.preventDefault(); void finish(false); }
+    });
+    input.addEventListener("blur", () => { void finish(true); });
+  }
+
+  mottoEl.addEventListener("click", () => {
+    if (!mottoEl.querySelector("input")) startMottoEdit();
+  });
 
   // The picker is locked once enough pomodoro minutes have NOT yet been
   // earned since the user's last explicit skin pick. accumulated >= required

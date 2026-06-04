@@ -38,6 +38,7 @@ class UserUpdate(BaseModel):
 
     # Daily work-time goal, 15 min – 12 h.
     daily_goal_minutes: int | None = Field(default=None, ge=15, le=720)
+    motto: str | None = Field(default=None, max_length=140)
     share_study_time: bool | None = None
     share_activity: bool | None = None
     share_project: bool | None = None
@@ -67,6 +68,7 @@ class UserRead(BaseSchema):
 
     # Daily work-time goal — surfaced so the picker UI can read/write it.
     daily_goal_minutes: int = 120
+    motto: str = ""
     share_study_time: bool = True
     share_activity: bool = True
     share_project: bool = False

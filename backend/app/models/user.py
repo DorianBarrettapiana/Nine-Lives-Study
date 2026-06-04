@@ -42,6 +42,9 @@ class User(Base):
     # Displayed as a progress meter under the XP card. Default 120 = 2h.
     daily_goal_minutes: Mapped[int] = mapped_column(Integer, default=120, nullable=False)
 
+    # Free-text personal motto shown under the avatar. Empty = no motto.
+    motto: Mapped[str] = mapped_column(String(140), default="", nullable=False)
+
     # True once the user has explicitly agreed to send their reflection /
     # notes / session text to OpenAI for AI summary generation. The first
     # time they click a "Generate" button we show a disclosure modal that
