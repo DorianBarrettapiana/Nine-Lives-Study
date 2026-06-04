@@ -30,3 +30,8 @@ ninelives.foussistan.fr {
 		dns cloudflare {env.CF_API_TOKEN}
 	}
 }
+
+# Charge les blocs de sites des autres projets deployes sur la meme machine
+# (par ex. calotrack.foussistan.fr -> C:\srv\caddy\sites\calotrack.conf).
+# Chaque projet est responsable de pousser son propre fichier dans sites\.
+import C:\srv\caddy\sites\*.conf
