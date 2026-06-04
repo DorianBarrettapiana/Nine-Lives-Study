@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DailyTaskStat(BaseModel):
@@ -28,6 +28,25 @@ class WorkLabelStat(BaseModel):
 
     label: str
     minutes: int
+
+
+class LabelRelabel(BaseModel):
+    """Request to rename or merge a focus label globally.
+
+    `to_label` equal to an existing label merges the two (their time
+    records combine); a fresh name simply renames. The operation rewrites
+    `work_label` on every matching past session so the change is permanent
+    and shows up everywhere the label is reported.
+    """
+
+    from_label: str = Field(..., min_length=1, max_length=300)
+    to_label: str = Field(..., min_length=1, max_length=300)
+
+
+class LabelRelabelResult(BaseModel):
+    updated_sessions: int
+    from_label: str
+    to_label: str
 
 
 class ProjectTimeStat(BaseModel):

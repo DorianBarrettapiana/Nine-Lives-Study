@@ -7,7 +7,7 @@ the planner rows so unfinished work remains visible.
 
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -37,6 +37,8 @@ from app.schemas.stats import (
     DailyMoodStat,
     DailyTaskStat,
     DailyWorkStat,
+    LabelRelabel,
+    LabelRelabelResult,
     ProjectTimeStat,
     UserStatsRead,
     WeeklySummary,
@@ -45,6 +47,11 @@ from app.schemas.stats import (
 )
 
 router = APIRouter(prefix="/stats", tags=["stats"])
+
+# Display name for sessions with neither a work_label nor a linked task.
+# Kept in sync with the get_stats aggregation below. This synthetic bucket
+# can't be renamed — it isn't a real label, just "everything unlabelled".
+UNLABELLED_LABEL = "Unlabelled work"
 
 
 @router.get("", response_model=UserStatsRead)
@@ -178,8 +185,8 @@ def get_stats(
         else:
             session = stopwatch_sessions.get(ev.entity_id)
         label = (
-            effective_focus_label(session, db, unlabeled_label="Unlabelled work")
-            if session is not None else "Unlabelled work"
+            effective_focus_label(session, db, unlabeled_label=UNLABELLED_LABEL)
+            if session is not None else UNLABELLED_LABEL
         )
         minutes_by_label[label] = minutes_by_label.get(label, 0) + ev.amount
     work_labels = [
@@ -332,4 +339,67 @@ def get_stats(
         total_feynman=total_feynman,
         total_moods=total_moods,
         weekly_summary=weekly_summary,
+    )
+
+
+@router.post("/labels/relabel", response_model=LabelRelabelResult)
+def relabel_focus_label(
+    payload: LabelRelabel,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> LabelRelabelResult:
+    """Rename or merge a focus label across ALL of the user's sessions.
+
+    This is the "self-organize your time records" operation. It rewrites
+    `work_label` on every pomodoro/stopwatch session whose *effective*
+    label (work_label, or the linked task's text when blank) equals
+    `from_label`, setting it to `to_label`.
+
+    - Rename: `to_label` is a brand-new name → those sessions now report
+      under the new name everywhere.
+    - Merge: `to_label` is an existing label → the two buckets combine and
+      their minutes add up, because aggregation keys on the string.
+
+    Sessions that inherited their label from a linked task get the label
+    *materialized* onto `work_label`, so the rename sticks even though the
+    task text is unchanged. The task hierarchy itself is never touched —
+    there is no parent/child ambiguity because we only relabel the
+    time-record strings, not the tasks.
+    """
+    from_label = payload.from_label.strip()
+    to_label = payload.to_label.strip()
+
+    if not from_label or not to_label:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Both from_label and to_label must be non-empty.",
+        )
+    # The synthetic unlabelled bucket isn't a real label; renaming it would
+    # silently stamp a name onto every genuinely-unrelated unlabelled block.
+    if from_label == UNLABELLED_LABEL:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The unlabelled bucket can't be renamed or merged.",
+        )
+    if from_label == to_label:
+        return LabelRelabelResult(
+            updated_sessions=0, from_label=from_label, to_label=to_label,
+        )
+
+    updated = 0
+    for model in (PomodoroSession, StopwatchSession):
+        sessions = db.scalars(
+            select(model).where(model.user_id == current_user.id)
+        ).all()
+        for session in sessions:
+            label = effective_focus_label(
+                session, db, unlabeled_label=UNLABELLED_LABEL,
+            )
+            if label == from_label:
+                session.work_label = to_label[:300]
+                updated += 1
+
+    db.commit()
+    return LabelRelabelResult(
+        updated_sessions=updated, from_label=from_label, to_label=to_label,
     )
