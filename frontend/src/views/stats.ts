@@ -6,7 +6,7 @@
  */
 
 import { deleteMoodEntry, listMoodEntries, type MoodEntryRead } from "../api/mood";
-import { getUserStats, getUserXp, type UserProgressRead, type UserStatsRead } from "../api/stats";
+import { getUserStats, getUserXp, relabelFocusLabel, type UserProgressRead, type UserStatsRead } from "../api/stats";
 import { getDailyState, type DailyStateRead } from "../api/tracker";
 import { updateMe } from "../api/users";
 import { escapeHtml, fmtMinutes, makeDateLabel, parseApiDate } from "../utils";
@@ -44,6 +44,12 @@ export function getTodayWorkMinutes(): number {
 }
 let expandedDay: string | null = null;
 const dayCache = new Map<string, DailyStateRead>();
+
+// Label of the focus row whose inline "merge into…" panel is open, if any.
+let mergingLabel: string | null = null;
+// Kept in sync with stats.py UNLABELLED_LABEL — this synthetic bucket can't
+// be renamed or merged, so it shows no organize controls.
+const UNLABELLED_LABEL = "Unlabelled work";
 
 export let statsDays = 7;
 
@@ -356,15 +362,79 @@ function renderFocusSection(): void {
   const labels = userStats?.work_labels ?? [];
   if (labels.length === 0) {
     statsFocusChart.innerHTML = `<div class="empty-state">Choose a task when starting a timer to see where your time goes.</div>`;
+    mergingLabel = null;
     return;
   }
+  // The open merge panel must target a label that still exists.
+  if (mergingLabel && !labels.some((l) => l.label === mergingLabel)) {
+    mergingLabel = null;
+  }
   const max = Math.max(...labels.map((item) => item.minutes), 1);
-  statsFocusChart.innerHTML = labels.map((item) => `
-    <div class="focus-stat-row">
-      <div class="focus-stat-label"><span>${escapeHtml(item.label)}</span><strong>${fmtMinutes(item.minutes)}</strong></div>
+  statsFocusChart.innerHTML = labels.map((item) => {
+    const organizable = item.label !== UNLABELLED_LABEL;
+    const enc = escapeHtml(item.label);
+    // Rename + merge controls. The unlabelled bucket isn't a real label, so
+    // it gets no controls (the server rejects renaming it anyway).
+    const actions = organizable
+      ? `<span class="focus-stat-actions">
+          <button type="button" class="focus-action-btn" data-focus-action="rename"
+                  data-label="${enc}" title="Rename this time record">✎</button>
+          <button type="button" class="focus-action-btn" data-focus-action="merge"
+                  data-label="${enc}" title="Merge into another record">⇄</button>
+        </span>`
+      : "";
+    const mergePanel = mergingLabel === item.label
+      ? renderMergePanel(item.label, labels.map((l) => l.label))
+      : "";
+    return `
+    <div class="focus-stat-row" data-label="${enc}">
+      <div class="focus-stat-label">
+        <span class="focus-stat-name">${enc}</span>
+        ${actions}
+        <strong>${fmtMinutes(item.minutes)}</strong>
+      </div>
       <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(item.minutes / max * 100)}%"></div></div>
+      ${mergePanel}
     </div>
-  `).join("");
+  `;
+  }).join("");
+}
+
+// Apply a rename/merge on the server, then reload stats so every chart
+// (focus, project, totals) reflects the reorganized records.
+async function applyRelabel(from: string, to: string): Promise<void> {
+  try {
+    await relabelFocusLabel(from, to);
+    await refresh();
+  } catch (error) {
+    console.error(error);
+    window.alert("Could not update the time record. Please try again.");
+  }
+}
+
+// Inline panel: pick another existing label to merge `source` into. Every
+// option triggers a confirm before it's applied (handled in the click
+// listener), satisfying "ask before each operation".
+function renderMergePanel(source: string, allLabels: string[]): string {
+  const targets = allLabels.filter(
+    (l) => l !== source && l !== UNLABELLED_LABEL,
+  );
+  if (targets.length === 0) {
+    return `<div class="focus-merge-panel"><span class="hint">No other record to merge into.</span>
+      <button type="button" class="focus-action-btn" data-focus-action="merge-cancel">Cancel</button></div>`;
+  }
+  const enc = escapeHtml(source);
+  const options = targets.map((t) =>
+    `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`
+  ).join("");
+  return `
+    <div class="focus-merge-panel" data-source="${enc}">
+      <span class="hint">Merge “${enc}” into:</span>
+      <select class="focus-merge-select" data-source="${enc}">${options}</select>
+      <button type="button" class="focus-action-btn primary" data-focus-action="merge-apply"
+              data-source="${enc}">Merge</button>
+      <button type="button" class="focus-action-btn" data-focus-action="merge-cancel">Cancel</button>
+    </div>`;
 }
 
 function renderProjectSection(): void {
@@ -619,6 +689,59 @@ export function init(onRefreshNeeded: () => Promise<void>): void {
       }
     }
   });
+  // Delegated handler for the focus-record organize controls (rename/merge).
+  // Each mutating action asks for explicit confirmation before applying, and
+  // takes effect globally on the server, then refreshes.
+  statsFocusChart?.addEventListener("click", async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const btn = target.closest<HTMLButtonElement>("[data-focus-action]");
+    if (!btn) return;
+    const action = btn.dataset.focusAction;
+
+    if (action === "rename") {
+      const from = btn.dataset.label ?? "";
+      if (!from) return;
+      const raw = window.prompt(`Rename time record “${from}” to:`, from);
+      if (raw === null) return;
+      const to = raw.trim();
+      if (!to || to === from) return;
+      if (!window.confirm(
+        `Rename “${from}” to “${to}”?\n\nThis updates all matching time records everywhere.`
+      )) return;
+      await applyRelabel(from, to);
+      return;
+    }
+
+    if (action === "merge") {
+      const label = btn.dataset.label ?? "";
+      mergingLabel = mergingLabel === label ? null : label;
+      renderFocusSection();
+      return;
+    }
+
+    if (action === "merge-cancel") {
+      mergingLabel = null;
+      renderFocusSection();
+      return;
+    }
+
+    if (action === "merge-apply") {
+      const from = btn.dataset.source ?? "";
+      const select = statsFocusChart.querySelector<HTMLSelectElement>(
+        `.focus-merge-select[data-source="${CSS.escape(from)}"]`
+      );
+      const to = select?.value ?? "";
+      if (!from || !to || from === to) return;
+      if (!window.confirm(
+        `Merge “${from}” into “${to}”?\n\nTheir time records combine under “${to}”. This can't be auto-undone.`
+      )) return;
+      mergingLabel = null;
+      await applyRelabel(from, to);
+      return;
+    }
+  });
+
   statsTasksTitle = document.querySelector<HTMLHeadingElement>("#stats-tasks-title")!;
   statsPomodoroTitle = document.querySelector<HTMLHeadingElement>("#stats-pomodoro-title")!;
   statsMoodTitle = document.querySelector<HTMLHeadingElement>("#stats-mood-title")!;

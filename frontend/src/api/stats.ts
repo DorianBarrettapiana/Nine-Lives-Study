@@ -83,3 +83,24 @@ export async function getUserXp(): Promise<UserProgressRead> {
   const tz = new Date().getTimezoneOffset() * -1;
   return apiFetch<UserProgressRead>(`/xp?tz_offset=${tz}`);
 }
+
+export interface LabelRelabelResult {
+  updated_sessions: number;
+  from_label: string;
+  to_label: string;
+}
+
+/**
+ * Rename or merge a focus (time-usage) label across all sessions.
+ * Passing an existing label as `to` merges the two buckets; a new name
+ * just renames. Applied globally on the server.
+ */
+export async function relabelFocusLabel(
+  from: string,
+  to: string,
+): Promise<LabelRelabelResult> {
+  return apiFetch<LabelRelabelResult>("/stats/labels/relabel", {
+    method: "POST",
+    body: JSON.stringify({ from_label: from, to_label: to }),
+  });
+}
