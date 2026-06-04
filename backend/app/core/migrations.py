@@ -21,6 +21,7 @@ _ADD_COLUMNS: list[tuple[str, str, str]] = [
     ("users", "cat_skin_changed_at",               "TIMESTAMP"),
     ("users", "cat_skin_free_changes",             "INTEGER NOT NULL DEFAULT 1"),
     ("users", "daily_goal_minutes",                "INTEGER NOT NULL DEFAULT 120"),
+    ("users", "motto",                             "VARCHAR(140) NOT NULL DEFAULT ''"),
     ("users", "share_study_time",                  "BOOLEAN NOT NULL DEFAULT 1"),
     ("users", "share_activity",                    "BOOLEAN NOT NULL DEFAULT 1"),
     ("users", "share_project",                     "BOOLEAN NOT NULL DEFAULT 0"),

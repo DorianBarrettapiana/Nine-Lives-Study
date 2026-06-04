@@ -78,6 +78,27 @@ def test_me_returns_current_user(auth_client: TestClient):
     assert r.json()["username"] == "tester"
 
 
+def test_motto_defaults_empty(auth_client: TestClient):
+    assert auth_client.get("/auth/me").json()["motto"] == ""
+
+
+def test_motto_can_be_set_and_cleared(auth_client: TestClient):
+    r = auth_client.patch("/users/me", json={"motto": "Slow is smooth, smooth is fast"})
+    assert r.status_code == 200
+    assert r.json()["motto"] == "Slow is smooth, smooth is fast"
+    # Persists across requests.
+    assert auth_client.get("/auth/me").json()["motto"] == "Slow is smooth, smooth is fast"
+    # And can be cleared back to empty.
+    r2 = auth_client.patch("/users/me", json={"motto": ""})
+    assert r2.status_code == 200
+    assert r2.json()["motto"] == ""
+
+
+def test_motto_too_long_rejected(auth_client: TestClient):
+    r = auth_client.patch("/users/me", json={"motto": "x" * 141})
+    assert r.status_code == 422
+
+
 def test_logout_clears_session(auth_client: TestClient):
     assert auth_client.get("/auth/me").status_code == 200
     r = auth_client.post("/auth/logout")

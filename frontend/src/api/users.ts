@@ -21,6 +21,7 @@ export interface UserRead {
   cat_skin_minutes_required: number;
   cat_skin_free_changes: number;
   daily_goal_minutes: number;
+  motto: string;
   share_study_time: boolean;
   share_activity: boolean;
   share_project: boolean;
@@ -51,6 +52,7 @@ export interface UserUpdate {
   cat_skin?: string;
 
   daily_goal_minutes?: number;
+  motto?: string;
   share_study_time?: boolean;
   share_activity?: boolean;
   share_project?: boolean;
