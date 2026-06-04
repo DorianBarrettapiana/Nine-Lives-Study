@@ -90,6 +90,29 @@ def test_patch_estimate_minutes(auth_client: TestClient):
     assert r.json()["estimate_minutes"] == 45
 
 
+def test_patch_can_clear_estimate(auth_client: TestClient):
+    """The inline editor clears an estimate by PATCHing null."""
+    tid = auth_client.post(
+        "/daily/tasks", json={"text": "t", "estimate_minutes": 25},
+    ).json()["id"]
+    r = auth_client.patch(f"/daily/tasks/{tid}", json={"estimate_minutes": None})
+    assert r.status_code == 200
+    assert r.json()["estimate_minutes"] is None
+
+
+def test_subtask_can_have_estimate(auth_client: TestClient):
+    """Subtasks support the same size estimate as root tasks."""
+    parent = auth_client.post("/daily/tasks", json={"text": "parent"}).json()["id"]
+    r = auth_client.post(
+        "/daily/tasks",
+        json={"text": "child", "parent_task_id": parent, "estimate_minutes": 15},
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["parent_task_id"] == parent
+    assert body["estimate_minutes"] == 15
+
+
 def test_patch_planned_date_updates_task_date(auth_client: TestClient):
     """Editing planned_date must keep task_date in sync — otherwise the
     legacy 'tasks for day X' query goes stale."""
