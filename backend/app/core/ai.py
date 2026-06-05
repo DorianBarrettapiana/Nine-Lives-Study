@@ -38,6 +38,7 @@ from app.core.xp import (
 )
 from app.models.daily_tracker import DailyLog, DailyTask
 from app.models.feynman_entry import FeynmanEntry
+from app.models.milestone import Milestone
 from app.models.mood_entry import MoodEntry
 from app.models.paper_note import PaperNote
 from app.models.pomodoro_session import PomodoroSession
@@ -248,6 +249,11 @@ def gather_weekly(
                 "title": note.title,
                 "reading_status": note.reading_status,
                 "focus_minutes": minutes,
+                # The note body is the real signal for a research recap —
+                # what the user took away and what they're still asking.
+                # Truncated so a few long notes don't dominate the prompt.
+                "key_points": (note.key_points or "").strip()[:400],
+                "open_questions": (note.questions or "").strip()[:400],
             })
 
     unresolved_gaps = db.scalars(
@@ -322,6 +328,37 @@ def gather_with_previous_period(
     }
 
 
+def gather_near_milestones(
+    user_id: int, db: Session, horizon_days: int = 60,
+) -> list[dict]:
+    """Upcoming milestones (date-anchored targets) within `horizon_days`.
+
+    Distinct from `upcoming_deadlines`, which are day-level tasks. A
+    milestone is the *thing the user is working toward* (a chapter due
+    date, an abstract deadline) — it's the anchor that lets the recap
+    ask "did this week move the needle on what matters". Forward-looking,
+    so it's gathered once (not per period) and attached at the top level.
+    """
+    today = datetime.now(timezone.utc).date()
+    rows = db.scalars(
+        select(Milestone)
+        .where(Milestone.user_id == user_id)
+        .where(Milestone.is_archived == False)  # noqa: E712
+        .where(Milestone.due_date >= today)
+        .where(Milestone.due_date <= today + timedelta(days=horizon_days))
+        .order_by(Milestone.due_date.asc())
+        .limit(5)
+    ).all()
+    return [
+        {
+            "title": m.title,
+            "due_date": m.due_date.isoformat(),
+            "days_left": (m.due_date - today).days,
+        }
+        for m in rows
+    ]
+
+
 def gather_feynman_review(user_id: int, entry_id: int, db: Session) -> dict | None:
     entry = db.get(FeynmanEntry, entry_id)
     if entry is None or entry.user_id != user_id:
@@ -388,12 +425,25 @@ Surface these in a short "what's pressing next" sentence — it's the
 single most useful forward-looking item we can give a PhD student.
 If the list is empty, don't fabricate urgency.
 
-The input wraps these fields under `current_period` and `previous_period`.
-Compare them: mention one meaningful change in focus time or work mix.
-Include a short **Papers touched** section when
-`current_period.papers_touched` is non-empty. Use
-`current_period.unresolved_feynman_gaps` only when it helps identify a
-concrete next step.
+`upcoming_milestones` (top-level, not per-period) lists the date-anchored
+targets the user is working toward — a chapter due date, an abstract
+deadline, a defense. Each has `days_left`. This is the ANCHOR of a
+research recap: tie the week's work back to whichever milestone is
+nearest, e.g. "with the X abstract N days out, this week's time on Y
+is/isn't moving that". Quote the milestone title verbatim. If the list
+is empty, skip this — never invent a milestone or deadline.
+
+The input wraps the period fields under `current_period` and
+`previous_period`. Compare them: mention one meaningful change in focus
+time or work mix.
+
+Include a **Papers touched** section when `current_period.papers_touched`
+is non-empty. Each entry now carries `key_points` (what the user took
+away) and `open_questions` (what they're still asking). Use these to make
+the section substantive — quote a real takeaway or an open question
+rather than just listing titles and minutes. Treat `open_questions` and
+`current_period.unresolved_feynman_gaps` as the user's live research
+threads: surface the most concrete one as fuel for the Next step.
 
 ALWAYS finish the recap with these lines in exactly this format (verbatim,
 including the asterisks, each on its own line):
@@ -403,21 +453,30 @@ including the asterisks, each on its own line):
 **Project:** <one verbatim project name from time_per_project_minutes, or (no project)>
 
 These lines are parsed by the frontend to offer a one-click task with a
-deadline and project. Make the action imperative and specific (e.g.
-"Re-read paper A's section 3 and note 2 questions") rather than vague
-("focus more"). Use a realistic near-term due date.\
+deadline and project. The Next step must move the RESEARCH forward, not
+just "work more". In order of preference, derive it from:
+  1. a concrete `open_questions` / `unresolved_feynman_gaps` item — turn
+     it into the next question to resolve;
+  2. a paper to read/finish, or a section to write, implied by
+     `papers_touched` and `reading_status`;
+  3. the work needed for the nearest `upcoming_milestones` entry.
+Make it imperative and specific (e.g. "Derive the variance bound in
+Paper A §3 and write 1 paragraph") rather than vague ("focus more").
+Anchor the **Due:** date sensibly against the nearest milestone if one
+exists. Avoid generic productivity advice.\
 """
 
-# Tuesday slot: retrospective. Looks at the previous ISO week (Mon-Sun,
-# already complete). Past tense; closure framing.
+# Friday slot: retrospective on the past 7 days (Sat-Fri) — the most
+# recent weekend through today. Past tense; closure framing.
 _SYSTEM_WEEKLY_RETROSPECTIVE = _SHARED_RECAP_TONE + """
 
-This is a RETROSPECTIVE on the **previous full week** (Mon-Sun, now
-closed). Use past tense throughout. The recap should help the user close
-the loop on what just finished.
+This is a RETROSPECTIVE on the **past 7 days** (Saturday through this
+Friday) — the most recent weekend through today. Use past tense
+throughout. The recap should help the user close the loop on the week
+that just finished.
 
 Output format: Markdown. ~250 words total. Sections:
-- **Last week in numbers** (1-2 lines: hours, sessions, streak)
+- **This week in numbers** (1-2 lines: hours, sessions, streak)
 - **Where your time went** (2-3 bullets quoting the largest task labels
   verbatim, with their hour counts)
 - **What stood out** (1-2 honest observations, including any dips)
@@ -526,16 +585,20 @@ def _summarise(system_prompt: str, user_payload: dict, max_tokens: int) -> Summa
 
 
 def summarise_weekly_retrospective(
-    user_id: int, last_week_start_utc: datetime, db: Session,
+    user_id: int, window_start_utc: datetime, db: Session,
 ) -> SummaryResult:
-    """Tuesday slot — recap of the previous full ISO week (Mon-Sun, closed)."""
+    """Friday slot — recap of the past 7 days (Sat-Fri), i.e. the most
+    recent weekend through today. `window_start_utc` is the Saturday that
+    starts the window; the recap gathers the 7 days from there and
+    compares against the immediately preceding 7-day block."""
     data = gather_with_previous_period(
         user_id,
-        last_week_start_utc,
-        last_week_start_utc + timedelta(days=7),
+        window_start_utc,
+        window_start_utc + timedelta(days=7),
         db,
     )
-    data["window_label"] = "previous full week (Mon-Sun)"
+    data["window_label"] = "past 7 days (Sat through Fri)"
+    data["upcoming_milestones"] = gather_near_milestones(user_id, db)
     return _summarise(_SYSTEM_WEEKLY_RETROSPECTIVE, data, max_tokens=1500)
 
 
@@ -565,6 +628,7 @@ def summarise_progress_recap(
 ) -> SummaryResult:
     data = gather_with_previous_period(user_id, window_start_utc, window_end_utc, db)
     data["window_label"] = period_label
+    data["upcoming_milestones"] = gather_near_milestones(user_id, db, horizon_days=120)
     return _summarise(_SYSTEM_PROGRESS_RECAP, data, max_tokens=2400)
 
 
