@@ -309,6 +309,8 @@ def test_paper_note_read_today_flows_into_focus_minutes_and_recap(
         "title": "Attention Is All You Need",
         "reading_status": "reading",
         "focus_minutes": 25,
+        "key_points": "",
+        "open_questions": "",
     }]
 
 

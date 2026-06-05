@@ -328,18 +328,19 @@ def stage_availability(
 def _period_key_for_slot(slot: str, tz_offset_minutes: int) -> str:
     """Period key the given slot would write right now.
 
-    The (only) Friday slot is now retrospective: it summarises the
-    just-closed previous week (Mon-Sun). Anchoring the key on the
-    previous Monday keeps "Recap for 2026-W21" genuinely about W21.
+    The (only) Friday slot summarises the past 7 days (Sat-Fri): the
+    most recent weekend through today. We anchor the key on the current
+    week's Monday so "Recap for 2026-W22" lines up with the week the
+    user is actually in, not the calendar-previous one.
 
     The legacy `"T"` slot is retained for back-compat with any code
-    that still passes that letter; it uses the same previous-week
+    that still passes that letter; it shares the same current-week
     anchor (so a Tue UI hitting an unmigrated frontend would still
     produce a sensible period_key, though the Tuesday slot is now
     rejected at the route layer).
     """
     this_monday = _local_monday_utc(tz_offset_minutes)
-    anchor = this_monday - timedelta(days=7)  # previous week (Mon-Sun)
+    anchor = this_monday  # current week (the Sat-Fri recap ends this Fri)
     return f"{_iso_week_key(anchor)}-{slot}"
 
 
@@ -440,10 +441,12 @@ def generate_weekly(
     _check_period_not_yet_generated(current_user.id, "weekly", period_key, db)
     this_monday = _local_monday_utc(tz_offset)
     try:
-        # Friday: retrospective on the just-closed week (Mon-Sun). The
-        # week the recap covers ends on the Sunday before today's Friday.
+        # Friday: retrospective on the past 7 days (Sat-Fri) — last
+        # weekend through today — rather than the prior Mon-Sun week.
+        # Saturday is two days before this week's Monday; the retrospective
+        # gathers a 7-day window from there, i.e. Sat-Sun-Mon-...-Fri.
         result = ai.summarise_weekly_retrospective(
-            current_user.id, this_monday - timedelta(days=7), db,
+            current_user.id, this_monday - timedelta(days=2), db,
         )
     except Exception as exc:  # noqa: BLE001 — surface SDK errors as 502
         raise HTTPException(
