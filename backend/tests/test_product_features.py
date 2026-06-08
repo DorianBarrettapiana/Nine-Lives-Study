@@ -33,6 +33,50 @@ def test_unfinished_task_carry_forward_moves_in_place(auth_client: TestClient):
     assert second.json()["task_date"] == "2026-06-02"
 
 
+def test_past_unfinished_lists_only_earlier_open_top_level_tasks(auth_client: TestClient):
+    """past-unfinished surfaces open top-level tasks scheduled before today,
+    excluding done ones, subtasks, and anything dated today or later."""
+    today = date.today()
+    old = auth_client.post("/daily/tasks", json={
+        "text": "Old straggler", "task_date": (today - timedelta(days=5)).isoformat(),
+    }).json()
+    # A done past task — should not surface.
+    done_old = auth_client.post("/daily/tasks", json={
+        "text": "Finished long ago", "task_date": (today - timedelta(days=3)).isoformat(),
+    }).json()
+    auth_client.patch(f"/daily/tasks/{done_old['id']}", json={"is_done": True})
+    # A task for today — not "past".
+    auth_client.post("/daily/tasks", json={"text": "For today"})
+    # A subtask under the old task — excluded (rides with its parent).
+    auth_client.post("/daily/tasks", json={
+        "text": "Old subtask", "parent_task_id": old["id"],
+    })
+
+    body = auth_client.get("/daily/tasks/past-unfinished").json()
+    assert [t["text"] for t in body] == ["Old straggler"]
+
+
+def test_carry_to_today_pulls_past_task_and_its_subtasks_forward(auth_client: TestClient):
+    today = date.today()
+    parent = auth_client.post("/daily/tasks", json={
+        "text": "Process data", "task_date": (today - timedelta(days=4)).isoformat(),
+    }).json()
+    child = auth_client.post("/daily/tasks", json={
+        "text": "Normalize columns", "parent_task_id": parent["id"],
+    }).json()
+
+    resp = auth_client.post(f"/daily/tasks/{parent['id']}/carry-to-today")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["id"] == parent["id"]
+    assert resp.json()["planned_date"] == today.isoformat()
+
+    today_tasks = auth_client.get("/daily").json()["tasks"]
+    moved = {t["id"] for t in today_tasks}
+    assert parent["id"] in moved and child["id"] in moved
+    # No longer listed as past unfinished.
+    assert auth_client.get("/daily/tasks/past-unfinished").json() == []
+
+
 def test_completed_task_is_not_carried_forward(auth_client: TestClient):
     task = auth_client.post("/daily/tasks", json={"text": "Done"}).json()
     auth_client.patch(f"/daily/tasks/{task['id']}", json={"is_done": True})
