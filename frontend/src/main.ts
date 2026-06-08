@@ -189,6 +189,16 @@ const APP_HTML = `
             <div id="today-yesterday-body"></div>
           </section>
 
+          <section class="card today-pasttasks-card hidden" id="today-pasttasks-card">
+            <div class="section-header">
+              <h2>📋 Earlier unfinished</h2>
+              <button id="today-pasttasks-carry-all" class="link-btn hidden" type="button"
+                      title="Bring every earlier unfinished task into today">Bring all to today</button>
+            </div>
+            <p class="hint">Pick up a task you scheduled on an earlier day and never finished.</p>
+            <div id="today-pasttasks-body"></div>
+          </section>
+
           <section class="card today-hero">
             <p class="eyebrow">🎯 Main goal</p>
             <div id="today-main-goal-picker"></div>

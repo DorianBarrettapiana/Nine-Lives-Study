@@ -386,29 +386,24 @@ def list_upcoming_tasks(
     return _serialize_tasks_with_tags(list(db.scalars(stmt).all()), current_user, db)
 
 
-@router.post("/tasks/{task_id}/carry-forward", response_model=DailyTaskRead)
-def carry_daily_task_forward(
-    task_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> DailyTaskRead:
-    """Move an unfinished task to the following day.
+def _reschedule_task_to(
+    task: DailyTask, target_date: date, current_user: User, db: Session,
+) -> DailyTask:
+    """Re-schedule an unfinished task (and its unfinished children) to a day.
 
-    Re-schedules the existing row (planned_date += 1 day) rather than
-    creating a copy. This keeps one row per logical task, so a task carried
-    over to the next day no longer shows up twice inside its project. Tags
-    ride along automatically since the row itself is preserved.
+    Re-schedules the existing rows (sets planned_date) rather than creating
+    copies. This keeps one row per logical task, so a moved task never shows
+    up twice inside its project, and tags ride along since the rows are
+    preserved. Children of a moved parent ride along so a subtask group stays
+    grouped; the parent of a moved *child* is left where it is — the user
+    picked that child, not the whole group. Moved rows are appended to the
+    bottom of the target day's group.
     """
-    task = _get_owned_task(task_id, current_user, db)
     if task.is_done:
-        raise HTTPException(status_code=400, detail="Completed tasks do not need to be carried forward.")
-    base_date = task.planned_date or task.task_date
-    target_date = base_date + timedelta(days=1)
-
-    # Gather rows to move: the task itself, plus its unfinished children if
-    # it's a parent. Children ride along so a subtask group stays grouped on
-    # the new day. The parent of a moved child is left where it is — the
-    # user explicitly picked the child to carry, not the whole group.
+        raise HTTPException(
+            status_code=400,
+            detail="Completed tasks do not need to be rescheduled.",
+        )
     movers: list[DailyTask] = [task]
     if task.parent_task_id is None:
         movers.extend(db.scalars(
@@ -433,6 +428,65 @@ def carry_daily_task_forward(
         mover.sort_order = max_so + offset
     db.commit()
     db.refresh(task)
+    return task
+
+
+@router.get("/tasks/past-unfinished", response_model=list[DailyTaskRead])
+def list_past_unfinished_tasks(
+    target_date: date | None = Query(default=None, alias="date"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[DailyTaskRead]:
+    """Top-level unfinished tasks planned for a day BEFORE `date` (today).
+
+    Powers the "pull a past task into today" affordance: anything the user
+    scheduled on an earlier day and never finished. Subtasks are excluded —
+    they ride along with their parent when it's pulled forward. Sorted by
+    planned_date ascending so the oldest stragglers surface first.
+    """
+    day = resolve_target_date(target_date)
+    stmt = (
+        select(DailyTask)
+        .where(DailyTask.user_id == current_user.id)
+        .where(DailyTask.is_done == False)  # noqa: E712
+        .where(DailyTask.parent_task_id.is_(None))
+        .where(DailyTask.planned_date.is_not(None))
+        .where(DailyTask.planned_date < day)
+        .order_by(DailyTask.planned_date.asc(), DailyTask.sort_order.asc())
+    )
+    return _serialize_tasks_with_tags(list(db.scalars(stmt).all()), current_user, db)
+
+
+@router.post("/tasks/{task_id}/carry-forward", response_model=DailyTaskRead)
+def carry_daily_task_forward(
+    task_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DailyTaskRead:
+    """Move an unfinished task to the following day (planned_date += 1)."""
+    task = _get_owned_task(task_id, current_user, db)
+    base_date = task.planned_date or task.task_date
+    task = _reschedule_task_to(task, base_date + timedelta(days=1), current_user, db)
+    return _serialize_tasks_with_tags([task], current_user, db)[0]
+
+
+@router.post("/tasks/{task_id}/carry-to-today", response_model=DailyTaskRead)
+def carry_daily_task_to_today(
+    task_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DailyTaskRead:
+    """Pull an unfinished (typically past) task into today.
+
+    Unlike carry-forward's +1-day step, this jumps the task straight to
+    today regardless of how long ago it was planned — the action behind the
+    "Earlier unfinished" card. No-op-safe if the task is already on today.
+    """
+    task = _get_owned_task(task_id, current_user, db)
+    today = date.today()
+    if (task.planned_date or task.task_date) == today:
+        return _serialize_tasks_with_tags([task], current_user, db)[0]
+    task = _reschedule_task_to(task, today, current_user, db)
     return _serialize_tasks_with_tags([task], current_user, db)[0]
 
 
