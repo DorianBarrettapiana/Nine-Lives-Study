@@ -133,10 +133,6 @@ export async function carryDailyTask(taskId: number): Promise<DailyTaskRead> {
   });
 }
 
-export async function listPastUnfinishedTasks(): Promise<DailyTaskRead[]> {
-  return apiFetch<DailyTaskRead[]>("/daily/tasks/past-unfinished");
-}
-
 export async function carryTaskToToday(taskId: number): Promise<DailyTaskRead> {
   return apiFetch<DailyTaskRead>(`/daily/tasks/${taskId}/carry-to-today`, {
     method: "POST",

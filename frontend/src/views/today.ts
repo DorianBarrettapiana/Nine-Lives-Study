@@ -12,7 +12,7 @@
 import { createMoodEntry, deleteMoodEntry, listMoodEntries, type MoodEntryRead } from "../api/mood";
 import {
   carryDailyTask, carryTaskToToday, createDailyTask, deleteDailyTask,
-  getDailyState, listPastUnfinishedTasks, listUpcomingTasks, saveDailyLog,
+  getDailyState, listUpcomingTasks, saveDailyLog,
   updateDailyTask,
   type DailyStateRead, type DailyTaskRead,
 } from "../api/tracker";
@@ -56,9 +56,6 @@ let taskEstimateEl: HTMLDivElement;
 let yesterdayCardEl: HTMLElement;
 let yesterdayBodyEl: HTMLDivElement;
 let yesterdayCarryAllBtn: HTMLButtonElement;
-let pastTasksCardEl: HTMLElement;
-let pastTasksBodyEl: HTMLDivElement;
-let pastTasksCarryAllBtn: HTMLButtonElement;
 let moodRow: HTMLDivElement;
 let moodReflectionInput: HTMLTextAreaElement;
 let moodSaveBtn: HTMLButtonElement;
@@ -72,9 +69,6 @@ let state: DailyStateRead | null = null;
 let upcoming: DailyTaskRead[] = [];
 let milestones: MilestoneRead[] = [];
 let yesterdayState: DailyStateRead | null = null;
-// Top-level unfinished tasks from days before today — the "Earlier
-// unfinished" card lets the user pull any of them into today.
-let pastUnfinished: DailyTaskRead[] = [];
 let todaysMoods: MoodEntryRead[] = [];
 let onDataChangedCb: (() => Promise<void>) | null = null;
 // Root tasks whose subtask panel the user has manually expanded this
@@ -248,7 +242,9 @@ function taskHtml(task: DailyTaskRead, readOnly: boolean, isChild = false, hasCh
       ${duePill}
       ${estControl}
       ${bigNudge}
-      ${readOnly ? "" : `
+      ${readOnly
+        ? (task.is_done ? "" : `<button type="button" class="link-btn task-carry-today" data-task-action="carry-to-today" data-id="${task.id}" title="Add this task to today">→ Today</button>`)
+        : `
         ${task.is_done ? "" : `<button type="button" class="link-btn task-add-child" data-task-action="add-child" data-id="${task.id}" title="${stepTitle}">+ Step</button>`}
         ${task.is_done ? "" : `<button type="button" class="link-btn task-breakdown-btn" data-task-action="break-down" data-id="${task.id}" title="Stuck? Answer 3 quick questions to break it down">🧩 Break down</button>`}
         ${task.is_done ? "" : `<button class="secondary compact-btn" data-task-action="stopwatch" data-id="${task.id}" title="Start work timer">▶</button>`}
@@ -461,40 +457,6 @@ function renderYesterdayCard(): void {
   yesterdayCarryAllBtn.classList.toggle("hidden", unfinished.length < 2);
 }
 
-// Tasks scheduled before today and never finished. Yesterday's stragglers
-// already live in the "Yesterday in review" card, so we drop them here to
-// avoid showing the same row twice — this card is for older leftovers.
-function pastCandidates(): DailyTaskRead[] {
-  const yesterday = shiftDate(todayStr(), -1);
-  return pastUnfinished
-    .filter((t) => t.planned_date !== null && t.planned_date < yesterday)
-    .filter(passesProjectFilter);
-}
-
-function renderPastTasksCard(): void {
-  // Planning affordance only — hide it while browsing a past day.
-  if (!isToday()) {
-    pastTasksCardEl.classList.add("hidden");
-    return;
-  }
-  const candidates = pastCandidates();
-  if (candidates.length === 0) {
-    pastTasksCardEl.classList.add("hidden");
-    return;
-  }
-  pastTasksCardEl.classList.remove("hidden");
-  pastTasksBodyEl.innerHTML = candidates.map((t) => `
-    <div class="yesterday-task-row" data-id="${t.id}">
-      <span class="past-task-when">${escapeHtml(humanWhen(t.planned_date!))}</span>
-      <span class="yesterday-task-text">${escapeHtml(t.text)}</span>
-      ${projectChipHtml(t.project_id)}
-      <button class="link-btn" data-pasttask-action="carry" data-id="${t.id}"
-              type="button" title="Bring to today">→ Today</button>
-    </div>
-  `).join("");
-  pastTasksCarryAllBtn.classList.toggle("hidden", candidates.length < 2);
-}
-
 function renderUpcoming(): void {
   // Upcoming is global (not date-scoped), so we keep showing it even
   // when the user has navigated to a past day — gives a "still
@@ -652,7 +614,6 @@ export function render(): void {
   progressFill.style.width = `${state.completion_percent}%`;
   renderProjectBreakdown();
   renderYesterdayCard();
-  renderPastTasksCard();
   renderTaskList();
   renderMilestoneSteps();
   renderUpcoming();
@@ -691,11 +652,7 @@ export async function refresh(): Promise<void> {
     const yesterdayFetch: Promise<DailyStateRead | null> = isToday()
       ? getDailyState(shiftDate(todayStr(), -1)).catch(() => null)
       : Promise.resolve(null);
-    // Past unfinished tasks only matter while planning today.
-    const pastFetch: Promise<DailyTaskRead[]> = isToday()
-      ? listPastUnfinishedTasks().catch(() => [] as DailyTaskRead[])
-      : Promise.resolve([] as DailyTaskRead[]);
-    const [s, up, moods, y, ms, past] = await Promise.all([
+    const [s, up, moods, y, ms] = await Promise.all([
       getDailyState(viewedDate ?? undefined),
       // Upcoming is always for "from today onwards" — date navigation in
       // Today doesn't shift the looming-deadlines window.
@@ -706,13 +663,11 @@ export async function refresh(): Promise<void> {
       yesterdayFetch,
       // Future-dated, non-archived milestones for the "steps due soon" card.
       listMilestones({ onlyFuture: false }).catch(() => [] as MilestoneRead[]),
-      pastFetch,
     ]);
     state = s;
     upcoming = up;
     yesterdayState = y;
     milestones = ms;
-    pastUnfinished = past;
     // Filter today's moods to actual today (the 1-day list can include
     // yesterday's tail-end depending on tz).
     const today = todayStr();
@@ -940,9 +895,6 @@ export function init(onDataChanged: () => Promise<void>): void {
   yesterdayCardEl = document.querySelector<HTMLElement>("#today-yesterday-card")!;
   yesterdayBodyEl = document.querySelector<HTMLDivElement>("#today-yesterday-body")!;
   yesterdayCarryAllBtn = document.querySelector<HTMLButtonElement>("#today-yesterday-carry-all")!;
-  pastTasksCardEl = document.querySelector<HTMLElement>("#today-pasttasks-card")!;
-  pastTasksBodyEl = document.querySelector<HTMLDivElement>("#today-pasttasks-body")!;
-  pastTasksCarryAllBtn = document.querySelector<HTMLButtonElement>("#today-pasttasks-carry-all")!;
   moodRow = document.querySelector<HTMLDivElement>("#today-mood-row")!;
   moodReflectionInput = document.querySelector<HTMLTextAreaElement>("#today-mood-reflection")!;
   moodSaveBtn = document.querySelector<HTMLButtonElement>("#today-mood-save")!;
@@ -1028,9 +980,18 @@ export function init(onDataChanged: () => Promise<void>): void {
     if (!action || !Number.isFinite(id)) return;
     const task = state.tasks.find((t) => t.id === id);
     if (!task) return;
-    if (!isToday() && action !== "stopwatch" && action !== "pomodoro") return;
+    if (!isToday() && action !== "stopwatch" && action !== "pomodoro" && action !== "carry-to-today") return;
     try {
-      if (action === "add-child") {
+      if (action === "carry-to-today") {
+        // Available while reviewing a past day: pull that task into today.
+        // The backend brings a parent's unfinished children along, and a
+        // clicked subtask drags its parent with it.
+        await carryTaskToToday(id);
+        setMessage(messageEl, "Added to today.", "success");
+        await refresh();
+        await onDataChangedCb?.();
+        window.dispatchEvent(new CustomEvent("task-list:updated"));
+      } else if (action === "add-child") {
         addingChildForTaskId = id;
         renderTaskList();
       } else if (action === "cancel-child") {
@@ -1194,43 +1155,6 @@ export function init(onDataChanged: () => Promise<void>): void {
       setMessage(messageEl, "Could not carry tasks.", "error");
     } finally {
       yesterdayCarryAllBtn.disabled = false;
-    }
-  });
-
-  // Earlier-unfinished card — pull a past task straight into today.
-  pastTasksBodyEl.addEventListener("click", async (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    if (target.dataset.pasttaskAction !== "carry") return;
-    const id = Number(target.dataset.id);
-    if (!Number.isFinite(id)) return;
-    try {
-      await carryTaskToToday(id);
-      setMessage(messageEl, "Brought to today.", "success");
-      await refresh();
-      await onDataChangedCb?.();
-      window.dispatchEvent(new CustomEvent("task-list:updated"));
-    } catch (error) {
-      console.error(error);
-      setMessage(messageEl, "Could not bring task to today.", "error");
-    }
-  });
-
-  pastTasksCarryAllBtn.addEventListener("click", async () => {
-    const candidates = pastCandidates();
-    if (candidates.length === 0) return;
-    pastTasksCarryAllBtn.disabled = true;
-    try {
-      await Promise.all(candidates.map((t) => carryTaskToToday(t.id)));
-      setMessage(messageEl, `Brought ${candidates.length} task${candidates.length === 1 ? "" : "s"} to today.`, "success");
-      await refresh();
-      await onDataChangedCb?.();
-      window.dispatchEvent(new CustomEvent("task-list:updated"));
-    } catch (error) {
-      console.error(error);
-      setMessage(messageEl, "Could not bring tasks to today.", "error");
-    } finally {
-      pastTasksCarryAllBtn.disabled = false;
     }
   });
 
