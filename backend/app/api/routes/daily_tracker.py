@@ -386,18 +386,42 @@ def list_upcoming_tasks(
     return _serialize_tasks_with_tags(list(db.scalars(stmt).all()), current_user, db)
 
 
+def _move_rows_to(
+    movers: list[DailyTask], target_date: date, current_user: User, db: Session,
+) -> None:
+    """Re-schedule the given rows to `target_date`, appended to its bottom.
+
+    Moves the existing rows (sets planned_date/task_date) rather than creating
+    copies, so a moved task never shows up twice inside its project and its
+    tags ride along. `movers` is appended after the target day's last task,
+    preserving the order it was passed in.
+    """
+    if not movers:
+        return
+    mover_ids = [m.id for m in movers]
+    max_so = db.scalar(
+        select(DailyTask.sort_order)
+        .where(DailyTask.user_id == current_user.id)
+        .where(DailyTask.planned_date == target_date)
+        .where(DailyTask.id.not_in(mover_ids))
+        .order_by(DailyTask.sort_order.desc())
+        .limit(1)
+    ) or 0.0
+    for offset, mover in enumerate(movers, start=1):
+        mover.planned_date = target_date
+        mover.task_date = target_date
+        mover.sort_order = max_so + offset
+    db.commit()
+
+
 def _reschedule_task_to(
     task: DailyTask, target_date: date, current_user: User, db: Session,
 ) -> DailyTask:
     """Re-schedule an unfinished task (and its unfinished children) to a day.
 
-    Re-schedules the existing rows (sets planned_date) rather than creating
-    copies. This keeps one row per logical task, so a moved task never shows
-    up twice inside its project, and tags ride along since the rows are
-    preserved. Children of a moved parent ride along so a subtask group stays
-    grouped; the parent of a moved *child* is left where it is — the user
-    picked that child, not the whole group. Moved rows are appended to the
-    bottom of the target day's group.
+    Children of a moved parent ride along so a subtask group stays grouped;
+    the parent of a moved *child* is left where it is — carry-forward moves
+    exactly what the user pointed at (plus a parent's own children).
     """
     if task.is_done:
         raise HTTPException(
@@ -413,48 +437,9 @@ def _reschedule_task_to(
             .where(DailyTask.is_done.is_(False))
             .order_by(DailyTask.sort_order.asc(), DailyTask.created_at.asc())
         ).all())
-
-    max_so = db.scalar(
-        select(DailyTask.sort_order)
-        .where(DailyTask.user_id == current_user.id)
-        .where(DailyTask.planned_date == target_date)
-        .where(DailyTask.id.not_in([m.id for m in movers]))
-        .order_by(DailyTask.sort_order.desc())
-        .limit(1)
-    ) or 0.0
-    for offset, mover in enumerate(movers, start=1):
-        mover.planned_date = target_date
-        mover.task_date = target_date
-        mover.sort_order = max_so + offset
-    db.commit()
+    _move_rows_to(movers, target_date, current_user, db)
     db.refresh(task)
     return task
-
-
-@router.get("/tasks/past-unfinished", response_model=list[DailyTaskRead])
-def list_past_unfinished_tasks(
-    target_date: date | None = Query(default=None, alias="date"),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> list[DailyTaskRead]:
-    """Top-level unfinished tasks planned for a day BEFORE `date` (today).
-
-    Powers the "pull a past task into today" affordance: anything the user
-    scheduled on an earlier day and never finished. Subtasks are excluded —
-    they ride along with their parent when it's pulled forward. Sorted by
-    planned_date ascending so the oldest stragglers surface first.
-    """
-    day = resolve_target_date(target_date)
-    stmt = (
-        select(DailyTask)
-        .where(DailyTask.user_id == current_user.id)
-        .where(DailyTask.is_done == False)  # noqa: E712
-        .where(DailyTask.parent_task_id.is_(None))
-        .where(DailyTask.planned_date.is_not(None))
-        .where(DailyTask.planned_date < day)
-        .order_by(DailyTask.planned_date.asc(), DailyTask.sort_order.asc())
-    )
-    return _serialize_tasks_with_tags(list(db.scalars(stmt).all()), current_user, db)
 
 
 @router.post("/tasks/{task_id}/carry-forward", response_model=DailyTaskRead)
@@ -476,17 +461,44 @@ def carry_daily_task_to_today(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DailyTaskRead:
-    """Pull an unfinished (typically past) task into today.
+    """Pull a task into today from a day the user is reviewing.
 
-    Unlike carry-forward's +1-day step, this jumps the task straight to
-    today regardless of how long ago it was planned — the action behind the
-    "Earlier unfinished" card. No-op-safe if the task is already on today.
+    Unlike carry-forward's +1-day step, this jumps the task straight to today
+    regardless of how long ago it was planned — the "→ Today" button on a
+    past day's task rows. Carry semantics keep a subtask group together:
+      - clicking a parent brings the parent + all its unfinished children,
+      - clicking a subtask brings the subtask *and its parent* (so the child
+        never lands orphaned), leaving the parent's other children behind.
+    No-op-safe if the clicked task is already on today.
     """
     task = _get_owned_task(task_id, current_user, db)
+    if task.is_done:
+        raise HTTPException(
+            status_code=400,
+            detail="Completed tasks do not need to be rescheduled.",
+        )
     today = date.today()
     if (task.planned_date or task.task_date) == today:
         return _serialize_tasks_with_tags([task], current_user, db)[0]
-    task = _reschedule_task_to(task, today, current_user, db)
+
+    if task.parent_task_id is None:
+        # Parent → parent + its unfinished children.
+        movers: list[DailyTask] = [task]
+        movers.extend(db.scalars(
+            select(DailyTask)
+            .where(DailyTask.user_id == current_user.id)
+            .where(DailyTask.parent_task_id == task.id)
+            .where(DailyTask.is_done.is_(False))
+            .order_by(DailyTask.sort_order.asc(), DailyTask.created_at.asc())
+        ).all())
+    else:
+        # Subtask → its parent first, then the clicked subtask, so the group
+        # arrives parent-above-child. Siblings stay where they are.
+        parent = _get_owned_task(task.parent_task_id, current_user, db)
+        movers = [parent, task]
+
+    _move_rows_to(movers, today, current_user, db)
+    db.refresh(task)
     return _serialize_tasks_with_tags([task], current_user, db)[0]
 
 
