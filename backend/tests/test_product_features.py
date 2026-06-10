@@ -5,8 +5,56 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.api.routes import summaries
-from app.core.ai import SummaryResult, gather_weekly
+from app.api.routes import daily_tracker, summaries
+from app.core.ai import SummaryResult, _parse_task_steps_json, gather_weekly
+
+
+def test_parse_task_steps_json_tolerates_fences_and_rejects_junk():
+    assert _parse_task_steps_json('{"steps": ["Open the draft", "List 3 claims"]}') == [
+        "Open the draft", "List 3 claims",
+    ]
+    # Models sometimes wrap the JSON in a code fence despite instructions.
+    assert _parse_task_steps_json('```json\n{"steps": ["a", "b"]}\n```') == ["a", "b"]
+    # Blank entries are dropped; an all-blank / empty list becomes None so the
+    # caller falls back to the manual panel.
+    assert _parse_task_steps_json('{"steps": ["  ", ""]}') is None
+    assert _parse_task_steps_json("not json at all") is None
+    assert _parse_task_steps_json('{"wrong_key": []}') is None
+
+
+def test_task_breakdown_returns_llm_steps_when_opted_in(auth_client: TestClient, monkeypatch):
+    task = auth_client.post(
+        "/daily/tasks", json={"text": "Write the introduction"},
+    ).json()
+    auth_client.post("/summaries/opt-in", json={"opted_in": True})
+    monkeypatch.setattr(daily_tracker.ai, "is_configured", lambda: True)
+    monkeypatch.setattr(
+        daily_tracker.ai,
+        "suggest_task_steps",
+        lambda *_a, **_k: ["Open the intro file", "List the 3 core claims"],
+    )
+
+    response = auth_client.get(f"/daily/tasks/{task['id']}/suggest-steps")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == "llm"
+    assert [s["text"] for s in body["suggestions"]] == [
+        "Open the intro file", "List the 3 core claims",
+    ]
+
+
+def test_task_breakdown_falls_back_when_not_opted_in(auth_client: TestClient, monkeypatch):
+    task = auth_client.post(
+        "/daily/tasks", json={"text": "Write the introduction"},
+    ).json()
+    # Key is present but the user never opted in → no AI, no error.
+    monkeypatch.setattr(daily_tracker.ai, "is_configured", lambda: True)
+
+    response = auth_client.get(f"/daily/tasks/{task['id']}/suggest-steps")
+
+    assert response.status_code == 200
+    assert response.json() == {"suggestions": [], "source": "none"}
 
 
 def test_unfinished_task_carry_forward_moves_in_place(auth_client: TestClient):

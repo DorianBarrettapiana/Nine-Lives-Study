@@ -12,11 +12,12 @@
 import { createMoodEntry, deleteMoodEntry, listMoodEntries, type MoodEntryRead } from "../api/mood";
 import {
   carryDailyTask, carryTaskToToday, createDailyTask, deleteDailyTask,
-  getDailyState, listUpcomingTasks, saveDailyLog,
+  getDailyState, getTaskStepSuggestions, listUpcomingTasks, saveDailyLog,
   updateDailyTask,
   type DailyStateRead, type DailyTaskRead,
 } from "../api/tracker";
 import { addMilestoneToToday, listMilestones, type MilestoneRead } from "../api/milestones";
+import { aiErrorMessage, ensureAiConsent, isAiEnabled } from "./ai-tools";
 import { escapeHtml, flashMessage, parseApiDate, setMessage } from "../utils";
 import { renderEmptyStateWithCat } from "./icons";
 import * as PomodoroView from "./pomodoro";
@@ -88,6 +89,9 @@ let pendingTaskDue: string = "";
 let addingChildForTaskId: number | null = null;
 // Which root task currently has its "break it down" question panel open.
 let breakingDownTaskId: number | null = null;
+// Whether the server has an Anthropic key configured. Fetched once in init();
+// gates the "Suggest steps with AI" button in the break-down panel.
+let aiEnabled = false;
 // Estimate (minutes) pre-selected for the next new task via the chip row.
 // null = no estimate. Sticky across the session like the project picker.
 let pendingTaskEstimate: number | null = null;
@@ -253,22 +257,47 @@ function taskHtml(task: DailyTaskRead, readOnly: boolean, isChild = false, hasCh
     </div>`;
 }
 
-function breakdownPanelHtml(taskId: number): string {
+// `parentId` is the ROOT task the new steps attach to (one-level model);
+// `brokenDownId` is the task the user actually clicked break-down on (may be
+// a subtask) — it's the text the AI helper reasons about.
+function breakdownPanelHtml(parentId: number, brokenDownId: number): string {
   const rows = BREAKDOWN_QUESTIONS.map((q, i) => `
     <label class="task-breakdown-q">
       <span>${escapeHtml(q)}</span>
       <input class="task-breakdown-input" data-q-index="${i}" type="text" maxlength="500"
              placeholder="Answer becomes a subtask (optional)" />
     </label>`).join("");
+  // AI suggestions land in `.task-breakdown-ai-steps` as more
+  // `.task-breakdown-input` rows, so the existing submit handler picks
+  // them up with no special-casing.
+  const aiBtn = aiEnabled
+    ? `<button type="button" class="link-btn task-breakdown-ai" data-task-action="ai-suggest-steps" data-id="${brokenDownId}" title="Let Claude suggest concrete steps you can start right now">✨ Suggest steps with AI</button>`
+    : "";
   return `
-    <form class="task-breakdown-form" data-parent-id="${taskId}">
-      <p class="hint task-breakdown-hint">Stuck? Turn the blocker into next steps — fill any that apply.</p>
+    <form class="task-breakdown-form" data-parent-id="${parentId}">
+      <p class="hint task-breakdown-hint">Stuck? Turn the blocker into next steps — fill any that apply.${aiBtn ? " Or let AI propose a starting point." : ""}</p>
+      ${aiBtn}
+      <div class="task-breakdown-ai-steps"></div>
       ${rows}
       <div class="button-row">
         <button type="submit">Add as steps</button>
-        <button type="button" class="secondary" data-task-action="cancel-breakdown" data-id="${taskId}">Cancel</button>
+        <button type="button" class="secondary" data-task-action="cancel-breakdown" data-id="${parentId}">Cancel</button>
       </div>
     </form>`;
+}
+
+// Replace the AI-steps container with editable, prefilled rows. Each is a
+// `.task-breakdown-input` so the "Add as steps" submit turns it into a
+// subtask; the user can edit or clear any before submitting.
+function injectAiSteps(form: HTMLFormElement, steps: string[]): void {
+  const container = form.querySelector<HTMLDivElement>(".task-breakdown-ai-steps");
+  if (!container) return;
+  container.innerHTML = steps.map((s, i) => `
+    <label class="task-breakdown-q">
+      <span>Step ${i + 1}</span>
+      <input class="task-breakdown-input" type="text" maxlength="500" value="${escapeHtml(s)}" />
+    </label>`).join("");
+  container.querySelector<HTMLInputElement>(".task-breakdown-input")?.focus();
 }
 
 function taskGroupHtml(task: DailyTaskRead, children: DailyTaskRead[], readOnly: boolean): string {
@@ -280,7 +309,7 @@ function taskGroupHtml(task: DailyTaskRead, children: DailyTaskRead[], readOnly:
   // so they appear as siblings (the model forbids deeper nesting).
   const childRows = children.map((child) => {
     const addStep = addingChildForTaskId === child.id && !readOnly ? addStepFormHtml(rootId) : "";
-    const breakdown = breakingDownTaskId === child.id && !readOnly ? breakdownPanelHtml(rootId) : "";
+    const breakdown = breakingDownTaskId === child.id && !readOnly ? breakdownPanelHtml(rootId, child.id) : "";
     return taskHtml(child, readOnly, true) + addStep + breakdown;
   }).join("");
   // Subtasks are collapsed by default — opening Today should not auto-expand
@@ -294,7 +323,7 @@ function taskGroupHtml(task: DailyTaskRead, children: DailyTaskRead[], readOnly:
          <div class="task-children-list">${childRows}</div>
          ${addingRoot ? addStepFormHtml(rootId) : ""}
        </details>`;
-  const breakdownPanel = breakingDownRoot ? breakdownPanelHtml(rootId) : "";
+  const breakdownPanel = breakingDownRoot ? breakdownPanelHtml(rootId, rootId) : "";
   return `<div class="task-group">${taskHtml(task, readOnly, false, children.length > 0)}${childPanel}${breakdownPanel}</div>`;
 }
 
@@ -903,6 +932,10 @@ export function init(onDataChanged: () => Promise<void>): void {
   reflectionInput = document.querySelector<HTMLTextAreaElement>("#today-reflection")!;
   messageEl = document.querySelector<HTMLParagraphElement>("#today-message")!;
 
+  // Resolve AI availability once. The break-down panel is user-triggered
+  // later, so this Promise resolving after the first render is fine.
+  void isAiEnabled().then((enabled) => { aiEnabled = enabled; });
+
   // Date navigation
   dateBar.addEventListener("click", async (event) => {
     const target = event.target;
@@ -1004,6 +1037,30 @@ export function init(onDataChanged: () => Promise<void>): void {
       } else if (action === "cancel-breakdown") {
         breakingDownTaskId = null;
         renderTaskList();
+      } else if (action === "ai-suggest-steps") {
+        // `id` is the broken-down task; the panel form (only one open at a
+        // time) is where the editable suggestion rows get injected.
+        const form = taskList.querySelector<HTMLFormElement>(".task-breakdown-form");
+        if (!form) return;
+        const consented = await ensureAiConsent(`Your task “${task.text}”`);
+        if (!consented) return;
+        const btn = target instanceof HTMLButtonElement ? target : null;
+        const label = btn?.textContent ?? "";
+        if (btn) { btn.disabled = true; btn.textContent = "✨ Thinking…"; }
+        try {
+          const res = await getTaskStepSuggestions(id);
+          if (res.source === "none" || res.suggestions.length === 0) {
+            setMessage(messageEl, "AI couldn't suggest steps right now — try the questions below.", "error");
+          } else {
+            injectAiSteps(form, res.suggestions.map((s) => s.text));
+            setMessage(messageEl, `Suggested ${res.suggestions.length} step${res.suggestions.length === 1 ? "" : "s"} — edit or clear any, then “Add as steps”.`, "success");
+          }
+        } catch (error) {
+          console.error(error);
+          setMessage(messageEl, aiErrorMessage(error), "error");
+        } finally {
+          if (btn) { btn.disabled = false; btn.textContent = label; }
+        }
       } else if (action === "edit-estimate") {
         editingEstimateTaskId = editingEstimateTaskId === id ? null : id;
         renderTaskList();
