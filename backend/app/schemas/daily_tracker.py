@@ -115,3 +115,21 @@ class DailyStateRead(BaseModel):
     done_count: int
     total_count: int
     completion_percent: int
+
+
+class TaskStepSuggestion(BaseModel):
+    """One AI-proposed concrete step toward an intimidating task."""
+
+    text: str
+
+
+class TaskStepSuggestionsRead(BaseModel):
+    """Response for the task break-down helper.
+
+    `source` is "llm" when Claude produced the steps, "none" when the AI
+    path was unavailable (no key, not opted in, or a failure) so the
+    frontend can quietly fall back to the manual question panel.
+    """
+
+    suggestions: list[TaskStepSuggestion]
+    source: str = "none"

@@ -104,6 +104,27 @@ export async function getDailyState(date?: string): Promise<DailyStateRead> {
   return apiFetch<DailyStateRead>(`/daily${query}`);
 }
 
+export interface TaskStepSuggestion {
+  text: string;
+}
+
+export interface TaskStepSuggestionsRead {
+  suggestions: TaskStepSuggestion[];
+  // "llm" when Claude produced the steps; "none" when the AI path was
+  // unavailable and the caller should keep the manual question panel.
+  source: "llm" | "none";
+}
+
+/** Ask the server to break an intimidating task into concrete steps.
+ *
+ * Returns `source: "none"` with an empty list when AI is off or the user
+ * hasn't opted in — callers fall back to the manual break-down questions. */
+export async function getTaskStepSuggestions(
+  taskId: number,
+): Promise<TaskStepSuggestionsRead> {
+  return apiFetch<TaskStepSuggestionsRead>(`/daily/tasks/${taskId}/suggest-steps`);
+}
+
 export async function createDailyTask(payload: DailyTaskCreate): Promise<DailyTaskRead> {
   return apiFetch<DailyTaskRead>("/daily/tasks", {
     method: "POST",

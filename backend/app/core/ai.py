@@ -747,3 +747,86 @@ def suggest_backplan_via_llm(
     except Exception:  # noqa: BLE001 — any SDK/network failure → rules
         return None
     return _parse_backplan_json(result.content)
+
+
+# --- Task breakdown ("just get started") ------------------------------------
+#
+# Used by /daily/tasks/{id}/suggest-steps when the user opens the break-down
+# panel on an intimidating task and asks the model for help. Same shape as the
+# backplan path — structured JSON, parsed back, no DB write — but tuned for the
+# *activation-energy* problem specific to procrastination: the first step is a
+# sub-2-minute physical action, not a "real" chunk of work. Falls back to the
+# manual 3-question panel (handled entirely on the frontend) on any failure.
+
+_SYSTEM_TASK_STEPS = """\
+You are a PhD productivity coach helping a student who is STUCK or
+procrastinating on one task. They've named a task that feels too big,
+vague, or intimidating to start. Your job is to dissolve the activation
+energy by breaking it into concrete, physical next steps.
+
+You are given:
+- the task text,
+- optional context (its project, due date) — use it only to make the
+  steps specific; never invent a deadline or scope not implied.
+
+Produce 3 to 5 ordered steps. HARD rules (violating any voids the response):
+- The FIRST step must be a trivial "just get started" action that takes
+  under 2 minutes and requires zero decisions — opening the file, writing
+  one sentence, listing three names, pasting the outline. The whole point
+  is that it's too small to refuse.
+- Each later step is one concrete, physical action (start with a verb:
+  "Open", "Write", "List", "Run", "Read", "Sketch"). No vague verbs like
+  "work on", "think about", "continue".
+- Each step <= 80 chars. No emoji, no markdown, no numbering, no quotes.
+- Steps must be doable in one sitting each; if the task is genuinely
+  large, the steps cover only getting the FIRST meaningful chunk done.
+- Return between 3 and 5 items.
+- Output ONLY a JSON object of the shape:
+    {"steps": ["...", "...", "..."]}
+  No prose before or after. No code fences. No commentary.\
+"""
+
+
+def _parse_task_steps_json(raw: str) -> list[str] | None:
+    """Pull the {"steps": [...]} list of strings out of a model response.
+
+    Tolerant of an accidental code fence (same as the backplan parser).
+    Returns None on any error so the route falls back to the manual panel.
+    """
+    text = raw.strip()
+    if text.startswith("```"):
+        nl = text.find("\n")
+        if nl != -1:
+            text = text[nl + 1 :]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+    try:
+        parsed = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    items = parsed.get("steps")
+    if not isinstance(items, list):
+        return None
+    steps = [s.strip() for s in items if isinstance(s, str) and s.strip()]
+    return steps or None
+
+
+def suggest_task_steps(task_text: str, context: dict) -> list[str] | None:
+    """Ask Claude to break one intimidating task into concrete steps.
+
+    Returns an ordered list of step strings (first = a sub-2-min starter),
+    or None on any failure mode (no key, SDK error, unparseable response).
+    The caller gates on the user's `ai_opt_in` flag and falls back to the
+    manual break-down panel.
+    """
+    if not is_configured():
+        return None
+    payload = {"task": task_text, "context": context}
+    try:
+        result = _summarise(_SYSTEM_TASK_STEPS, payload, max_tokens=400)
+    except Exception:  # noqa: BLE001 — any SDK/network failure → manual panel
+        return None
+    return _parse_task_steps_json(result.content)

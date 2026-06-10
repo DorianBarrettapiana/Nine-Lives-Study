@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core import ai
 from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.core.mood import record_mood_entry
@@ -37,6 +38,8 @@ from app.schemas.daily_tracker import (
     DailyTaskCreate,
     DailyTaskRead,
     DailyTaskUpdate,
+    TaskStepSuggestion,
+    TaskStepSuggestionsRead,
 )
 
 router = APIRouter(prefix="/daily", tags=["daily-tracker"])
@@ -353,6 +356,43 @@ def delete_daily_task(
     delete_links_for_item(TAG_ITEM_DAILY_TASK, task.id, db)
     db.delete(task)
     db.commit()
+
+
+@router.get("/tasks/{task_id}/suggest-steps", response_model=TaskStepSuggestionsRead)
+def suggest_task_steps(
+    task_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TaskStepSuggestionsRead:
+    """Break one intimidating task into concrete, get-started steps.
+
+    Helps a procrastinating user past the activation-energy hump: the
+    first suggested step is a sub-2-minute action. Gated on the same
+    `ANTHROPIC_API_KEY` + `ai_opt_in` pair as the other AI features; when
+    either is missing (or the model fails) we return an empty list with
+    `source="none"` so the frontend quietly keeps the manual question
+    panel. Suggestions are never persisted — the frontend lets the user
+    edit / drop them before adding as subtasks.
+    """
+    task = _get_owned_task(task_id, current_user, db)
+    if not ai.is_configured() or not current_user.ai_opt_in:
+        return TaskStepSuggestionsRead(suggestions=[], source="none")
+
+    context: dict[str, str] = {}
+    if task.project_id is not None:
+        project = db.get(Project, task.project_id)
+        if project is not None and project.user_id == current_user.id:
+            context["project"] = project.name
+    if task.due_date is not None:
+        context["due_date"] = task.due_date.isoformat()
+
+    raw_steps = ai.suggest_task_steps(task.text, context)
+    if not raw_steps:
+        return TaskStepSuggestionsRead(suggestions=[], source="none")
+    # Cap to 5 and clamp length to the task text column (500) — the model
+    # is told <=80 chars but we don't trust it past the DB boundary.
+    suggestions = [TaskStepSuggestion(text=s[:500]) for s in raw_steps[:5]]
+    return TaskStepSuggestionsRead(suggestions=suggestions, source="llm")
 
 
 @router.get("/tasks/upcoming", response_model=list[DailyTaskRead])
