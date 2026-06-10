@@ -770,13 +770,17 @@ You are given:
   steps specific; never invent a deadline or scope not implied.
 
 Produce 3 to 5 ordered steps. HARD rules (violating any voids the response):
+- Write every step in the SAME language as the task text. If the task is
+  in Chinese, write the steps in Chinese; if in English, English; etc.
+  Match the user's language — never translate it to another.
 - The FIRST step must be a trivial "just get started" action that takes
   under 2 minutes and requires zero decisions — opening the file, writing
   one sentence, listing three names, pasting the outline. The whole point
   is that it's too small to refuse.
-- Each later step is one concrete, physical action (start with a verb:
-  "Open", "Write", "List", "Run", "Read", "Sketch"). No vague verbs like
-  "work on", "think about", "continue".
+- Each later step is one concrete, physical action that starts with a verb
+  (English e.g. "Open", "Write", "List", "Run", "Read", "Sketch"; Chinese
+  e.g. "打开", "写", "列出", "运行", "读"). No vague verbs like "work on",
+  "think about", "continue" (or their equivalents in other languages).
 - Each step <= 80 chars. No emoji, no markdown, no numbering, no quotes.
 - Steps must be doable in one sitting each; if the task is genuinely
   large, the steps cover only getting the FIRST meaningful chunk done.
